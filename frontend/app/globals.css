@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #15241f; background: #f5f2e9; font-family: Arial, "Noto Sans Thai", sans-serif; }
+button, input, textarea, select { font: inherit; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #f47f61; outline-offset: 2px; }
+@layer components {
+  .panel { @apply rounded-[2rem] border border-ink/10 bg-white shadow-soft; }
+  .field { @apply w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm transition placeholder:text-ink/35 focus:border-sage focus:outline-none; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-sage disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-ink/15 bg-white px-5 py-3 text-sm font-bold transition hover:bg-cream; }
+  .label { @apply mb-2 block text-sm font-bold; }
+}
