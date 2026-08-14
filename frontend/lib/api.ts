@@ -1,4 +1,4 @@
-import type { Course, Profile, RecommendResponse, Requirement, User } from "./types";
+import type { ChatReply, Course, Profile, RecommendResponse, Requirement, User } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); this.name = "ApiError"; } }
@@ -25,5 +25,7 @@ export const api = {
   requirements: (token: string) => apiFetch<Requirement[]>("/users/me/requirements", {}, token),
   addRequirement: (token: string, data: { req_type: string; req_value: string; priority: number }) => apiFetch<Requirement>("/users/me/requirements", { method: "POST", body: JSON.stringify(data) }, token),
   courses: () => apiFetch<Course[]>("/courses"),
-  recommend: (token: string, extra_query: string) => apiFetch<RecommendResponse>("/recommend", { method: "POST", body: JSON.stringify({ top_k_chunks: 12, top_n_courses: 5, extra_query: extra_query || null }) }, token)
+  recommend: (token: string, extra_query: string) => apiFetch<RecommendResponse>("/recommend", { method: "POST", body: JSON.stringify({ top_k_chunks: 12, top_n_courses: 5, extra_query: extra_query || null }) }, token),
+  // session_id = null คือเริ่มบทสนทนาใหม่ ส่งค่าที่ backend คืนมากลับไปเพื่อคุยต่อในบทสนทนาเดิม
+  chat: (token: string, message: string, session_id: string | null) => apiFetch<ChatReply>("/chat", { method: "POST", body: JSON.stringify({ message, session_id }) }, token)
 };

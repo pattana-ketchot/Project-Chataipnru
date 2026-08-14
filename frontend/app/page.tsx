@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, BookOpen, Check, LogOut, MessageCircle, Search, Sparkles, UserRound } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { api, ApiError } from "@/lib/api";
-import type { Course, Profile, Recommendation, User } from "@/lib/types";
+import type { ChatTurn, Course, Profile, Recommendation, User } from "@/lib/types";
 
-type View = "home" | "auth" | "survey" | "courses" | "chat";
+type View = "home" | "auth" | "survey" | "results" | "courses" | "chat";
 const emptyProfile: Profile = { education_level: "", field_of_study: "", current_role: "", career_goal: "", skills: [], interests: [], language_preference: "th" };
 
 export default function App() {
@@ -19,7 +19,8 @@ export default function App() {
     <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5"><Logo/><nav className="hidden items-center gap-6 text-sm font-bold md:flex"><button onClick={() => navigate("courses")}>หลักสูตร</button><button onClick={() => navigate("survey")}>แบบสอบถาม</button><button onClick={() => navigate("chat")}>คุยกับที่ปรึกษา</button></nav><div>{user ? <button className="btn-secondary !px-4 !py-2" onClick={logout}><LogOut size={16}/>ออกจากระบบ</button> : <button className="btn-secondary !px-4 !py-2" onClick={() => setView("auth")}>เข้าสู่ระบบ</button>}</div></header>
     {view === "home" && <Home onStart={() => navigate("survey")} onCourses={() => navigate("courses")}/>} 
     {view === "auth" && <Auth onSuccess={(t,u) => { window.localStorage.setItem("course_advisor_token", t); setToken(t); setUser(u); setView("survey"); }}/>} 
-    {view === "survey" && token && <Survey token={token} onDone={() => setView("chat")}/>} 
+    {view === "survey" && token && <Survey token={token} onDone={() => setView("results")}/>}
+    {view === "results" && token && <Results token={token} onChat={() => setView("chat")}/>}
     {view === "courses" && <Courses/>}
     {view === "chat" && token && <Chat token={token} name={user?.full_name ?? "คุณ"}/>} 
   </main>;
@@ -36,7 +37,89 @@ function Survey({token,onDone}:{token:string;onDone():void}) { const [profile,se
 
 function Courses(){const [items,setItems]=useState<Course[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [q,setQ]=useState("");useEffect(()=>{api.courses().then(setItems).catch(()=>setError("โหลดหลักสูตรไม่ได้ กรุณาตรวจสอบการเชื่อมต่อ")).finally(()=>setLoading(false))},[]);const shown=items.filter(c=>`${c.title} ${c.provider??""} ${c.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase()));return <section className="mx-auto max-w-7xl px-5 py-10"><div className="flex flex-wrap items-end justify-between gap-5"><div><p className="text-sm font-bold text-sage">คลังการเรียนรู้</p><h1 className="mt-2 text-4xl font-black">สำรวจหลักสูตร</h1></div><label className="relative"><Search className="absolute left-4 top-3.5 text-ink/40" size={18}/><input aria-label="ค้นหาหลักสูตร" className="field min-w-72 !pl-11" value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาชื่อ ผู้ให้บริการ หรือแท็ก"/></label></div>{loading?<Loading/>:error?<Empty text={error}/>:shown.length===0?<Empty text="ไม่พบหลักสูตรที่ตรงกับคำค้น"/>:<div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{shown.map(c=><CourseCard key={c.id} course={c}/>)}</div>}</section>}
 
-function Chat({token,name}:{token:string;name:string}){const [query,setQuery]=useState("");const [loading,setLoading]=useState(false);const [error,setError]=useState("");const [results,setResults]=useState<Recommendation[]>([]);async function ask(e:React.FormEvent){e.preventDefault();setLoading(true);setError("");try{const r=await api.recommend(token,query);setResults(r.recommendations);}catch(err){setError(err instanceof ApiError?translateError(err):"ที่ปรึกษายังไม่พร้อม กรุณาลองใหม่")}finally{setLoading(false)}}return <section className="mx-auto max-w-5xl px-5 py-10"><div className="grid gap-7 lg:grid-cols-[.7fr_1.3fr]"><aside><span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">AI COURSE ADVISOR</span><h1 className="mt-5 text-4xl font-black">สวัสดี {name}</h1><p className="mt-3 leading-7 text-ink/60">อยากพัฒนาตัวเองด้านไหนเป็นพิเศษ? ถามเพิ่มเติมจากข้อมูลในแบบสอบถามได้เลย</p><div className="mt-7 space-y-2">{["อยากเปลี่ยนสายไปทำงาน Data", "มีเวลาเรียนเฉพาะวันหยุด", "แนะนำคอร์สสำหรับผู้เริ่มต้น"].map(x=><button key={x} onClick={()=>setQuery(x)} className="block w-full rounded-2xl border border-ink/10 bg-white p-3 text-left text-sm hover:border-sage">{x}</button>)}</div></aside><div className="panel min-h-[520px] overflow-hidden"><div className="border-b border-ink/10 px-6 py-4"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-sage text-white"><MessageCircle size={18}/></span><div><strong>ที่ปรึกษาหลักสูตร</strong><p className="text-xs text-sage">พร้อมช่วยค้นหาเส้นทาง</p></div></div></div><div className="max-h-[540px] space-y-4 overflow-y-auto p-6" aria-live="polite">{results.length===0&&!loading&&<div className="grid min-h-72 place-items-center text-center text-ink/45"><div><BookOpen className="mx-auto mb-3"/><p>พิมพ์สิ่งที่อยากเรียนรู้<br/>ระบบจะใช้โปรไฟล์ของคุณประกอบคำแนะนำ</p></div></div>}{loading&&<div className="rounded-2xl bg-cream p-4 text-sm">กำลังค้นและวิเคราะห์หลักสูตรที่เหมาะ…</div>}{error&&<div role="alert" className="rounded-2xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}{results.map(r=><div key={r.course.id} className="rounded-2xl border border-ink/10 p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold text-sage">{r.course.code??r.course.provider??"หลักสูตรแนะนำ"}</p><h2 className="mt-1 text-xl font-black">{r.course.title}</h2></div><span className="rounded-full bg-lime px-3 py-1 text-sm font-black">{Math.round(r.score*100)}%</span></div><p className="mt-3 text-sm leading-6 text-ink/65">{r.rationale}</p></div>)}</div><form onSubmit={ask} className="flex gap-2 border-t border-ink/10 p-4"><input aria-label="คำถามถึงที่ปรึกษา" className="field" value={query} onChange={e=>setQuery(e.target.value)} maxLength={1000} placeholder="เช่น อยากเรียนออนไลน์ งบไม่เกิน 5,000 บาท"/><button aria-label="ส่งคำถาม" className="btn-primary !px-4" disabled={loading}><ArrowRight size={19}/></button></form></div></div></section>}
+/** ผลแนะนำจากแบบสอบถาม — เรียก /recommend ครั้งเดียวตอนเปิดหน้า */
+function Results({token,onChat}:{token:string;onChat():void}){const [items,setItems]=useState<Recommendation[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState("");useEffect(()=>{api.recommend(token,"").then(r=>setItems(r.recommendations)).catch(err=>setError(err instanceof ApiError?translateError(err):"ยังวิเคราะห์ไม่ได้ กรุณาตรวจสอบว่าระบบ AI พร้อมทำงาน")).finally(()=>setLoading(false))},[token]);return <section className="mx-auto max-w-5xl px-5 py-10"><p className="text-sm font-bold text-sage">ผลการวิเคราะห์</p><h1 className="mt-2 text-4xl font-black">หลักสูตรที่เหมาะกับคุณ</h1><p className="mt-2 text-ink/55">จัดอันดับจากโปรไฟล์และเงื่อนไขที่คุณกรอก พร้อมเหตุผลประกอบ</p>{loading?<div role="status" className="panel mt-8 grid min-h-64 place-items-center p-8 text-center text-ink/55">กำลังค้นหาและวิเคราะห์หลักสูตร…<br/><span className="mt-2 block text-sm">ขั้นตอนนี้ใช้เวลาสักครู่</span></div>:error?<Empty text={error}/>:items.length===0?<Empty text="ยังไม่พบหลักสูตรที่ตรงกับเงื่อนไข ลองปรับแบบสอบถามแล้วส่งใหม่"/>:<div className="mt-8 space-y-4">{items.map((r,i)=><article key={r.course.id} className="panel p-6"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black text-sage">อันดับ {i+1} · {r.course.code??r.course.provider??"หลักสูตร"}</p><h2 className="mt-1 text-xl font-black">{r.course.title}</h2></div><span className="shrink-0 rounded-full bg-lime px-3 py-1 text-sm font-black">{Math.round(r.score*100)}%</span></div><p className="mt-3 text-sm leading-6 text-ink/65">{r.rationale}</p></article>)}</div>}<button className="btn-primary mt-8" onClick={onChat}><MessageCircle size={18}/>สอบถามเพิ่มเติมกับที่ปรึกษา</button></section>}
+
+const CHAT_SUGGESTIONS = ["หลักสูตรวิทยาการคอมพิวเตอร์เรียนอะไรบ้าง", "ต้องเรียนกี่หน่วยกิต", "จบไปทำงานอะไรได้บ้าง"];
+
+/** หน้าสนทนา — คุยต่อเนื่องได้ผ่าน /chat โดยส่ง session_id กลับไปทุกครั้ง */
+function Chat({token,name}:{token:string;name:string}){
+  const [turns,setTurns]=useState<ChatTurn[]>([]);
+  const [sessionId,setSessionId]=useState<string|null>(null);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const endRef=useRef<HTMLDivElement>(null);
+
+  // เลื่อนลงล่างสุดทุกครั้งที่มีข้อความใหม่ ให้เหมือนแอปแชตทั่วไป
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"})},[turns,loading]);
+
+  async function send(text:string){
+    const message=text.trim();
+    if(!message||loading)return;
+    setInput("");setError("");setLoading(true);
+    setTurns(t=>[...t,{role:"user",content:message}]);
+    try{
+      const r=await api.chat(token,message,sessionId);
+      setSessionId(r.session_id);   // เทิร์นถัดไปจะคุยต่อในบทสนทนาเดิม
+      setTurns(t=>[...t,{role:"assistant",content:r.reply,citations:r.citations,inScope:r.in_scope}]);
+    }catch(err){
+      setError(err instanceof ApiError?translateError(err):"ที่ปรึกษายังไม่พร้อม กรุณาลองใหม่");
+    }finally{setLoading(false)}
+  }
+
+  return <section className="mx-auto max-w-3xl px-5 py-10">
+    <div className="mb-5 flex items-end justify-between gap-4">
+      <div>
+        <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">AI COURSE ADVISOR</span>
+        <h1 className="mt-4 text-3xl font-black">สวัสดี {name}</h1>
+        <p className="mt-1 text-sm text-ink/55">ถามเรื่องหลักสูตรของมหาวิทยาลัยได้เลย ถามต่อเนื่องได้</p>
+      </div>
+      {turns.length>0&&<button className="btn-secondary !px-4 !py-2 shrink-0" onClick={()=>{setTurns([]);setSessionId(null);setError("")}}>เริ่มใหม่</button>}
+    </div>
+
+    <div className="panel flex h-[560px] flex-col overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-ink/10 px-6 py-4">
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-sage text-white"><MessageCircle size={18}/></span>
+        <div><strong>ที่ปรึกษาหลักสูตร</strong><p className="text-xs text-sage">ตอบจากเอกสารหลักสูตรจริง</p></div>
+      </div>
+
+      <div className="flex-1 space-y-4 overflow-y-auto p-6" aria-live="polite">
+        {turns.length===0&&!loading&&<div className="grid h-full place-items-center text-center text-ink/45">
+          <div>
+            <BookOpen className="mx-auto mb-3"/>
+            <p>เริ่มถามได้เลย เช่น</p>
+            <div className="mt-4 space-y-2">{CHAT_SUGGESTIONS.map(s=><button key={s} onClick={()=>send(s)} className="block w-full rounded-2xl border border-ink/10 bg-white px-4 py-2.5 text-left text-sm text-ink/75 hover:border-sage">{s}</button>)}</div>
+          </div>
+        </div>}
+
+        {turns.map((t,i)=><div key={i} className={t.role==="user"?"flex justify-end":"flex justify-start"}>
+          <div className={t.role==="user"
+            ? "max-w-[80%] rounded-2xl rounded-br-sm bg-ink px-4 py-3 text-sm leading-6 text-white"
+            : "max-w-[85%] rounded-2xl rounded-bl-sm bg-cream px-4 py-3 text-sm leading-6"}>
+            <p className="whitespace-pre-wrap">{t.content}</p>
+            {/* แสดงที่มาของคำตอบ เพื่อให้ผู้ใช้ตรวจสอบย้อนกลับไปยังเอกสารได้ */}
+            {t.role==="assistant"&&t.inScope&&t.citations&&t.citations.length>0&&<details className="mt-3 border-t border-ink/10 pt-2">
+              <summary className="cursor-pointer text-xs font-bold text-sage">อ้างอิงจากเอกสาร {t.citations.length} รายการ</summary>
+              <ul className="mt-2 space-y-1 text-xs text-ink/55">
+                {t.citations.map(c=><li key={c.chunk_id}>{c.course_title}{c.page_number?` — หน้า ${c.page_number}`:""}</li>)}
+              </ul>
+            </details>}
+          </div>
+        </div>)}
+
+        {loading&&<div className="flex justify-start"><div className="rounded-2xl rounded-bl-sm bg-cream px-4 py-3 text-sm text-ink/55">กำลังค้นเอกสารและเรียบเรียงคำตอบ…</div></div>}
+        {error&&<div role="alert" className="rounded-2xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+        <div ref={endRef}/>
+      </div>
+
+      <form onSubmit={e=>{e.preventDefault();send(input)}} className="flex gap-2 border-t border-ink/10 p-4">
+        <input aria-label="คำถามถึงที่ปรึกษา" className="field" value={input} onChange={e=>setInput(e.target.value)} maxLength={1000} disabled={loading} placeholder="เช่น หลักสูตรเทคโนโลยีสารสนเทศเรียนอะไรบ้าง"/>
+        <button aria-label="ส่งคำถาม" className="btn-primary !px-4" disabled={loading||!input.trim()}><ArrowRight size={19}/></button>
+      </form>
+    </div>
+  </section>;
+}
 
 function Field({label,children}:{label:string;children:React.ReactNode}){return <label><span className="label">{label}</span>{children}</label>}
 function Loading(){return <div role="status" className="grid min-h-64 place-items-center text-sm text-ink/50">กำลังโหลด…</div>}
