@@ -23,6 +23,7 @@ from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.llm_client import get_llm_connector
 from app.services.query_expansion import expand_query
+from app.services.small_talk import match_small_talk
 from app.services.vector_search import search_similar_chunks
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
@@ -150,6 +151,21 @@ def answer_question(
     connector = get_llm_connector()
     session = _load_session(db, user_id, session_id)
     history = _load_history(db, session.id)
+
+    # --- 0. คำทักทาย/ขอบคุณ/ถามตัวตน -> ตอบทันทีโดยไม่ค้นเอกสารและไม่เรียก LLM ---
+    if (canned := match_small_talk(message)) is not None:
+        db.add(ChatMessage(session_id=session.id, role="user", content=message))
+        db.add(ChatMessage(session_id=session.id, role="assistant", content=canned))
+        db.commit()
+        return ChatReply(
+            session_id=session.id,
+            reply=canned,
+            search_query=message,
+            top_score=0.0,
+            status="small_talk",
+            in_scope=True,
+            citations=[],
+        )
 
     # --- 1. ค้นด้วยคำถามดิบก่อนเสมอ ---
     # เกณฑ์ RELEVANCE_THRESHOLD สอบเทียบจากคำถามที่ผู้ใช้พิมพ์จริง จึงต้องวัดกับ

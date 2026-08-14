@@ -28,6 +28,6 @@ class ChatReply(BaseModel):
     # แยกสามสถานะให้ชัด เพราะ "ปฏิเสธเพราะนอกเรื่อง" กับ "อยู่ในเรื่องแต่เอกสาร
     # ไม่มีคำตอบ" เป็นคนละกรณีที่ผู้ใช้ควรได้ข้อความต่างกัน และตอนวัดผลก็ต้อง
     # นับแยกกัน — ก่อนหน้านี้ใช้ in_scope ตัวเดียวจึงแยกไม่ออก
-    status: Literal["answered", "not_found", "out_of_scope"]
+    status: Literal["answered", "not_found", "out_of_scope", "small_talk"]
     in_scope: bool  # ผ่านเกณฑ์ความใกล้เคียงหรือไม่ (not_found ก็ถือว่าผ่าน)
     citations: list[ChatCitation]
