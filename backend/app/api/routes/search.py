@@ -9,6 +9,7 @@ from app.api.deps import get_current_user, rate_limiter
 from app.db.session import get_db
 from app.schemas.course import SearchQuery, SearchResultChunk
 from app.services.llm_client import get_llm_connector
+from app.services.query_expansion import expand_query
 from app.services.vector_search import search_similar_chunks
 from sqlalchemy.orm import Session
 
@@ -22,5 +23,5 @@ def search_courses(
     _user=Depends(get_current_user),
 ) -> list[SearchResultChunk]:
     connector = get_llm_connector()
-    query_embedding = connector.embed(payload.query)
+    query_embedding = connector.embed(expand_query(payload.query))
     return search_similar_chunks(db, query_embedding, top_k=payload.top_k)

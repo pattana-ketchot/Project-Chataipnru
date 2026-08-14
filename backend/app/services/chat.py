@@ -22,15 +22,19 @@ from sqlalchemy.orm import Session
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.llm_client import get_llm_connector
+from app.services.query_expansion import expand_query
 from app.services.vector_search import search_similar_chunks
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
 from llm.prompts import (  # noqa: E402
     CHAT_SYSTEM_PROMPT,
     CONDENSE_SYSTEM_PROMPT,
+    GROUNDING_CHECK_SYSTEM_PROMPT,
+    NOT_FOUND_REPLY,
     OUT_OF_SCOPE_REPLY,
     build_chat_prompt,
     build_condense_prompt,
+    build_grounding_check_prompt,
 )
 
 # เกณฑ์คะแนนความใกล้เคียง (similarity = 1 - cosine distance) ที่ถือว่าคำถาม
@@ -115,6 +119,28 @@ def _format_chunks(chunks) -> str:
     )
 
 
+def _can_answer_from(connector, chunks, question: str) -> bool:
+    """
+    ถามโมเดลเป็นคำถามปิดว่าเนื้อหาที่ค้นเจอตอบคำถามนี้ได้จริงไหม
+
+    ถ้าตรวจไม่สำเร็จให้ถือว่าตอบได้ (fail-open) เพราะการปิดกั้นคำถามที่ตอบได้จริง
+    ทำให้ระบบดูใช้งานไม่ได้ ซึ่งเสียหายกว่าการปล่อยผ่านบางกรณีแล้วให้ system
+    prompt ชั้นถัดไปช่วยคุมต่อ
+    """
+    try:
+        raw = connector.chat(
+            [
+                LLMMessage(role="system", content=GROUNDING_CHECK_SYSTEM_PROMPT),
+                LLMMessage(role="user", content=build_grounding_check_prompt(_format_chunks(chunks), question)),
+            ],
+            temperature=0.0,
+            json_mode=True,
+        )
+        return bool(json.loads(raw).get("can_answer", True))
+    except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError):
+        return True
+
+
 def answer_question(
     db: Session,
     user_id: uuid.UUID,
@@ -128,7 +154,7 @@ def answer_question(
     # --- 1. ค้นด้วยคำถามดิบก่อนเสมอ ---
     # เกณฑ์ RELEVANCE_THRESHOLD สอบเทียบจากคำถามที่ผู้ใช้พิมพ์จริง จึงต้องวัดกับ
     # ข้อความดิบ ไม่ใช่ข้อความที่ผ่านการเขียนใหม่ (ซึ่งคะแนนจะเลื่อนไปจากที่วัดไว้)
-    chunks = search_similar_chunks(db, connector.embed(message), top_k=TOP_K_CHUNKS)
+    chunks = search_similar_chunks(db, connector.embed(expand_query(message)), top_k=TOP_K_CHUNKS)
     best_score = chunks[0].score if chunks else 0.0
     search_query = message
 
@@ -138,23 +164,31 @@ def answer_question(
     if history:
         rewritten = _condense(connector, history, message)
         if rewritten != message:
-            alt = search_similar_chunks(db, connector.embed(rewritten), top_k=TOP_K_CHUNKS)
+            alt = search_similar_chunks(db, connector.embed(expand_query(rewritten)), top_k=TOP_K_CHUNKS)
             alt_score = alt[0].score if alt else 0.0
             if alt_score > best_score:
                 chunks, best_score, search_query = alt, alt_score, rewritten
 
     # --- 3. นอกขอบเขต -> ตอบเองโดยไม่เรียก LLM ---
+    citations: list[ChatCitation] = []
+    status: str
     if best_score < RELEVANCE_THRESHOLD:
-        reply_text = OUT_OF_SCOPE_REPLY
-        citations: list[ChatCitation] = []
+        reply_text, status = OUT_OF_SCOPE_REPLY, "out_of_scope"
+    # --- 4. อยู่ในขอบเขตแต่เอกสารไม่มีคำตอบ -> ตอบเองเช่นกัน ---
+    # ตัดสินด้วยคำถามปิดก่อนเสมอ ไม่ปล่อยให้โมเดลตัดสินใจกลางคันตอนเขียนคำตอบ
+    elif not _can_answer_from(connector, chunks, search_query):
+        reply_text, status = NOT_FOUND_REPLY, "not_found"
     else:
+        status = "answered"
         messages = [LLMMessage(role="system", content=CHAT_SYSTEM_PROMPT)]
         for m in history:
             messages.append(LLMMessage(role=m.role, content=m.content))
         messages.append(
             LLMMessage(role="user", content=build_chat_prompt(_format_chunks(chunks), message))
         )
-        reply_text = connector.chat(messages, temperature=0.3).strip()
+        # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
+        # มากกว่าความหลากหลายของสำนวน
+        reply_text = connector.chat(messages, temperature=0.1).strip()
         citations = [
             ChatCitation(
                 chunk_id=c.chunk_id,
@@ -176,6 +210,7 @@ def answer_question(
         reply=reply_text,
         search_query=search_query,
         top_score=round(best_score, 4),
-        in_scope=bool(citations),
+        status=status,
+        in_scope=best_score >= RELEVANCE_THRESHOLD,
         citations=citations,
     )
