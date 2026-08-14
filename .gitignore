@@ -12,9 +12,18 @@ venv/
 *.egg-info/
 
 # Env / secrets
+# ครอบทุกไฟล์ที่ขึ้นต้นด้วย .env (รวม .env.bak, .env.local, .env.production)
+# ยกเว้น .env.example ที่เป็นแม่แบบและต้องอยู่ใน repo
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# เอกสารหลักสูตรที่นำเข้า — เป็นไฟล์ขนาดใหญ่และเป็นเอกสารของสถาบัน
+# ไม่ควรอยู่ใน git (ลบบรรทัดนี้ถ้าต้องการเก็บไฟล์ตัวอย่างไว้ใน repo จริงๆ)
+samples/*.pdf
+
+# venv ของโปรเจกต์
+.venv/
 
 # OS / editor
 Thumbs.db

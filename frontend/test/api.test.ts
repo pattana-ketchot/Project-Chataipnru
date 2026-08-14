@@ -10,7 +10,7 @@ describe("API client", () => {
   });
   it("adds a bearer token and exposes API errors", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "token expired" }), { status: 401, headers: { "Content-Type": "application/json" } }));
-    await expect(api.me("expired")).rejects.toEqual(expect.objectContaining<ApiError>({ status: 401, message: "token expired" }));
+    await expect(api.me("expired")).rejects.toEqual(expect.objectContaining<Partial<ApiError>>({ status: 401, message: "token expired" }));
     const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer expired");
   });

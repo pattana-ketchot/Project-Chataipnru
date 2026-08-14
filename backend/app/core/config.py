@@ -3,12 +3,20 @@
 SECURITY: ห้าม commit ไฟล์ .env จริงเข้า repo — ใช้ .env.example เป็นแม่แบบ
 """
 from functools import lru_cache
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# <root>/backend/app/core/config.py -> <root>/.env
+# ต้องเป็น absolute path: ถ้าใช้ ".env" เฉยๆ pydantic-settings จะอ่านจาก working
+# directory ตอนรัน ซึ่งปกติคือ backend/ (ตามคำสั่ง uvicorn ใน README) แล้วหาไฟล์
+# ไม่เจอ เพราะ .env อยู่ที่ root ของ repo — backend จะ crash ตั้งแต่ import
+_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
     # --- Database ---
     database_url: str = Field(..., alias="DATABASE_URL")

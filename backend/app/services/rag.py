@@ -74,6 +74,7 @@ def recommend_for_user(
     )
 
     out: list[RecommendedCourse] = []
+    seen_course_ids: set[uuid.UUID] = set()
     for item in llm_result.items:
         try:
             course = db.get(Course, uuid.UUID(item.course_id))
@@ -81,6 +82,14 @@ def recommend_for_user(
             continue  # ค่าที่ไม่ใช่ UUID ที่ถูกต้อง -> ทิ้งอย่างเงียบๆ (ไม่ trust LLM output ตรงๆ)
         if course is None:
             continue  # LLM อาจ hallucinate id ที่ไม่มีจริง -> ทิ้งอย่างเงียบๆ (ไม่ trust LLM output ตรงๆ)
+
+        if course.id in seen_course_ids:
+            # โมเดลมักแนะนำหลักสูตรเดิมซ้ำหลายอันดับเมื่อ chunk ที่ retrieve มา
+            # หลายก้อนมาจากหลักสูตรเดียวกัน — เก็บเฉพาะอันดับแรก (คะแนนสูงสุด
+            # เพราะ prompt สั่งให้เรียงจากมากไปน้อยอยู่แล้ว) ไม่งั้นผู้ใช้จะเห็น
+            # หลักสูตรเดียวกันโผล่ซ้ำในรายการแนะนำ
+            continue
+        seen_course_ids.add(course.id)
 
         cited_uuids = [uuid.UUID(c) for c in item.cited_chunk_ids]
         rec = Recommendation(

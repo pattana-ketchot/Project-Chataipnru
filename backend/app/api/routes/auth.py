@@ -1,3 +1,5 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
@@ -8,6 +10,12 @@ from app.models.user import User
 from app.schemas.user import UserCreate, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# hash ของรหัสผ่านสุ่มที่ไม่มีใครรู้ ใช้เทียบตอนหา user ไม่เจอ เพื่อให้ /login
+# ใช้เวลาใกล้เคียงกันทั้งกรณีมีและไม่มีอีเมลนั้นในระบบ
+# สร้างตอน import ด้วยฟังก์ชันจริง (ไม่ hardcode สตริง) เพราะ hash ที่เขียนมือ
+# อาจผิดรูปแบบจน checkpw คืนค่าทันที แล้ว timing จะต่างกันจนเดาได้ว่าอีเมลมีจริงไหม
+_DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(32))
 
 
 class TokenPair(BaseModel):
@@ -42,8 +50,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenPair:
     user = db.query(User).filter(User.email == payload.email).first()
     # SECURITY: เทียบ hash เสมอแม้ user ไม่พบ (constant-shape response) เพื่อลด
     # timing/enumeration signal — ใช้ dummy hash เมื่อไม่พบ user
-    dummy_hash = "$2b$12$CwTycUXWue0Thq9StjUM0uJ8jr8fq0G9F0d1a5wQ0z6a5x5x5x5x5"
-    password_hash = user.password_hash if user else dummy_hash
+    password_hash = user.password_hash if user else _DUMMY_PASSWORD_HASH
     ok = verify_password(payload.password, password_hash)
 
     if not user or not ok or not user.is_active:
