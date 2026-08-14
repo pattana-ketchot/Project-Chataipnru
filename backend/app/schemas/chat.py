@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -24,5 +25,9 @@ class ChatReply(BaseModel):
     # ว่าระบบตีความคำถามต่อเนื่องถูกหรือไม่ (มีประโยชน์มากตอนสาธิต)
     search_query: str
     top_score: float
-    in_scope: bool
+    # แยกสามสถานะให้ชัด เพราะ "ปฏิเสธเพราะนอกเรื่อง" กับ "อยู่ในเรื่องแต่เอกสาร
+    # ไม่มีคำตอบ" เป็นคนละกรณีที่ผู้ใช้ควรได้ข้อความต่างกัน และตอนวัดผลก็ต้อง
+    # นับแยกกัน — ก่อนหน้านี้ใช้ in_scope ตัวเดียวจึงแยกไม่ออก
+    status: Literal["answered", "not_found", "out_of_scope"]
+    in_scope: bool  # ผ่านเกณฑ์ความใกล้เคียงหรือไม่ (not_found ก็ถือว่าผ่าน)
     citations: list[ChatCitation]
