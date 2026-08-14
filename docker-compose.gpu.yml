@@ -1,0 +1,25 @@
+# Overlay สำหรับเครื่องที่มี NVIDIA GPU — ให้ Ollama ใช้การ์ดจอแทน CPU
+#
+# ใช้งาน:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# ข้อกำหนดก่อนใช้:
+#   - Linux: ติดตั้ง nvidia-container-toolkit
+#   - Windows: Docker Desktop + WSL2 backend + ไดรเวอร์ NVIDIA ฝั่ง Windows
+#     (ไม่ต้องลงไดรเวอร์ใน WSL) ตรวจว่าใช้ได้ด้วย:
+#       docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+#
+# หมายเหตุการ์ดรุ่นใหม่ (RTX 50xx / Blackwell, compute capability 12.0):
+#   ต้องใช้ image ollama ที่ build ด้วย CUDA ใหม่พอ ถ้าเจอ error ว่าไม่รู้จัก
+#   สถาปัตยกรรมหรือ Ollama ตกไปรันบน CPU ให้ `docker compose pull ollama` เพื่อ
+#   ดึง latest ล่าสุดก่อน แล้วดูผลด้วย `docker compose logs ollama`
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

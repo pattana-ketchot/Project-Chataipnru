@@ -1,8 +1,10 @@
-version: "3.9"
-
 # Dev/local stack: PostgreSQL(+pgvector) และ Ollama (Local LLM runtime)
+#
 # SECURITY: ports ผูกกับ 127.0.0.1 เท่านั้น ไม่ expose ออก 0.0.0.0 สู่ network
 # ภายนอกโดย default — เปลี่ยนเมื่อ deploy จริงพร้อม auth/network policy ที่เหมาะสม
+#
+# ค่า ${...} ทั้งหมดอ่านจากไฟล์ .env ที่โฟลเดอร์เดียวกัน (คัดลอกจาก .env.example)
+# ถ้ามี GPU: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 services:
   postgres:
@@ -11,12 +13,24 @@ services:
     environment:
       POSTGRES_DB: course_advisor
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: change-me-local-only
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้งค่าใน .env}
+      # ส่งต่อให้ 20-roles.sh ใช้สร้าง least-privilege role
+      ADVISOR_API_PASSWORD: ${ADVISOR_API_PASSWORD:?ต้องตั้งค่าใน .env}
+      ADVISOR_INGEST_PASSWORD: ${ADVISOR_INGEST_PASSWORD:?ต้องตั้งค่าใน .env}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # initdb รันไฟล์ในโฟลเดอร์นี้ตามลำดับชื่อไฟล์ และรันครั้งเดียวตอน volume ว่าง
       - ./db/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ./db/20-roles.sh:/docker-entrypoint-initdb.d/20-roles.sh:ro
+    healthcheck:
+      # ให้ service อื่น (และคน) รู้ว่า DB พร้อมรับ connection จริงหรือยัง
+      test: ["CMD-SHELL", "pg_isready -U postgres -d course_advisor"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   ollama:
     image: ollama/ollama:latest
@@ -25,14 +39,12 @@ services:
       - "127.0.0.1:11434:11434"
     volumes:
       - ollama_models:/root/.ollama
-    # GPU (ถ้ามี): uncomment บรรทัดล่างและติดตั้ง nvidia-container-toolkit
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
 volumes:
   pgdata:

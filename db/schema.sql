@@ -43,7 +43,12 @@ CREATE TABLE user_profiles (
     user_id             UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     education_level     TEXT,                  -- e.g. 'high_school','bachelor','master'
     field_of_study      TEXT,
-    current_role        TEXT,
+    -- ต้องใส่ double quote: current_role เป็น reserved keyword ของ PostgreSQL
+    -- (ฟังก์ชันมาตรฐาน SQL เหมือน current_user) ถ้าไม่ quote จะ syntax error
+    -- และ CREATE TABLE ทั้งไฟล์จะหยุดตรงนี้
+    -- SQLAlchemy รู้จักคำนี้เป็น reserved word อยู่แล้วจึง quote ให้เองอัตโนมัติ
+    -- ฝั่ง ORM/API ไม่ต้องแก้ แต่ถ้าเขียน raw SQL เองต้องใส่ quote ทุกครั้ง
+    "current_role"      TEXT,
     career_goal         TEXT,
     skills              JSONB NOT NULL DEFAULT '[]',   -- ["python","data analysis"]
     interests           JSONB NOT NULL DEFAULT '[]',   -- ["ai","cloud"]
@@ -110,7 +115,11 @@ CREATE TABLE course_chunks (
     page_number     INTEGER,
     content         TEXT NOT NULL,
     token_count     INTEGER,
-    embedding       VECTOR(768) NOT NULL,     -- ปรับ dim ให้ตรง embedding model (ดูหมายเหตุบนสุดไฟล์)
+    -- ต้องตรงกับ EMBED_DIM ใน .env เสมอ (bge-m3 = 1024)
+    -- ถ้าไม่ตรง backend จะปฏิเสธการสตาร์ทพร้อมบอกค่าที่ขัดกัน (ดู app/main.py)
+    -- เปลี่ยนค่าตรงนี้ต้องสร้าง DB ใหม่และ ingest ใหม่ทั้งหมด เพราะ embedding เดิม
+    -- คำนวณจากโมเดลคนละตัว นำมาเทียบกันไม่ได้
+    embedding       VECTOR(1024) NOT NULL,
     metadata        JSONB NOT NULL DEFAULT '{}',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (document_id, chunk_index)
@@ -156,14 +165,38 @@ CREATE TABLE recommendations (
 CREATE INDEX idx_recommendations_user ON recommendations(user_id);
 
 -- ---------------------------------------------------------------------
--- Least-privilege role ตัวอย่าง (ปรับ password ก่อนใช้จริง — ห้าม commit จริงลง repo)
--- ---------------------------------------------------------------------
--- CREATE ROLE advisor_api LOGIN PASSWORD 'change-me';
--- GRANT SELECT, INSERT, UPDATE ON users, user_profiles, user_requirements,
---       courses, course_chunks, chat_sessions, chat_messages, recommendations
---       TO advisor_api;
--- GRANT SELECT ON course_documents TO advisor_api;  -- API ไม่ควรแก้ metadata การ ingest โดยตรง
+-- Trigger: ให้ updated_at อัปเดตอัตโนมัติทุกครั้งที่มีการแก้ไขแถว
 --
--- CREATE ROLE advisor_ingest LOGIN PASSWORD 'change-me';
--- GRANT SELECT, INSERT, UPDATE ON courses, course_documents, course_chunks TO advisor_ingest;
--- (ingest role ไม่ควรแตะตาราง users/recommendations เลย)
+-- ทำไมต้องใช้ trigger ไม่ใช่ onupdate ฝั่ง SQLAlchemy:
+--   `DEFAULT now()` มีผลตอน INSERT เท่านั้น ถ้าไม่มี trigger คอลัมน์ updated_at
+--   จะเท่ากับ created_at ตลอดไปแม้แก้ข้อมูลกี่ครั้งก็ตาม
+--   และตาราง courses ถูกเขียนโดย pipeline ผ่าน psycopg ตรงๆ ไม่ผ่าน ORM
+--   ถ้าพึ่ง onupdate ของ SQLAlchemy อย่างเดียวจะครอบไม่ถึง — ทำที่ชั้น DB
+--   จึงครอบคลุมทุกทางเข้าถึงข้อมูล และเป็นแหล่งความจริงเพียงที่เดียว
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_user_profiles_updated_at
+    BEFORE UPDATE ON user_profiles
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_courses_updated_at
+    BEFORE UPDATE ON courses
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ---------------------------------------------------------------------
+-- Least-privilege role
+-- ---------------------------------------------------------------------
+-- ย้ายไปที่ db/20-roles.sh แล้ว (รันต่อจากไฟล์นี้โดย docker-entrypoint-initdb.d)
+-- เหตุผล: ต้องอ่านรหัสผ่านจาก environment variable ซึ่งไฟล์ .sql ทำไม่ได้
+-- จึงต้องเป็นเชลล์สคริปต์ ไม่งั้นต้อง hardcode รหัสผ่านลงไฟล์ที่ commit เข้า git
