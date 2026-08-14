@@ -114,11 +114,13 @@ copy .env.example .env.local
 npm install
 npm run dev
 
-# นำเข้าหลักสูตรตัวอย่าง (เมื่อมี PDF)
-cd pipeline
-pip install -r requirements.txt
-python ingest.py --pdf ../samples/course101.pdf --course-code CS101
+# นำเข้าหลักสูตรตัวอย่าง (เมื่อมี PDF) — รันจากโฟลเดอร์ราก
+pip install -r pipeline/requirements.txt
+python -m pipeline.ingest --pdf samples/course101.pdf --title "AI Fundamentals" --course-code CS101
 ```
+
+> `--pdf` และ `--title` เป็น argument บังคับ ส่วน `--course-code` / `--provider` ใส่หรือไม่ก็ได้
+> และ ingest ต้องมี `INGEST_DATABASE_URL` ใน `.env` (คนละ role กับ `DATABASE_URL` ของ backend)
 
 เปิด UI ที่ `http://localhost:3000`, API ที่ `http://localhost:8000` และ OpenAPI ที่ `http://localhost:8000/docs`
 
@@ -146,7 +148,8 @@ curl http://localhost:8000/health
 
 | ตัวแปร | ฝั่ง | ค่าเริ่มต้น/หน้าที่ |
 |---|---|---|
-| `DATABASE_URL` | Backend/Pipeline | PostgreSQL connection string |
+| `DATABASE_URL` | Backend | PostgreSQL connection string (SQLAlchemy, มี prefix `postgresql+psycopg://`) |
+| `INGEST_DATABASE_URL` | Pipeline | connection string ของ role `advisor_ingest` (psycopg ตรงๆ ใช้ `postgresql://`) |
 | `JWT_SECRET` | Backend | secret สำหรับลงนาม token; ต้องสุ่มใหม่ |
 | `OLLAMA_BASE_URL` | Backend/Pipeline | `http://127.0.0.1:11434` |
 | `LLM_MODEL` / `EMBED_MODEL` | Backend | โมเดล generation/embedding |

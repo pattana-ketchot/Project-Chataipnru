@@ -38,11 +38,15 @@ def upsert_my_profile(
 
 
 @router.get("/me/profile", response_model=UserProfileOut)
-def get_my_profile(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> UserProfile:
+def get_my_profile(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> UserProfileOut:
     profile = db.get(UserProfile, user.id)
     if profile is None:
-        profile = UserProfile(user_id=user.id)
-    return profile
+        # ผู้ใช้ที่ยังไม่เคยบันทึกแบบสอบถาม: คืน schema เปล่าตาม default
+        # ห้ามคืน UserProfile() ที่ยังไม่ commit เพราะ column default (skills/
+        # interests/updated_at) ยังไม่ถูก apply -> เป็น None -> response
+        # validation ล้ม -> 500 และห้ามสร้างแถวใน DB จาก GET (side effect)
+        return UserProfileOut()
+    return UserProfileOut.model_validate(profile)
 
 
 @router.post("/me/requirements", response_model=RequirementOut, status_code=201)

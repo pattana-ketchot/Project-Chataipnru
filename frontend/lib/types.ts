@@ -1,5 +1,5 @@
 export type User = { id: string; email: string; full_name: string | null; created_at: string };
-export type Profile = { education_level: string | null; field_of_study: string | null; current_role: string | null; career_goal: string | null; skills: string[]; interests: string[]; language_preference: string; updated_at?: string };
+export type Profile = { education_level: string | null; field_of_study: string | null; current_role: string | null; career_goal: string | null; skills: string[]; interests: string[]; language_preference: string; updated_at?: string | null };
 export type Requirement = { id: string; req_type: string; req_value: string; priority: number; created_at: string };
 export type Course = { id: string; code: string | null; title: string; provider: string | null; summary: string | null; mode: string | null; duration_weeks: number | null; price: number | null; currency: string; tags: string[] };
 export type Recommendation = { course: Course; score: number; rationale: string; cited_chunk_ids: string[] };
