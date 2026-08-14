@@ -30,7 +30,8 @@ class UserProfileUpsert(BaseModel):
 
 class UserProfileOut(UserProfileUpsert):
     model_config = ConfigDict(from_attributes=True)
-    updated_at: datetime
+    # None = ยังไม่เคยบันทึกโปรไฟล์ (ยังไม่มีแถวใน user_profiles)
+    updated_at: datetime | None = None
 
 
 class RequirementCreate(BaseModel):

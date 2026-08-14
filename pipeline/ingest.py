@@ -27,6 +27,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import psycopg  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 from pgvector.psycopg import register_vector  # noqa: E402
 
 from llm.connector import OllamaConnector  # noqa: E402
@@ -37,6 +38,10 @@ from pipeline.extract_pdf import extract_pdf  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("pipeline.ingest")
+
+# อ่าน .env ที่ root ของ repo (override=False -> env var จริงที่ตั้งไว้แล้วชนะเสมอ
+# เพื่อให้ override ตอนรันใน CI/container ได้)
+load_dotenv(_REPO_ROOT / ".env", override=False)
 
 
 def get_or_create_course(conn: psycopg.Connection, course_code: str | None, title: str, provider: str | None) -> uuid.UUID:
@@ -94,7 +99,13 @@ def insert_chunks(conn: psycopg.Connection, course_id: uuid.UUID, document_id: u
 
 
 def run(pdf_path: str, title: str, course_code: str | None, provider: str | None) -> None:
-    database_url = os.environ["INGEST_DATABASE_URL"]  # ใช้ advisor_ingest role, แยกจาก backend
+    # ใช้ advisor_ingest role, แยกจาก backend (ดู .env.example)
+    database_url = os.environ.get("INGEST_DATABASE_URL")
+    if not database_url:
+        raise SystemExit(
+            "ไม่พบ INGEST_DATABASE_URL — ตั้งค่าใน .env ที่ root ของ repo หรือ export เป็น env var\n"
+            "ตัวอย่าง: postgresql://advisor_ingest:<password>@localhost:5432/course_advisor"
+        )
     ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
     embed_model = os.environ.get("EMBED_MODEL", "nomic-embed-text")
 
