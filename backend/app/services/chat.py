@@ -33,17 +33,34 @@ from llm.prompts import (  # noqa: E402
     GROUNDING_CHECK_SYSTEM_PROMPT,
     NOT_FOUND_REPLY,
     OUT_OF_SCOPE_REPLY,
+    SCOPE_CHECK_SYSTEM_PROMPT,
     build_chat_prompt,
     build_condense_prompt,
     build_grounding_check_prompt,
+    build_scope_check_prompt,
 )
 
-# เกณฑ์คะแนนความใกล้เคียง (similarity = 1 - cosine distance) ที่ถือว่าคำถาม
-# อยู่ในขอบเขต วัดจากคำถามจริง 12 ข้อกับคลังเอกสาร 18 หลักสูตร:
-#   คำถามเกี่ยวกับหลักสูตร  ได้ 0.625 - 0.721
-#   คำถามนอกเรื่อง          ได้ 0.411 - 0.525
-# ตั้งไว้ตรงกลางช่องว่างเพื่อให้มีระยะเผื่อทั้งสองฝั่ง
-RELEVANCE_THRESHOLD = 0.58
+# เกณฑ์คัดกรองชั้นแรก — ใช้ตัดเฉพาะคำถามที่ "ไม่มีอะไรในคลังใกล้เคียงเลย"
+#
+# เดิมใช้เกณฑ์เดียวที่ 0.58 ตัดสินว่าอยู่นอกขอบเขตหรือไม่ ซึ่งผิดหลักการ เพราะ
+# คะแนนความใกล้เคียงตอบได้แค่ว่า "คลังมีข้อความคล้ายคำถามนี้ไหม" ไม่ใช่ "คำถามนี้
+# เกี่ยวกับมหาวิทยาลัยไหม" — คนละเรื่องกัน คำถามที่เกี่ยวกับหลักสูตรจริงแต่เอกสาร
+# ไม่ครอบคลุม (เช่น อัตราการได้งานของบัณฑิต) จึงได้คะแนนกลางๆ แล้วถูกเหมาว่า
+# นอกเรื่อง ทั้งที่ควรตอบว่า "ไม่มีข้อมูลนี้ในเอกสาร"
+#
+# วัดจากชุดประเมิน 14 คำถาม:
+#   ตอบได้จากเอกสาร      0.708 - 0.771
+#   ในเรื่องแต่ไม่มีข้อมูล  0.539 - 0.634
+#   นอกเรื่อง             0.441 - 0.517
+# ช่องว่างระหว่างสองกลุ่มหลังกว้างเพียง 0.022 ซึ่งแคบเกินกว่าจะวางเกณฑ์ให้เชื่อถือ
+# ได้จากตัวอย่างเท่านี้ จึงลดบทบาทของตัวเลขลงเหลือแค่ทางลัดสำหรับกรณีที่ชัดเจนมาก
+# แล้วให้ _gate() เป็นคนตัดสินจริงในช่วงที่ก้ำกึ่ง
+OFF_TOPIC_THRESHOLD = 0.50
+
+# ขอบบนของช่วงที่คะแนนแยกไม่ออกว่านอกเรื่องหรือแค่เอกสารไม่ครอบคลุม
+# เหนือค่านี้ถือว่าอยู่ในเรื่องแน่นอน (คำถามที่ตอบได้จริงทั้งหมดในชุดประเมินได้
+# 0.708 ขึ้นไป) จึงข้ามการตรวจหัวข้อไปตรวจแค่ว่าเอกสารตอบได้ไหม
+AMBIGUOUS_UNTIL = 0.65
 
 # จำนวนข้อความย้อนหลังที่ส่งเข้า prompt — มากกว่านี้ทำให้ prompt ยาวและช้าขึ้น
 # โดยได้บริบทเพิ่มไม่มาก เพราะคำถามมักอ้างถึงไม่กี่เทิร์นล่าสุด
@@ -120,26 +137,40 @@ def _format_chunks(chunks) -> str:
     )
 
 
-def _can_answer_from(connector, chunks, question: str) -> bool:
+def _ask_json_flag(connector, system: str, user: str, key: str) -> bool:
     """
-    ถามโมเดลเป็นคำถามปิดว่าเนื้อหาที่ค้นเจอตอบคำถามนี้ได้จริงไหม
+    ถามคำถามปิดหนึ่งข้อแล้วอ่านค่า boolean จาก JSON
 
-    ถ้าตรวจไม่สำเร็จให้ถือว่าตอบได้ (fail-open) เพราะการปิดกั้นคำถามที่ตอบได้จริง
-    ทำให้ระบบดูใช้งานไม่ได้ ซึ่งเสียหายกว่าการปล่อยผ่านบางกรณีแล้วให้ system
-    prompt ชั้นถัดไปช่วยคุมต่อ
+    fail-open: ถ้าเรียกไม่สำเร็จหรืออ่านค่าไม่ได้ให้ถือว่า true เพราะการปิดกั้น
+    คำถามที่ตอบได้จริงทำให้ระบบดูใช้งานไม่ได้ ซึ่งเสียหายกว่าการปล่อยผ่านแล้วให้
+    ชั้นถัดไปช่วยคุมต่อ
     """
     try:
         raw = connector.chat(
-            [
-                LLMMessage(role="system", content=GROUNDING_CHECK_SYSTEM_PROMPT),
-                LLMMessage(role="user", content=build_grounding_check_prompt(_format_chunks(chunks), question)),
-            ],
+            [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
             temperature=0.0,
             json_mode=True,
         )
-        return bool(json.loads(raw).get("can_answer", True))
+        return bool(json.loads(raw).get(key, True))
     except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError):
         return True
+
+
+def _is_about_scope(connector, question: str) -> bool:
+    """คำถามนี้เป็นเรื่องของมหาวิทยาลัยหรือไม่ (ไม่เกี่ยวกับว่าเอกสารมีคำตอบไหม)"""
+    return _ask_json_flag(
+        connector, SCOPE_CHECK_SYSTEM_PROMPT, build_scope_check_prompt(question), "about_scope"
+    )
+
+
+def _can_answer_from(connector, chunks, question: str) -> bool:
+    """เนื้อหาที่ค้นเจอมีข้อเท็จจริงตอบคำถามนี้ได้จริงไหม"""
+    return _ask_json_flag(
+        connector,
+        GROUNDING_CHECK_SYSTEM_PROMPT,
+        build_grounding_check_prompt(_format_chunks(chunks), question),
+        "can_answer",
+    )
 
 
 def answer_question(
@@ -168,8 +199,8 @@ def answer_question(
         )
 
     # --- 1. ค้นด้วยคำถามดิบก่อนเสมอ ---
-    # เกณฑ์ RELEVANCE_THRESHOLD สอบเทียบจากคำถามที่ผู้ใช้พิมพ์จริง จึงต้องวัดกับ
-    # ข้อความดิบ ไม่ใช่ข้อความที่ผ่านการเขียนใหม่ (ซึ่งคะแนนจะเลื่อนไปจากที่วัดไว้)
+    # ใช้ข้อความดิบก่อน เพราะเป็นสิ่งที่ผู้ใช้พิมพ์จริงและเป็นฐานที่ใช้สอบเทียบ
+    # OFF_TOPIC_THRESHOLD ไว้
     chunks = search_similar_chunks(db, connector.embed(expand_query(message)), top_k=TOP_K_CHUNKS)
     best_score = chunks[0].score if chunks else 0.0
     search_query = message
@@ -185,17 +216,22 @@ def answer_question(
             if alt_score > best_score:
                 chunks, best_score, search_query = alt, alt_score, rewritten
 
-    # --- 3. นอกขอบเขต -> ตอบเองโดยไม่เรียก LLM ---
+    # --- 3. ตัดสินว่าจะตอบ ปฏิเสธ หรือบอกว่าไม่มีข้อมูล ---
     citations: list[ChatCitation] = []
     status: str
-    if best_score < RELEVANCE_THRESHOLD:
+    if best_score < OFF_TOPIC_THRESHOLD:
+        # ต่ำขนาดนี้คือไม่มีอะไรในคลังใกล้เคียงเลย ตัดจบโดยไม่ต้องเสียเวลาเรียก LLM
         reply_text, status = OUT_OF_SCOPE_REPLY, "out_of_scope"
-    # --- 4. อยู่ในขอบเขตแต่เอกสารไม่มีคำตอบ -> ตอบเองเช่นกัน ---
-    # ตัดสินด้วยคำถามปิดก่อนเสมอ ไม่ปล่อยให้โมเดลตัดสินใจกลางคันตอนเขียนคำตอบ
+    # ช่วงก้ำกึ่ง: คะแนนแยกไม่ออกว่า "นอกเรื่อง" หรือ "ในเรื่องแต่เอกสารไม่ครอบคลุม"
+    # จึงถามเรื่องหัวข้อเพิ่มอีกหนึ่งคำถาม เฉพาะในช่วงนี้เท่านั้น เพื่อไม่ให้คำถาม
+    # ที่คะแนนสูงอยู่แล้ว (ซึ่งอยู่ในเรื่องแน่นอน) ต้องเสียเวลาเรียก LLM เพิ่ม
+    elif best_score < AMBIGUOUS_UNTIL and not _is_about_scope(connector, search_query):
+        reply_text, status = OUT_OF_SCOPE_REPLY, "out_of_scope"
     elif not _can_answer_from(connector, chunks, search_query):
         reply_text, status = NOT_FOUND_REPLY, "not_found"
     else:
         status = "answered"
+    if status == "answered":
         messages = [LLMMessage(role="system", content=CHAT_SYSTEM_PROMPT)]
         for m in history:
             messages.append(LLMMessage(role=m.role, content=m.content))
@@ -227,6 +263,6 @@ def answer_question(
         search_query=search_query,
         top_score=round(best_score, 4),
         status=status,
-        in_scope=best_score >= RELEVANCE_THRESHOLD,
+        in_scope=status in ("answered", "not_found"),
         citations=citations,
     )
