@@ -3,15 +3,15 @@ Shared FastAPI dependencies: DB session, current-user auth, simple rate limiter.
 
 SECURITY:
   - get_current_user validates JWT signature+exp ทุกครั้ง (ไม่ trust client claim เฉยๆ)
-  - rate_limiter เป็น in-memory token bucket ต่อ IP สำหรับ dev; production ควรทำที่
-    reverse proxy (nginx/traefik) หรือ Redis-backed limiter แทน (in-memory ใช้ไม่ได้
-    ถ้ามีหลาย worker/instance)
+  - rate_limiter เป็น in-memory token bucket ต่อ "บัญชีผู้ใช้" สำหรับ dev;
+    production ควรใช้ Redis-backed limiter แทน (in-memory ใช้ไม่ได้ถ้ามีหลาย
+    worker/instance เพราะแต่ละ process นับแยกกัน)
 """
 import time
 import uuid
 from collections import defaultdict
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy.orm import Session
@@ -57,11 +57,23 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 _bucket: dict[str, list[float]] = defaultdict(list)
 
 
-def rate_limiter(request: Request) -> None:
+def rate_limiter(user: User = Depends(get_current_user)) -> None:
+    """
+    จำกัดจำนวนคำขอต่อนาที "ต่อหนึ่งบัญชี"
+
+    เดิมนับจาก IP ซึ่งใช้ไม่ได้เมื่อ frontend ส่งต่อคำขอให้ backend (rewrite ใน
+    next.config.ts) เพราะ backend จะเห็นเป็น IP ของเซิร์ฟเวอร์ Next เหมือนกันหมด
+    ผู้ใช้ทุกคนจึงแชร์โควตาก้อนเดียวกัน — คนหนึ่งยิงถี่แล้วคนอื่นโดน 429 ไปด้วย
+
+    การนับจาก user id ยังปลอมไม่ได้ด้วย ต่างจาก X-Forwarded-For ที่ client
+    ตั้งค่าเองได้ถ้า backend ถูกเปิดออกสู่ภายนอกโดยตรง
+
+    ทุก endpoint ที่ใช้ตัวนี้ต้องผ่าน authentication อยู่แล้ว และ FastAPI cache
+    ผลของ get_current_user ภายใน request เดียวกัน จึงไม่ได้ query DB ซ้ำ
+    """
     now = time.time()
     window = 60.0
-    key = request.client.host if request.client else "unknown"
-    hits = _bucket[key]
+    hits = _bucket[str(user.id)]
     hits[:] = [t for t in hits if now - t < window]
     if len(hits) >= settings.rate_limit_per_minute:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "rate limit exceeded")
