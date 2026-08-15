@@ -18,13 +18,24 @@
 """
 from __future__ import annotations
 
+import re
+
 # คำย่อ/คำเรียกติดปาก -> ชื่อสาขาตามเอกสาร
 # key ต้องเป็นคำที่เจาะจงพอจะไม่ไปตรงกับคำอื่นโดยบังเอิญ
-_ALIASES: dict[str, str] = {
+#
+# คำย่ออักษรโรมันมาจากการทดสอบกับผู้ใช้จริง ซึ่งพิมพ์ว่า "Comsci" ไม่ใช่ "วิทคอม"
+# คำสั้นอย่าง "it" ถูกเทียบแบบมีขอบเขตคำ (ดู _ROMAN_ALIAS_RE) เพื่อไม่ให้ไปตรงกับ
+# ตัวอักษรที่อยู่กลางคำอังกฤษอื่น
+ALIASES: dict[str, str] = {
     "วิทคอม": "วิทยาการคอมพิวเตอร์",
     "คอมพิวเตอร์ไซแอนซ์": "วิทยาการคอมพิวเตอร์",
+    "comsci": "วิทยาการคอมพิวเตอร์",
+    "com sci": "วิทยาการคอมพิวเตอร์",
+    "computer science": "วิทยาการคอมพิวเตอร์",
+    "cs": "วิทยาการคอมพิวเตอร์",
     "ไอที": "เทคโนโลยีสารสนเทศ",
     "it": "เทคโนโลยีสารสนเทศ",
+    "information technology": "เทคโนโลยีสารสนเทศ",
     "แอนิเมชัน": "คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย",
     "แอนิเมชั่น": "คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย",
     "อนิเมชั่น": "คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย",
@@ -40,11 +51,22 @@ _ALIASES: dict[str, str] = {
 }
 
 
+def _alias_present(alias: str, lowered: str) -> bool:
+    """
+    คำย่ออักษรโรมันต้องเทียบแบบมีขอบเขตคำ ไม่งั้น "it" จะไปตรงกับตัวอักษรกลางคำ
+    อย่าง "digital" หรือ "unit" ส่วนคำไทยเทียบแบบมีอยู่ในข้อความได้เลย
+    เพราะภาษาไทยไม่เขียนเว้นวรรคระหว่างคำจึงไม่มีขอบเขตคำให้อ้างอิง
+    """
+    if alias.isascii():
+        return re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", lowered) is not None
+    return alias in lowered
+
+
 def expand_query(query: str) -> str:
     """เติมชื่อหลักสูตรเต็มต่อท้ายถ้าพบคำย่อ คืนข้อความเดิมถ้าไม่พบ"""
     lowered = query.lower()
     additions: list[str] = []
-    for alias, full in _ALIASES.items():
-        if alias in lowered and full not in query and full not in " ".join(additions):
+    for alias, full in ALIASES.items():
+        if _alias_present(alias, lowered) and full not in query and full not in " ".join(additions):
             additions.append(full)
     return f"{query} {' '.join(additions)}" if additions else query

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
+from app.services.course_scope import resolve_scope
 from app.services.llm_client import get_llm_connector
 from app.services.query_expansion import expand_query
 from app.services.small_talk import match_small_talk
@@ -137,6 +138,29 @@ def _format_chunks(chunks) -> str:
     )
 
 
+def _retrieve(db: Session, connector, question: str):
+    """
+    ค้นเนื้อหาที่เกี่ยวข้อง โดยจำกัดขอบเขตไว้ที่หลักสูตรเดียวถ้าระบุได้จากคำถาม
+
+    เมื่อรู้แล้วว่าถามถึงหลักสูตรใด ชื่อหลักสูตรในคำถามกลายเป็นตัวรบกวนการจัดอันดับ
+    เพราะไปแมตช์กับทุก chunk ที่เอ่ยชื่อนั้น (รวมภาคผนวกที่เป็นตารางประเมิน ซึ่งพูดชื่อ
+    หลักสูตรซ้ำแทบทุกบรรทัด) จึงตัดชื่อออกแล้วค้นด้วยส่วนที่เป็นคำถามจริง
+
+    วัดกับคำถาม "สาขาวิชาเทคโนโลยีการจัดการสุขภาพ เรียนจบทำอาชีพไหนได้บ้าง":
+    chunk ที่มีรายชื่ออาชีพจริงเคยอยู่อันดับแย่กว่า 200 ของทั้งคลัง เมื่อจำกัดขอบเขต
+    และตัดชื่อออกแล้วขึ้นมาอยู่อันดับ 3
+    """
+    scope = resolve_scope(db, question)
+    if scope is None:
+        return search_similar_chunks(db, connector.embed(expand_query(question)), top_k=TOP_K_CHUNKS)
+    return search_similar_chunks(
+        db,
+        connector.embed(scope.search_text),
+        top_k=TOP_K_CHUNKS,
+        course_ids=scope.course_ids,
+    )
+
+
 def _ask_json_flag(connector, system: str, user: str, key: str) -> bool:
     """
     ถามคำถามปิดหนึ่งข้อแล้วอ่านค่า boolean จาก JSON
@@ -201,7 +225,7 @@ def answer_question(
     # --- 1. ค้นด้วยคำถามดิบก่อนเสมอ ---
     # ใช้ข้อความดิบก่อน เพราะเป็นสิ่งที่ผู้ใช้พิมพ์จริงและเป็นฐานที่ใช้สอบเทียบ
     # OFF_TOPIC_THRESHOLD ไว้
-    chunks = search_similar_chunks(db, connector.embed(expand_query(message)), top_k=TOP_K_CHUNKS)
+    chunks = _retrieve(db, connector, message)
     best_score = chunks[0].score if chunks else 0.0
     search_query = message
 
@@ -211,7 +235,7 @@ def answer_question(
     if history:
         rewritten = _condense(connector, history, message)
         if rewritten != message:
-            alt = search_similar_chunks(db, connector.embed(expand_query(rewritten)), top_k=TOP_K_CHUNKS)
+            alt = _retrieve(db, connector, rewritten)
             alt_score = alt[0].score if alt else 0.0
             if alt_score > best_score:
                 chunks, best_score, search_query = alt, alt_score, rewritten
