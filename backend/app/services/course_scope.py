@@ -41,8 +41,18 @@ class CourseScope:
     search_text: str
 
 
-# คำนำหน้าที่ตัดทิ้งได้เมื่อเอาชื่อหลักสูตรออกแล้ว เพื่อไม่ให้เหลือเศษคำ
-_LEADING_NOISE = re.compile(r"^(หลักสูตร|สาขาวิชา|สาขา|คณะ|เอก)\s*")
+# คำห่อที่ไม่มีความหมายในการจัดอันดับเมื่อรู้แล้วว่าถามถึงหลักสูตรใด
+#
+# แยกเป็นสองชั้นโดยตั้งใจ เพราะเคยตัด "หลักสูตร" ทุกตำแหน่งแล้วพัง:
+# คำถาม "ใครเป็นอาจารย์ผู้รับผิดชอบหลักสูตรวิทยาการคอมพิวเตอร์บ้าง" กลายเป็น
+# "ใครเป็นอาจารย์ผู้รับผิดชอบ บ้าง" ซึ่งทำลายศัพท์เฉพาะ "อาจารย์ผู้รับผิดชอบ
+# หลักสูตร" ที่ใช้ในเอกสาร มคอ.2 จนค้นรายชื่ออาจารย์ไม่เจอ
+#
+# ชื่อปริญญา (ลงท้าย "บัณฑิต") และคำว่า "สาขาวิชา/สาขา" เป็นคำห่อเสมอ ตัดได้ทุกตำแหน่ง
+_DEGREE_AND_WRAPPER = re.compile(r"([ก-๙]*บัณฑิต|สาขาวิชา|สาขา|วิชาเอก)")
+# ส่วน "หลักสูตร" ตัดเฉพาะเมื่ออยู่ต้นประโยค (เป็นคำนำที่ผู้ใช้พิมพ์นำหน้าชื่อ)
+# ถ้าอยู่กลางประโยคมักเป็นส่วนของศัพท์เฉพาะ จึงต้องเก็บไว้
+_LEADING_COURSE_WORD = re.compile(r"^หลักสูตร\s*")
 _EXTRA_SPACE = re.compile(r"\s{2,}")
 
 # ความยาวขั้นต่ำของข้อความที่เหลือหลังตัดชื่อหลักสูตร ถ้าสั้นกว่านี้แปลว่าคำถามแทบไม่มี
@@ -98,7 +108,9 @@ def _build(ids: list[uuid.UUID], name: str, question: str, strip: str | None = N
     target = strip or name
     # ตัดแบบไม่สนตัวพิมพ์เล็กใหญ่ เพราะคำย่ออาจเป็นอักษรโรมัน
     remainder = re.sub(re.escape(target), " ", question, flags=re.IGNORECASE)
-    remainder = _LEADING_NOISE.sub("", _EXTRA_SPACE.sub(" ", remainder).strip()).strip()
+    remainder = _DEGREE_AND_WRAPPER.sub(" ", remainder)
+    remainder = _EXTRA_SPACE.sub(" ", remainder).strip()
+    remainder = _LEADING_COURSE_WORD.sub("", remainder).strip()
 
     # เหลือน้อยเกินไปแปลว่าคำถามคือชื่อหลักสูตรล้วน ใช้ข้อความเดิมค้นต่อไป
     search_text = remainder if len(remainder) >= _MIN_REMAINDER else question
