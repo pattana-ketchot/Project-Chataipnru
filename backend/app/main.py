@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -8,6 +9,8 @@ from sqlalchemy import text
 from app.api.routes import auth, chat, courses, recommend, search, users
 from app.core.config import get_settings
 from app.db.session import engine
+
+from llm.connector import ChatMessage  # noqa: E402  (sys.path ตั้งโดย llm_client)
 
 settings = get_settings()
 
@@ -39,10 +42,51 @@ def _check_embedding_dim() -> None:
     logger.info("embedding dim = %d ตรงกับ %s", db_dim, settings.embed_model)
 
 
+async def _keep_models_warm() -> None:
+    """
+    ยิงคำขอเล็กๆ ไปที่ Ollama เป็นระยะเพื่อไม่ให้โมเดลถูกถอดออกจาก VRAM
+
+    ปัญหาที่แก้: Ollama ถอดโมเดลทิ้งเมื่อไม่ถูกใช้ครบ OLLAMA_KEEP_ALIVE (ตั้งไว้
+    30 นาที) คำถามแรกหลังจากนั้นต้องโหลดกลับเข้า VRAM ซึ่งวัดได้ 118 วินาที
+    นานจนฝั่ง Next ตัดการเชื่อมต่อด้วย ECONNRESET แล้วผู้ใช้เห็นเป็น
+    "เกิดข้อผิดพลาด กรุณาลองใหม่" ทั้งที่ระบบยังทำงานปกติ
+
+    ยิงถี่กว่าเวลาหมดอายุเพื่อให้ตัวนับถูกรีเซ็ตก่อนเสมอ ค่าใช้จ่ายต่อครั้งต่ำมาก
+    (embed ข้อความสั้นหนึ่งครั้ง) แลกกับการที่โมเดลค้างอยู่ใน VRAM ตลอดเวลาที่
+    เซิร์ฟเวอร์เปิด ซึ่งเป็นสิ่งที่ต้องการอยู่แล้วบนเครื่องที่ตั้งใจใช้สาธิต
+
+    ปิดได้ด้วย WARMUP_INTERVAL_MINUTES=0 ถ้าต้องการคืน VRAM ให้งานอื่น
+    """
+    from app.services.llm_client import get_llm_connector
+
+    interval = settings.warmup_interval_minutes * 60
+    connector = get_llm_connector()
+    while True:
+        try:
+            # embed อย่างเดียวไม่พอ ต้องแตะโมเดลตอบคำถามด้วยเพราะนับเวลาแยกกัน
+            await asyncio.to_thread(connector.embed, "warmup")
+            await asyncio.to_thread(
+                connector.chat, [ChatMessage(role="user", content="hi")], 0.0, False
+            )
+            logger.debug("warmup ping สำเร็จ")
+        except Exception as e:  # noqa: BLE001 — งานเบื้องหลัง ห้ามทำให้เซิร์ฟเวอร์ล้ม
+            logger.warning("warmup ping ไม่สำเร็จ: %s", type(e).__name__)
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _check_embedding_dim()
+
+    task = None
+    if settings.warmup_interval_minutes > 0:
+        task = asyncio.create_task(_keep_models_warm())
+        logger.info("เปิด warmup ทุก %d นาที", settings.warmup_interval_minutes)
+
     yield
+
+    if task is not None:
+        task.cancel()
 
 
 app = FastAPI(

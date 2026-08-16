@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     embed_dim: int = Field(768, alias="EMBED_DIM")
     llm_request_timeout_s: int = 120
 
+    # ยิงคำขอเล็กๆ ไปที่ Ollama ทุกกี่นาทีเพื่อไม่ให้โมเดลถูกถอดออกจาก VRAM
+    # ต้องน้อยกว่า OLLAMA_KEEP_ALIVE ใน docker-compose.yml (ตั้งไว้ 30 นาที)
+    # ตั้ง 0 เพื่อปิด แล้วคืน VRAM ให้งานอื่นแทน
+    warmup_interval_minutes: int = Field(20, alias="WARMUP_INTERVAL_MINUTES")
+
     # --- PDF ingest ---
     max_pdf_size_mb: int = 50
     pdf_storage_dir: str = Field("./storage/pdfs", alias="PDF_STORAGE_DIR")
