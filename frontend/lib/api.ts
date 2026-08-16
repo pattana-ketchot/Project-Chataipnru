@@ -3,13 +3,25 @@ import type { ChatReply, Course, Profile, RecommendResponse, Requirement, User }
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); this.name = "ApiError"; } }
 
+/** ใช้เมื่อคำขอขาดหรือ gateway ล้ม ซึ่งเกือบทุกครั้งคือโมเดลกำลังโหลดเข้า VRAM */
+const SLOW_HINT = "ระบบ AI กำลังเตรียมโมเดล คำถามแรกหลังเปิดระบบหรือเว้นว่างนานอาจใช้เวลาถึง 2 นาที กรุณารอสักครู่แล้วถามใหม่อีกครั้งครับ";
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}, token?: string | null): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  } catch {
+    // fetch โยน error เมื่อการเชื่อมต่อขาด ซึ่งเกิดได้เมื่อคำขอใช้เวลานานมาก
+    // (เช่น Ollama กำลังโหลดโมเดลกลับเข้า VRAM ซึ่งวัดได้ถึง 118 วินาที)
+    // แล้ว proxy ตัดการเชื่อมต่อทิ้ง — ต้องบอกผู้ใช้ให้ตรงว่าเกิดอะไรขึ้น
+    throw new ApiError(0, SLOW_HINT);
+  }
   if (!response.ok) {
-    let message = "เกิดข้อผิดพลาด กรุณาลองใหม่";
+    // proxy ที่ล้มจะคืนหน้า HTML ไม่ใช่ JSON จึงอ่าน detail ไม่ได้ ต้องมีข้อความสำรอง
+    let message = response.status >= 502 ? SLOW_HINT : "เกิดข้อผิดพลาด กรุณาลองใหม่";
     try { const body = await response.json(); message = body.detail ?? message; } catch { /* non-JSON error */ }
     throw new ApiError(response.status, message);
   }
