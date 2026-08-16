@@ -1,8 +1,14 @@
 import type { NextConfig } from "next";
 
 // ที่อยู่ของ backend ในมุมของ "เซิร์ฟเวอร์ Next" ไม่ใช่ของเบราว์เซอร์
-// ตอนรันบนเครื่อง = 127.0.0.1:8000 / ตอนอยู่ใน Docker = http://backend:8000
-const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN ?? "http://127.0.0.1:8000";
+// ตอนรันบนเครื่อง = 127.0.0.1:9000 / ตอนอยู่ใน Docker = http://backend:8000
+//
+// ใช้ 9000 ไม่ใช่ 8000 เพราะ Windows จองช่วงพอร์ตให้ Hyper-V/WSL ไว้ล่วงหน้า
+// (ดูได้ด้วย netsh interface ipv4 show excludedportrange protocol=tcp)
+// บนเครื่องพัฒนานี้ช่วงที่จองคือ 7916-8715 ซึ่งคลุม 8000 ทั้งช่วง ทำให้ uvicorn
+// bind ไม่ได้และขึ้น "[Errno 13] ... forbidden by its access permissions"
+// ช่วงนี้ถูกสุ่มใหม่ทุกครั้งที่รีสตาร์ทเครื่อง จึงเลือกพอร์ตนอกช่วงไปเลยจะแน่นอนกว่า
+const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN ?? "http://127.0.0.1:9000";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
