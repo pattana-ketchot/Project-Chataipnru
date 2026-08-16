@@ -73,11 +73,23 @@ def _ask_with_retry(client: httpx.Client, headers: dict, question: str, attempts
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--api", default="http://127.0.0.1:8000")
+    ap.add_argument("--api", default="http://127.0.0.1:9000")
     ap.add_argument("--out", help="ไฟล์ JSON สำหรับเก็บผลดิบไว้เทียบภายหลัง")
+    # ชุดเต็ม 109 คำถามใช้เวลาราว 25-30 นาที และกดดัน VRAM จนตัวรันโมเดลอาจถูกฆ่า
+    # จึงเลือกรันเฉพาะกลุ่มที่สนใจได้ เช่น --groups A8,A9 ตอนแก้เรื่องการค้นหา
+    ap.add_argument("--groups", help="รันเฉพาะกลุ่มที่ระบุ คั่นด้วยจุลภาค เช่น A8,A9,B")
     args = ap.parse_args()
 
     spec = json.loads((Path(__file__).parent / "questions.json").read_text(encoding="utf-8"))
+
+    if args.groups:
+        wanted = {g.strip().upper() for g in args.groups.split(",")}
+        spec["groups"] = [g for g in spec["groups"] if g["id"].upper() in wanted]
+        if not spec["groups"]:
+            raise SystemExit(f"ไม่พบกลุ่มที่ระบุ: {args.groups}")
+
+    total_questions = sum(len(g["questions"]) for g in spec["groups"])
+    print(f"จะทดสอบ {total_questions} คำถาม จาก {len(spec['groups'])} กลุ่ม")
 
     with httpx.Client(base_url=args.api, timeout=600) as c:
         email = f"eval-{secrets.token_hex(4)}@example.com"
