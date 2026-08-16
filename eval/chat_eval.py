@@ -31,7 +31,9 @@ _LONG_REPLY = 250  # ตัวอักษร
 
 
 def classify(reply: str, status: str) -> str:
-    """จัดประเภทคำตอบเป็น answer / not_found / refuse / hallucinated"""
+    """จัดประเภทคำตอบเป็น answered / not_found / refuse / small_talk / hallucinated"""
+    if status == "small_talk":
+        return "small_talk"
     if status == "out_of_scope":
         return "refuse"
     if status == "not_found":
@@ -45,7 +47,28 @@ def classify(reply: str, status: str) -> str:
         return "not_found"
     if guessed:
         return "hallucinated"
-    return "answer"
+    return "answered"
+
+
+def _ask_with_retry(client: httpx.Client, headers: dict, question: str, attempts: int = 3):
+    """
+    ถาม /chat พร้อมลองใหม่เมื่อฝั่งโมเดลล้มชั่วคราว
+
+    จำเป็นเพราะการยิงคำถามติดกันหลายสิบข้อกดดัน VRAM จนตัวรันโมเดลของ Ollama
+    ถูกฆ่ากลางคัน (ตอบ 500 "model runner has unexpectedly stopped") บนการ์ด 8GB
+    ที่ต้องแบ่งหน่วยความจำให้จอภาพด้วย ผู้ใช้จริงถามทีละคำถามจึงไม่เจออาการนี้
+    แต่ชุดประเมินยิงรัวจึงเจอ — หยุดพักแล้วลองใหม่ให้โมเดลโหลดกลับเข้า VRAM ได้
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            r = client.post("/chat", headers=headers, json={"message": question})
+            if r.status_code == 200:
+                return r.json()
+        except httpx.HTTPError:
+            pass
+        if attempt < attempts:
+            time.sleep(30)
+    return None
 
 
 def main() -> None:
@@ -70,7 +93,13 @@ def main() -> None:
             for q in group["questions"]:
                 t0 = time.time()
                 # ทุกคำถามเริ่ม session ใหม่ เพื่อไม่ให้ประวัติของข้อก่อนหน้ารบกวนผล
-                d = c.post("/chat", headers=headers, json={"message": q}).json()
+                d = _ask_with_retry(c, headers, q)
+                if d is None:
+                    records.append({"group": group["id"], "question": q, "expect": expect,
+                                    "got": "error", "score": 0.0, "seconds": 0, "reply": ""})
+                    total += 1
+                    print(f'  ข้ามไป [error        ] เรียกโมเดลไม่สำเร็จ  {q}')
+                    continue
                 got = classify(d["reply"], d["status"])
                 ok = got == expect
                 hits += ok
