@@ -8,17 +8,23 @@ endpoint นี้จำบทสนทนาได้และตอบเป�
 สองครั้ง: เขียนคำถามใหม่ + ตอบ)
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, rate_limiter
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.chat import ChatReply, ChatRequest
-from app.services.chat import answer_question
+from app.services.chat import answer_question, stream_answer
 
 from llm.connector import LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+MODEL_BUSY = (
+    "ระบบ AI ยังไม่พร้อมตอบในขณะนี้ (โมเดลกำลังโหลดหรือหน่วยความจำไม่พอ) "
+    "กรุณารอสักครู่แล้วลองถามใหม่อีกครั้งครับ"
+)
 
 
 @router.post("", response_model=ChatReply, dependencies=[Depends(rate_limiter)])
@@ -36,6 +42,38 @@ def chat(
         # แทนข้อความ "เกิดข้อผิดพลาด" ที่ไม่ช่วยให้ตัดสินใจว่าควรลองใหม่ไหม
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "ระบบ AI ยังไม่พร้อมตอบในขณะนี้ (โมเดลกำลังโหลดหรือหน่วยความจำไม่พอ) "
-            "กรุณารอสักครู่แล้วลองถามใหม่อีกครั้งครับ",
+            MODEL_BUSY,
         ) from e
+
+
+@router.post("/stream", dependencies=[Depends(rate_limiter)])
+def chat_stream(
+    payload: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """
+    เหมือน POST /chat แต่ทยอยส่งคำตอบทีละส่วนตามรูปแบบ Server-Sent Events
+
+    มีไว้ให้หน้าเว็บใช้ ส่วน POST /chat ยังคงอยู่เพราะชุดประเมินและการทดสอบ
+    ต้องการคำตอบทั้งก้อนพร้อมสถานะในครั้งเดียว
+
+    ข้อผิดพลาดที่เกิด "ระหว่าง" สตรีมส่งเป็น HTTP status ไม่ได้แล้ว เพราะหัวข้อความ
+    ถูกส่งออกไปตั้งแต่ตัวอักษรแรก จึงต้องส่งเป็นเหตุการณ์ error ให้หน้าเว็บอ่านแทน
+    """
+
+    def events():
+        try:
+            yield from stream_answer(db, user_id=user.id, session_id=payload.session_id, message=payload.message)
+        except ValueError as e:
+            yield f'event: error\ndata: {{"detail": "{e}"}}\n\n'
+        except LLMConnectionError:
+            yield f'event: error\ndata: {{"detail": "{MODEL_BUSY}"}}\n\n'
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        # กัน proxy ที่อยู่ระหว่างทางเก็บคำตอบไว้จนครบก้อนแล้วค่อยส่ง ซึ่งจะทำให้
+        # การทยอยส่งไม่มีผลอะไรเลย ผู้ใช้ยังคงเห็นหน้าจอว่างจนกว่าจะเขียนเสร็จ
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

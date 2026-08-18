@@ -28,6 +28,64 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, token?: 
   return response.json() as Promise<T>;
 }
 
+/** ข้อมูลสรุปของเทิร์น ส่งมาก่อนตัวอักษรแรกของคำตอบ */
+export type ChatMeta = Omit<ChatReply, "reply">;
+
+/**
+ * ถาม /chat/stream แล้วเรียก callback ทุกครั้งที่ได้ข้อความส่วนใหม่
+ *
+ * ใช้แทน api.chat บนหน้าเว็บเพื่อลดเวลารอที่ผู้ใช้รู้สึก — เซิร์ฟเวอร์ที่รันด้วย CPU
+ * เขียนคำตอบเสร็จใน 30-40 วินาที แต่ตัวอักษรแรกออกมาตั้งแต่ราว 5 วินาที
+ *
+ * อ่านตามรูปแบบ Server-Sent Events: แต่ละเหตุการณ์คั่นด้วยบรรทัดว่าง จึงต้องพัก
+ * ข้อมูลที่อ่านมาไม่ครบไว้ใน buffer เพราะขอบเขตของ chunk ที่เครือข่ายส่งมาไม่ได้
+ * ตรงกับขอบเขตของเหตุการณ์
+ */
+export async function chatStream(
+  token: string,
+  message: string,
+  session_id: string | null,
+  handlers: { onMeta(meta: ChatMeta): void; onToken(text: string): void },
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ message, session_id }),
+    });
+  } catch {
+    throw new ApiError(0, SLOW_HINT);
+  }
+  if (!response.ok || !response.body) {
+    let detail = response.status >= 502 ? SLOW_HINT : "เกิดข้อผิดพลาด กรุณาลองใหม่";
+    try { detail = (await response.json()).detail ?? detail; } catch { /* non-JSON error */ }
+    throw new ApiError(response.status, detail);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let cut: number;
+    while ((cut = buffer.indexOf("\n\n")) !== -1) {
+      const block = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      const event = block.match(/^event: (.+)$/m)?.[1];
+      const raw = block.match(/^data: (.*)$/m)?.[1];
+      if (!event || raw === undefined) continue;
+      const data = JSON.parse(raw);
+      if (event === "meta") handlers.onMeta(data as ChatMeta);
+      else if (event === "token") handlers.onToken(data.t as string);
+      // ข้อผิดพลาดที่เกิดกลางสตรีมส่งเป็น HTTP status ไม่ได้ เพราะหัวข้อความออกไปแล้ว
+      else if (event === "error") throw new ApiError(503, data.detail ?? SLOW_HINT);
+    }
+  }
+}
+
 export const api = {
   register: (data: { email: string; password: string; full_name?: string }) => apiFetch<User>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
   login: (email: string, password: string) => apiFetch<{ access_token: string; refresh_token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),

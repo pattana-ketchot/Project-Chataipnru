@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, BookOpen, Check, LogOut, MessageCircle, Search, Sparkles, UserRound } from "lucide-react";
 import { Logo } from "@/components/logo";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, chatStream, type ChatMeta } from "@/lib/api";
 import type { ChatTurn, Course, Profile, Recommendation, User } from "@/lib/types";
 
 type View = "home" | "auth" | "survey" | "results" | "courses" | "chat";
@@ -48,24 +48,30 @@ function Chat({token,name}:{token:string;name:string}){
   const [sessionId,setSessionId]=useState<string|null>(null);
   const [input,setInput]=useState("");
   const [loading,setLoading]=useState(false);
+  // คำตอบที่กำลังทยอยมา ยังไม่จบ — เก็บแยกจาก turns เพื่อไม่ให้ประวัติมีเทิร์นที่ยังไม่สมบูรณ์
+  const [pending,setPending]=useState("");
   const [error,setError]=useState("");
   const endRef=useRef<HTMLDivElement>(null);
 
   // เลื่อนลงล่างสุดทุกครั้งที่มีข้อความใหม่ ให้เหมือนแอปแชตทั่วไป
-  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"})},[turns,loading]);
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"})},[turns,loading,pending]);
 
   async function send(text:string){
     const message=text.trim();
     if(!message||loading)return;
-    setInput("");setError("");setLoading(true);
+    setInput("");setError("");setLoading(true);setPending("");
     setTurns(t=>[...t,{role:"user",content:message}]);
     try{
-      const r=await api.chat(token,message,sessionId);
-      setSessionId(r.session_id);   // เทิร์นถัดไปจะคุยต่อในบทสนทนาเดิม
-      setTurns(t=>[...t,{role:"assistant",content:r.reply,citations:r.citations,inScope:r.in_scope}]);
+      let meta:ChatMeta|null=null;
+      let full="";
+      await chatStream(token,message,sessionId,{
+        onMeta(m){meta=m;setSessionId(m.session_id)},   // เทิร์นถัดไปจะคุยต่อในบทสนทนาเดิม
+        onToken(t){full+=t;setPending(full)},
+      });
+      setTurns(t=>[...t,{role:"assistant",content:full.trim(),citations:meta?.citations,inScope:meta?.in_scope}]);
     }catch(err){
       setError(err instanceof ApiError?translateError(err):"ที่ปรึกษายังไม่พร้อม กรุณาลองใหม่");
-    }finally{setLoading(false)}
+    }finally{setLoading(false);setPending("")}
   }
 
   return <section className="mx-auto max-w-3xl px-5 py-10">
@@ -108,7 +114,12 @@ function Chat({token,name}:{token:string;name:string}){
           </div>
         </div>)}
 
-        {loading&&<div className="flex justify-start"><div className="rounded-2xl rounded-bl-sm bg-cream px-4 py-3 text-sm text-ink/55">กำลังค้นเอกสารและเรียบเรียงคำตอบ…</div></div>}
+        {/* ระหว่างรอ: ก่อนตัวอักษรแรกมาถึงบอกว่ากำลังค้นอยู่ พอเริ่มมาแล้วแสดงข้อความจริงเลย */}
+        {loading&&<div className="flex justify-start"><div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-cream px-4 py-3 text-sm leading-6 text-ink/55">
+          {pending
+            ? <p className="whitespace-pre-wrap text-ink">{pending}<span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-sage align-text-bottom"/></p>
+            : "กำลังค้นเอกสารและเรียบเรียงคำตอบ…"}
+        </div></div>}
         {error&&<div role="alert" className="rounded-2xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
         <div ref={endRef}/>
       </div>

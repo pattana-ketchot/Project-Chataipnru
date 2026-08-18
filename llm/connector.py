@@ -21,7 +21,9 @@ SECURITY:
 """
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -93,6 +95,42 @@ class OllamaConnector:
         if content is None:
             raise LLMConnectionError(f"chat response missing content: {data!r}"[:200])
         return content
+
+    def chat_stream(
+        self,
+        messages: list[ChatMessage],
+        temperature: float = 0.2,
+    ) -> Iterator[str]:
+        """
+        เหมือน chat() แต่ทยอยคืนข้อความทีละส่วนระหว่างที่โมเดลกำลังเขียน
+
+        มีไว้เพื่อลด "เวลารอที่รู้สึกได้" ไม่ใช่เวลารวม — เซิร์ฟเวอร์ที่รันด้วย CPU
+        เขียนได้ราว 8 โทเคน/วินาที คำตอบยาว 250 โทเคนจึงใช้เวลาราว 30 วินาที
+        ถ้ารอจนจบค่อยส่ง ผู้ใช้จะเห็นแต่หน้าจอว่างตลอด 30 วินาทีนั้น
+
+        ไม่มีการลองใหม่เหมือน _post_with_retry เพราะเมื่อส่งข้อความบางส่วนออกไปแล้ว
+        การเริ่มใหม่จะทำให้ผู้ใช้เห็นคำตอบซ้ำสองรอบ ความล้มเหลวกลางคันจึงต้องโยน
+        ออกไปให้ผู้เรียกตัดสินใจแทน
+        """
+        payload: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "stream": True,
+            "options": {"temperature": temperature},
+        }
+        try:
+            with self._client.stream("POST", "/api/chat", json=payload) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    if chunk := data.get("message", {}).get("content"):
+                        yield chunk
+                    if data.get("done"):
+                        return
+        except (httpx.HTTPError, json.JSONDecodeError) as e:
+            raise LLMConnectionError(f"chat_stream failed: {type(e).__name__}: {e}"[:200]) from e
 
     # ------------------------------------------------------------------
     # internals
