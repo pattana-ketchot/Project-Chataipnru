@@ -75,17 +75,15 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # ทั้งสองค่าต้องส่งตอน build ไม่ใช่ตอนรัน
-        #
-        # NEXT_PUBLIC_* ถูกฝังลง bundle ของเบราว์เซอร์ตอน build อยู่แล้ว
-        # ส่วน BACKEND_ORIGIN ก็เช่นกันเพราะ output: "standalone" เก็บกฎ rewrite
-        # ที่คำนวณเสร็จแล้วไว้ในไฟล์ ตั้งตอน docker run จึงไม่มีผล — เคยพลาดมาแล้ว
-        # ผลคือ /api/* ขึ้น 500 ทั้งที่ทุกคอนเทนเนอร์ดูเหมือนทำงานปกติ
+        # NEXT_PUBLIC_* ถูกฝังลง bundle ของเบราว์เซอร์ตอน build ตั้งตอนรันไม่มีผล
+        # ค่านี้ทำให้เบราว์เซอร์เรียก API เป็น path สัมพัทธ์ จึงอยู่ origin เดียวกับหน้าเว็บ
         NEXT_PUBLIC_API_URL: /api
-        BACKEND_ORIGIN: http://backend:8000
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      # อ่านตอนรันโดย app/api/[...path]/route.ts — ย้าย backend ได้โดยไม่ต้อง build ใหม่
+      BACKEND_ORIGIN: http://backend:8000
     ports:
       # พอร์ตเดียวที่เปิดสู่ภายนอก
       - "80:3000"
