@@ -41,10 +41,13 @@ ENV NODE_ENV=production \
 # ("UID is not unique") ข้อความนี้ไม่ได้บอกสาเหตุตรงๆ จึงหาต้นเหตุยาก
 
 # standalone มี server.js กับ node_modules เท่าที่จำเป็นมาให้แล้ว
-# แต่ไม่รวม static assets กับ public จึงต้องคัดลอกเพิ่มเอง
+# แต่ไม่รวม static assets จึงต้องคัดลอกเพิ่มเอง
+#
+# ไม่มีบรรทัดคัดลอก public/ เพราะโปรเจคนี้ไม่มีโฟลเดอร์นั้น — ไม่ได้ใช้ไฟล์
+# สาธารณะอย่างรูปหรือ favicon เลย ถ้าใส่ไว้ตามแม่แบบทั่วไป build จะล้มด้วย
+# "/app/public: not found" ถ้าวันหลังเพิ่มโฟลเดอร์นี้ ต้องเพิ่มบรรทัดคัดลอกด้วย
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
-COPY --from=builder --chown=node:node /app/public ./public
 
 USER node
 EXPOSE 3000
