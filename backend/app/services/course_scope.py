@@ -54,6 +54,8 @@ _DEGREE_AND_WRAPPER = re.compile(r"([ก-๙]*บัณฑิต|สาขาว
 # ถ้าอยู่กลางประโยคมักเป็นส่วนของศัพท์เฉพาะ จึงต้องเก็บไว้
 _LEADING_COURSE_WORD = re.compile(r"^หลักสูตร\s*")
 _EXTRA_SPACE = re.compile(r"\s{2,}")
+# "พ.ศ. 2566" หรือเลขปีลอยๆ — ใช้เลือกเล่มแล้วจึงตัดออกจากคำค้น (ดู _build)
+_YEAR_PHRASE = re.compile(r"(พ\.?\s*ศ\.?\s*)?25\d{2}")
 
 # ความยาวขั้นต่ำของข้อความที่เหลือหลังตัดชื่อหลักสูตร ถ้าสั้นกว่านี้แปลว่าคำถามแทบไม่มี
 # เนื้อหาอื่นเลย (เช่น "หลักสูตรวิทยาการคอมพิวเตอร์") การค้นด้วยข้อความที่เหลือจะไร้ความหมาย
@@ -76,9 +78,37 @@ def _distinctive_name(title: str) -> str:
     return re.sub(r"^หลักสูตร", "", name).replace("บัณฑิต", "").strip()
 
 
+def _year_in(text: str) -> str | None:
+    """ดึงปีพุทธศักราชจากข้อความ คืน None ถ้าไม่มี"""
+    m = re.search(r"25\d{2}", text)
+    return m.group(0) if m else None
+
+
+def _narrow_by_year(
+    ids: list[uuid.UUID], titles: dict[uuid.UUID, str], question: str
+) -> list[uuid.UUID]:
+    """
+    ถ้าคำถามระบุปีการศึกษา ให้เหลือเฉพาะเล่มของปีนั้น
+
+    คลังนี้มี 4 หลักสูตรที่มีสองปีการศึกษา (การแพทย์แผนไทยประยุกต์ 2560/2565,
+    วิทยาการคอมพิวเตอร์ 2561/2566, เทคโนโลยีสารสนเทศ 2561/2566,
+    วิทยาศาสตร์เครื่องสำอาง 2561/2566) เดิมจับคู่จากชื่ออย่างเดียวจึงดึงทั้งสองปี
+    มาปนกัน เมื่อผู้ใช้ถามเจาะจงปี โมเดลจะเห็นเนื้อหาของอีกปีแล้วตอบว่า
+    "ข้อมูลที่มีเป็นของอีกปีหนึ่ง" ทั้งที่เอกสารปีที่ถามมีอยู่ในคลัง
+
+    ถ้าปีที่ระบุไม่ตรงกับเล่มใดเลย ให้คงรายการเดิมไว้ ดีกว่าตัดจนไม่เหลืออะไรค้น
+    """
+    year = _year_in(question)
+    if year is None:
+        return ids
+    matched = [cid for cid in ids if year in titles.get(cid, "")]
+    return matched or ids
+
+
 def resolve_scope(db: Session, question: str) -> CourseScope | None:
     """คืนขอบเขตหลักสูตรถ้าระบุได้ มิฉะนั้นคืน None (แปลว่าให้ค้นทั้งคลัง)"""
     courses = db.scalars(select(Course).where(Course.is_active.is_(True))).all()
+    titles = {c.id: c.title for c in courses}
 
     # ชื่อเฉพาะ -> รายการ course id (หลักสูตรเดียวกันหลายปีจะรวมอยู่ด้วยกัน)
     by_name: dict[str, list[uuid.UUID]] = {}
@@ -91,7 +121,7 @@ def resolve_scope(db: Session, question: str) -> CourseScope | None:
     # ส่วนหนึ่งของชื่อยาวชนะ (เช่น 'คณิตศาสตร์' อยู่ใน 'คหกรรมศาสตร์' ไม่ได้ แต่กันไว้)
     for name in sorted(by_name, key=len, reverse=True):
         if name and name.lower() in lowered:
-            return _build(by_name[name], name, question)
+            return _build(_narrow_by_year(by_name[name], titles, question), name, question)
 
     # ไม่เจอชื่อตรงๆ ลองผ่านคำย่อ เช่น 'วิทคอม' -> 'วิทยาการคอมพิวเตอร์'
     for alias, full in ALIASES.items():
@@ -100,7 +130,8 @@ def resolve_scope(db: Session, question: str) -> CourseScope | None:
         for name in by_name:
             if name and name in full:
                 # ตัดคำย่อออกจากคำถามแทนชื่อเต็ม เพราะในคำถามมีแค่คำย่อ
-                return _build(by_name[name], name, question, strip=alias)
+                ids = _narrow_by_year(by_name[name], titles, question)
+                return _build(ids, name, question, strip=alias)
     return None
 
 
@@ -108,6 +139,9 @@ def _build(ids: list[uuid.UUID], name: str, question: str, strip: str | None = N
     target = strip or name
     # ตัดแบบไม่สนตัวพิมพ์เล็กใหญ่ เพราะคำย่ออาจเป็นอักษรโรมัน
     remainder = re.sub(re.escape(target), " ", question, flags=re.IGNORECASE)
+    # ปีการศึกษาทำหน้าที่เลือกเล่มไปแล้ว เหลือไว้ในคำค้นมีแต่โทษ เพราะจะไปจับคู่กับ
+    # หน้าปกและมติอนุมัติหลักสูตรที่เอ่ยปีซ้ำๆ แทนที่จะจับคู่เนื้อหาที่ถามถึง
+    remainder = _YEAR_PHRASE.sub(" ", remainder)
     remainder = _DEGREE_AND_WRAPPER.sub(" ", remainder)
     remainder = _EXTRA_SPACE.sub(" ", remainder).strip()
     remainder = _LEADING_COURSE_WORD.sub("", remainder).strip()
