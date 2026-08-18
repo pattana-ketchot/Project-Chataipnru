@@ -77,7 +77,11 @@ def _load_session(db: Session, user_id: uuid.UUID, session_id: uuid.UUID | None)
     if session_id is None:
         session = ChatSession(user_id=user_id)
         db.add(session)
-        db.flush()
+        # commit ทันที ไม่ใช่แค่ flush เพราะโหมดสตรีมบันทึกข้อความด้วย session
+        # ฐานข้อมูลคนละตัวกับที่สร้างแถวนี้ ถ้ายังไม่ commit แถวบทสนทนาจะยังไม่มีจริง
+        # สำหรับ connection อื่น แล้วการบันทึกข้อความจะติด foreign key
+        db.commit()
+        db.refresh(session)
         return session
 
     session = db.get(ChatSession, session_id)

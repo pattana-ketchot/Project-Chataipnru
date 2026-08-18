@@ -7,6 +7,8 @@ endpoint นี้จำบทสนทนาได้และตอบเป�
 ใช้ rate_limiter เช่นเดียวกับ /recommend เพราะเรียก LLM (หนึ่งเทิร์นอาจเรียกถึง
 สองครั้ง: เขียนคำถามใหม่ + ตอบ)
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -20,6 +22,7 @@ from app.services.chat import answer_question, stream_answer
 from llm.connector import LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+logger = logging.getLogger("course_advisor")
 
 MODEL_BUSY = (
     "ระบบ AI ยังไม่พร้อมตอบในขณะนี้ (โมเดลกำลังโหลดหรือหน่วยความจำไม่พอ) "
@@ -69,6 +72,12 @@ def chat_stream(
             yield f'event: error\ndata: {{"detail": "{e}"}}\n\n'
         except LLMConnectionError:
             yield f'event: error\ndata: {{"detail": "{MODEL_BUSY}"}}\n\n'
+        except Exception:
+            # ต้องจับให้หมด ไม่ปล่อยให้ข้อยกเว้นหลุดออกจาก generator เพราะหัวข้อความ
+            # ถูกส่งไปแล้ว การโยนต่อจะทำให้การเชื่อมต่อค้างจนหน้าเว็บรอไม่จบ
+            # แทนที่จะเห็นข้อความบอกว่าเกิดอะไรขึ้น
+            logger.exception("chat stream ล้มกลางคัน")
+            yield 'event: error\ndata: {"detail": "ระบบขัดข้องระหว่างเรียบเรียงคำตอบ กรุณาลองใหม่อีกครั้งครับ"}\n\n'
 
     return StreamingResponse(
         events(),
