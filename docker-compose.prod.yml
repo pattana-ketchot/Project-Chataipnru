@@ -1,0 +1,92 @@
+# Production stack — รันทั้ง 4 ส่วนใน Docker บนเซิร์ฟเวอร์เดียว
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# ต่างจาก docker-compose.yml (ใช้ตอนพัฒนา) ตรงที่:
+#   - รวม backend และ frontend เข้ามาด้วย ไม่ต้องรันมือ
+#   - postgres กับ ollama ไม่เปิดพอร์ตออกนอกเครื่อง ให้คุยกันในเครือข่ายของ compose
+#   - เปิดสู่ภายนอกพอร์ตเดียวคือเว็บ
+#
+# ออกแบบสำหรับ Oracle Cloud Always Free (ARM Ampere, ไม่มี GPU) ซึ่งหมายความว่า
+# โมเดลทำงานบน CPU และตอบช้ากว่าบนเครื่องที่มีการ์ดจอมาก — ดู docs/DEPLOY_ORACLE_CLOUD.md
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: course_advisor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้งค่าใน .env}
+      ADVISOR_API_PASSWORD: ${ADVISOR_API_PASSWORD:?ต้องตั้งค่าใน .env}
+      ADVISOR_INGEST_PASSWORD: ${ADVISOR_INGEST_PASSWORD:?ต้องตั้งค่าใน .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ./db/20-roles.sh:/docker-entrypoint-initdb.d/20-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d course_advisor"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      # บนเครื่องที่ไม่มี GPU การโหลดโมเดลกลับเข้าหน่วยความจำใช้เวลานานกว่าเดิมอีก
+      # จึงถือไว้นานขึ้น และ backend ยังยิง warmup เป็นระยะอยู่แล้ว
+      OLLAMA_KEEP_ALIVE: "60m"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  backend:
+    build:
+      # context ต้องเป็น root ของ repo เพราะ backend import แพ็กเกจ llm/
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      # ในเครือข่ายของ compose เรียกกันด้วยชื่อ service ไม่ใช่ 127.0.0.1
+      DATABASE_URL: postgresql+psycopg://advisor_api:${ADVISOR_API_PASSWORD}@postgres:5432/course_advisor
+      OLLAMA_BASE_URL: http://ollama:11434
+      JWT_SECRET: ${JWT_SECRET:?ต้องตั้งค่าใน .env}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      EMBED_MODEL: ${EMBED_MODEL:-bge-m3}
+      EMBED_DIM: ${EMBED_DIM:-1024}
+      # หน้าเว็บเรียก API ผ่าน origin เดียวกันอยู่แล้ว จึงไม่ต้องตั้ง CORS
+      # แต่ใส่ไว้เผื่อมีการเรียกตรงจากเครื่องมือทดสอบ
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-["http://localhost:3000"]}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # ฝังตอน build — เรียก API แบบ path สัมพัทธ์ผ่าน rewrite ของ Next
+        NEXT_PUBLIC_API_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # อ่านตอนรัน ใช้บอก Next ว่าจะส่งต่อ /api ไปที่ไหน
+      BACKEND_ORIGIN: http://backend:8000
+    ports:
+      # พอร์ตเดียวที่เปิดสู่ภายนอก
+      - "80:3000"
+
+volumes:
+  pgdata:
+  ollama_models:
