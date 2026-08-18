@@ -1,0 +1,6 @@
+# สคริปต์เชลล์ต้องลงท้ายบรรทัดแบบ LF เสมอ
+#
+# พัฒนาบน Windows แต่รันบน Linux ถ้าไฟล์ถูกแปลงเป็น CRLF ตอน checkout
+# บรรทัด #!/usr/bin/env bash จะกลายเป็น "bash\r" แล้ว Linux จะขึ้นว่า
+# "bad interpreter: No such file or directory" ซึ่งอ่านแล้วไม่รู้เลยว่าสาเหตุคืออะไร
+*.sh text eol=lf
