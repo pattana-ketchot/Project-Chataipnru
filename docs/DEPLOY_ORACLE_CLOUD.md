@@ -41,15 +41,30 @@
 
 ## ขั้นที่ 2 — ติดตั้งระบบ
 
-เข้าเครื่องด้วย SSH แล้วรัน
+**นำโค้ดขึ้นเครื่องก่อน** เลือกทางใดทางหนึ่ง
+
+*ทางที่ 1 — ส่งจากเครื่องพัฒนาโดยตรง* ใช้ทางนี้ถ้ายังไม่ได้ push โค้ดล่าสุดขึ้น GitHub
+
+`git archive` ส่งเฉพาะไฟล์ที่อยู่ใน git จริงๆ จึงรับประกันว่า `.env` และไฟล์
+รหัสผ่านทั้งหมดไม่ติดขึ้นไปด้วย เพราะไฟล์พวกนั้นไม่เคยถูก track
 
 ```bash
-sudo apt update && sudo apt install -y git
+git archive --format=tar.gz -o /tmp/repo.tar.gz HEAD && scp -i <ไฟล์กุญแจ> /tmp/repo.tar.gz ubuntu@<IP>:~/
 ```
 
+แล้วบนเซิร์ฟเวอร์
+
 ```bash
-git clone https://github.com/popoza11874/Project-Chataipnru.git && cd Project-Chataipnru
+mkdir -p ~/course-advisor-system && tar -xzf ~/repo.tar.gz -C ~/course-advisor-system && cd ~/course-advisor-system
 ```
+
+*ทางที่ 2 — clone จาก GitHub* ใช้ได้เมื่อ push โค้ดล่าสุดขึ้นไปแล้วเท่านั้น
+
+```bash
+sudo apt update && sudo apt install -y git && git clone https://github.com/popoza11874/Project-Chataipnru.git && cd Project-Chataipnru
+```
+
+**แล้วรันสคริปต์ติดตั้ง**
 
 ```bash
 bash scripts/setup_server.sh
@@ -156,6 +171,21 @@ git pull && docker compose -f docker-compose.prod.yml up -d --build
 ```bash
 BACKUP_DIR=backups docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U postgres -d course_advisor --clean --if-exists | gzip > backups/oci_$(date +%Y%m%d).sql.gz
 ```
+
+---
+
+## ประหยัดเครดิตเมื่อใช้เครื่องแบบเสียเงิน
+
+ถ้าเครื่องที่ได้ไม่ใช่ `VM.Standard.A1.Flex` (เช่นตอนที่ ARM เต็มจนต้องใช้ AMD แทน)
+เครื่องจะกินเครดิตตลอดเวลาที่เปิดอยู่ ประมาณเดือนละ $100 สำหรับ 4 คอร์ / 24GB
+
+**สั่งหยุดเครื่องตอนไม่ใช้** ค่าซีพียูและหน่วยความจำหยุดคิดทันที เหลือแต่ค่าดิสก์
+ราวเดือนละ $2.5 — หน้าเว็บ Oracle → Compute → Instances → เลือกเครื่อง → **Stop**
+
+เปิดกลับมาด้วยปุ่ม **Start** ข้อมูลทั้งหมดยังอยู่ครบ แต่ **Public IP แบบ Ephemeral
+จะเปลี่ยนเลขใหม่ทุกครั้งที่เปิด** ถ้าต้องการให้เลขคงที่ต้องเปลี่ยนเป็น Reserved public IP
+
+**ดูยอดเครดิตคงเหลือ** — หน้าเว็บ Oracle → Billing & Cost Management → Subscriptions
 
 ---
 
