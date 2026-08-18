@@ -15,10 +15,13 @@
 """
 import json
 import uuid
+from collections.abc import Iterator
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.session import SessionLocal
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.course_scope import resolve_scope
@@ -197,29 +200,54 @@ def _can_answer_from(connector, chunks, question: str) -> bool:
     )
 
 
-def answer_question(
+@dataclass
+class Prepared:
+    """
+    ผลของทุกขั้นก่อนลงมือเขียนคำตอบ
+
+    แยกออกมาเพื่อให้โหมด "รอจนจบ" กับโหมด "ทยอยส่ง" เดินตรรกะเดียวกันทั้งหมด
+    ตั้งแต่การค้น การตัดสินขอบเขต ไปจนถึงการตรวจว่าเอกสารตอบได้ไหม ต่างกันแค่
+    ขั้นสุดท้ายว่าจะรอข้อความทั้งก้อนหรือส่งทีละส่วน ถ้าปล่อยให้สองโหมดมีตรรกะ
+    ของตัวเอง ผลประเมินกับสิ่งที่ผู้ใช้เห็นจริงจะค่อยๆ ห่างกันโดยไม่มีใครรู้
+    """
+
+    session_id: uuid.UUID
+    status: str
+    search_query: str
+    best_score: float
+    citations: list[ChatCitation]
+    # ถ้าไม่ใช่ None คือได้คำตอบแล้วโดยไม่ต้องให้โมเดลเขียน (ทักทาย/นอกขอบเขต/ไม่พบข้อมูล)
+    canned: str | None
+    # ข้อความที่จะส่งให้โมเดลเขียนคำตอบ — ว่างเมื่อ canned ไม่ใช่ None
+    messages: list[LLMMessage]
+
+
+def _persist(db: Session, session_id: uuid.UUID, question: str, reply: str) -> None:
+    db.add(ChatMessage(session_id=session_id, role="user", content=question))
+    db.add(ChatMessage(session_id=session_id, role="assistant", content=reply))
+    db.commit()
+
+
+def prepare_answer(
     db: Session,
     user_id: uuid.UUID,
     session_id: uuid.UUID | None,
     message: str,
-) -> ChatReply:
+) -> Prepared:
     connector = get_llm_connector()
     session = _load_session(db, user_id, session_id)
     history = _load_history(db, session.id)
 
     # --- 0. คำทักทาย/ขอบคุณ/ถามตัวตน -> ตอบทันทีโดยไม่ค้นเอกสารและไม่เรียก LLM ---
     if (canned := match_small_talk(message)) is not None:
-        db.add(ChatMessage(session_id=session.id, role="user", content=message))
-        db.add(ChatMessage(session_id=session.id, role="assistant", content=canned))
-        db.commit()
-        return ChatReply(
+        return Prepared(
             session_id=session.id,
-            reply=canned,
-            search_query=message,
-            top_score=0.0,
             status="small_talk",
-            in_scope=True,
+            search_query=message,
+            best_score=0.0,
             citations=[],
+            canned=canned,
+            messages=[],
         )
 
     # --- 1. ค้นด้วยคำถามดิบก่อนเสมอ ---
@@ -255,16 +283,16 @@ def answer_question(
         reply_text, status = NOT_FOUND_REPLY, "not_found"
     else:
         status = "answered"
+
+    messages: list[LLMMessage] = []
     if status == "answered":
+        reply_text = None
         messages = [LLMMessage(role="system", content=CHAT_SYSTEM_PROMPT)]
         for m in history:
             messages.append(LLMMessage(role=m.role, content=m.content))
         messages.append(
             LLMMessage(role="user", content=build_chat_prompt(_format_chunks(chunks), message))
         )
-        # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
-        # มากกว่าความหลากหลายของสำนวน
-        reply_text = connector.chat(messages, temperature=0.1).strip()
         citations = [
             ChatCitation(
                 chunk_id=c.chunk_id,
@@ -276,17 +304,90 @@ def answer_question(
             for c in chunks
         ]
 
-    # --- 4. บันทึกบทสนทนา ---
-    db.add(ChatMessage(session_id=session.id, role="user", content=message))
-    db.add(ChatMessage(session_id=session.id, role="assistant", content=reply_text))
-    db.commit()
+    return Prepared(
+        session_id=session.id,
+        status=status,
+        search_query=search_query,
+        best_score=round(best_score, 4),
+        citations=citations,
+        canned=reply_text,
+        messages=messages,
+    )
+
+
+def answer_question(
+    db: Session,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID | None,
+    message: str,
+) -> ChatReply:
+    """ตอบแบบรอจนเขียนเสร็จแล้วส่งทีเดียว — ใช้โดยชุดประเมินและผู้เรียกที่ไม่ต้องการสตรีม"""
+    p = prepare_answer(db, user_id, session_id, message)
+    if p.canned is not None:
+        reply_text = p.canned
+    else:
+        # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
+        # มากกว่าความหลากหลายของสำนวน
+        reply_text = get_llm_connector().chat(p.messages, temperature=0.1).strip()
+
+    _persist(db, p.session_id, message, reply_text)
 
     return ChatReply(
-        session_id=session.id,
+        session_id=p.session_id,
         reply=reply_text,
-        search_query=search_query,
-        top_score=round(best_score, 4),
-        status=status,
-        in_scope=status in ("answered", "not_found"),
-        citations=citations,
+        search_query=p.search_query,
+        top_score=p.best_score,
+        status=p.status,
+        in_scope=p.status in ("answered", "not_found"),
+        citations=p.citations,
     )
+
+
+def stream_answer(
+    db: Session,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID | None,
+    message: str,
+) -> Iterator[str]:
+    """
+    ตอบแบบทยอยส่ง คืนเป็นบรรทัดตามรูปแบบ Server-Sent Events
+
+    ลำดับเหตุการณ์: meta (หนึ่งครั้ง) -> token (หลายครั้ง) -> done
+    ฝั่งหน้าเว็บใช้ meta ตั้งค่าสถานะกับรายการอ้างอิงได้ทันทีก่อนตัวอักษรแรกมาถึง
+
+    การบันทึกบทสนทนาต้องเปิด session ฐานข้อมูลใหม่ ไม่ใช้ตัวที่รับเข้ามา เพราะ
+    FastAPI ปิด session ของ dependency ทิ้งตั้งแต่ตอนที่ route คืนค่า ซึ่งเกิดก่อน
+    generator นี้ทำงานจบ ถ้าใช้ตัวเดิมจะได้ error เรื่อง session ถูกปิดไปแล้ว
+    """
+    p = prepare_answer(db, user_id, session_id, message)
+    yield _sse(
+        "meta",
+        {
+            "session_id": str(p.session_id),
+            "status": p.status,
+            "search_query": p.search_query,
+            "top_score": p.best_score,
+            "in_scope": p.status in ("answered", "not_found"),
+            "citations": [c.model_dump(mode="json") for c in p.citations],
+        },
+    )
+
+    if p.canned is not None:
+        yield _sse("token", {"t": p.canned})
+        reply_text = p.canned
+    else:
+        parts: list[str] = []
+        for chunk in get_llm_connector().chat_stream(p.messages, temperature=0.1):
+            parts.append(chunk)
+            yield _sse("token", {"t": chunk})
+        reply_text = "".join(parts).strip()
+
+    with SessionLocal() as fresh:
+        _persist(fresh, p.session_id, message, reply_text)
+    yield _sse("done", {})
+
+
+def _sse(event: str, data: dict) -> str:
+    # ต้องแปลงเป็น JSON เสมอ เพราะรูปแบบ SSE ใช้ขึ้นบรรทัดใหม่เป็นตัวจบเหตุการณ์
+    # ข้อความภาษาไทยที่มีการขึ้นบรรทัดใหม่จึงทำให้ผู้รับตีความผิดถ้าส่งดิบๆ
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
