@@ -22,6 +22,16 @@ COPY . .
 
 ARG NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
+# BACKEND_ORIGIN ต้องมาตอน build ด้วย ไม่ใช่ตอนรัน
+#
+# output: "standalone" เก็บค่า rewrites ที่คำนวณแล้วลง .next/required-server-files.json
+# ตั้งแต่ตอน build เซิร์ฟเวอร์ตอนรันจึงอ่านค่าจากไฟล์นั้น ไม่ได้อ่าน environment ใหม่
+# ถ้าตั้งแต่ตอน docker run อย่างเดียว ปลายทางจะค้างเป็นค่าเริ่มต้นใน next.config.ts
+# แล้ว /api/* จะขึ้น 500 พร้อม ECONNREFUSED ไปยังพอร์ตของเครื่องพัฒนา
+ARG BACKEND_ORIGIN=http://backend:8000
+ENV BACKEND_ORIGIN=$BACKEND_ORIGIN
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
