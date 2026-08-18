@@ -29,5 +29,16 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${BACKEND_ORIGIN}/:path*` }];
   },
+
+  experimental: {
+    // เพดานเวลารอ backend ตอบตอนส่งต่อ /api/* — ค่าเริ่มต้นของ Next คือ 30 วินาที
+    //
+    // บนเครื่องที่มีการ์ดจอไม่เคยชนเพดานนี้ แต่บนเซิร์ฟเวอร์ที่รันโมเดลด้วย CPU
+    // คำถามที่ต้องเรียกโมเดลหลายรอบ (ย่อคำถาม -> ตรวจขอบเขต -> ตรวจว่าอิงเอกสาร
+    // -> ตอบ) ใช้เวลาเกิน 30 วินาทีเป็นเรื่องปกติ พอชนเพดาน Next จะตัดการเชื่อมต่อ
+    // แล้วส่ง 500 "Internal Server Error" กลับไป ทั้งที่ backend ยังทำงานอยู่และ
+    // ตอบสำเร็จในภายหลัง — อาการนี้หลอกมาก เพราะ log ของ backend ไม่มี error เลย
+    proxyTimeout: 300_000,
+  },
 };
 export default nextConfig;
