@@ -34,14 +34,18 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 
-RUN useradd --create-home --uid 1000 nextjs
+# ใช้ผู้ใช้ `node` ที่ image ของ Node มีมาให้อยู่แล้ว ไม่สร้างใหม่
+#
+# เดิมบรรทัดนี้เป็น `useradd --create-home --uid 1000 nextjs` ซึ่ง build ไม่ผ่าน
+# เพราะผู้ใช้ `node` ใน image ถือ UID 1000 อยู่ก่อนแล้ว useradd จึงออกด้วย exit 4
+# ("UID is not unique") ข้อความนี้ไม่ได้บอกสาเหตุตรงๆ จึงหาต้นเหตุยาก
 
 # standalone มี server.js กับ node_modules เท่าที่จำเป็นมาให้แล้ว
 # แต่ไม่รวม static assets กับ public จึงต้องคัดลอกเพิ่มเอง
-COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nextjs /app/public ./public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/public ./public
 
-USER nextjs
+USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
