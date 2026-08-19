@@ -79,12 +79,16 @@ class OllamaConnector:
         messages: list[ChatMessage],
         temperature: float = 0.2,
         json_mode: bool = False,
+        num_predict: int | None = None,
     ) -> str:
+        options: dict[str, Any] = {"temperature": temperature}
+        if num_predict is not None:
+            options["num_predict"] = num_predict
         payload: dict[str, Any] = {
             "model": self.chat_model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
             "stream": False,
-            "options": {"temperature": temperature},
+            "options": options,
         }
         if json_mode:
             payload["format"] = "json"  # Ollama บังคับ valid JSON output
@@ -100,6 +104,7 @@ class OllamaConnector:
         self,
         messages: list[ChatMessage],
         temperature: float = 0.2,
+        num_predict: int | None = None,
     ) -> Iterator[str]:
         """
         เหมือน chat() แต่ทยอยคืนข้อความทีละส่วนระหว่างที่โมเดลกำลังเขียน
@@ -112,11 +117,14 @@ class OllamaConnector:
         การเริ่มใหม่จะทำให้ผู้ใช้เห็นคำตอบซ้ำสองรอบ ความล้มเหลวกลางคันจึงต้องโยน
         ออกไปให้ผู้เรียกตัดสินใจแทน
         """
+        options: dict[str, Any] = {"temperature": temperature}
+        if num_predict is not None:
+            options["num_predict"] = num_predict
         payload: dict[str, Any] = {
             "model": self.chat_model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
             "stream": True,
-            "options": {"temperature": temperature},
+            "options": options,
         }
         try:
             with self._client.stream("POST", "/api/chat", json=payload) as resp:
