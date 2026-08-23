@@ -28,6 +28,16 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 14
 
+    # --- ผู้ให้บริการโมเดลสำหรับ "เขียนคำตอบ" ---
+    # "ollama" = โมเดลในเครื่อง (ค่าเริ่มต้น ไม่ส่งข้อมูลออกนอกเครื่อง)
+    # "gemini" = เรียก API ของ Google (เร็วกว่ามากบนเครื่องที่ไม่มีการ์ดจอ)
+    #
+    # ส่วน embedding ใช้ bge-m3 ในเครื่องเสมอไม่ว่าตั้งค่านี้เป็นอะไร
+    # เพราะเวกเตอร์ในฐานข้อมูลผูกกับโมเดลและขนาดมิติของมัน (ดู services/llm_client.py)
+    llm_provider: str = Field("ollama", alias="LLM_PROVIDER")
+    gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
+    gemini_model: str = Field("gemini-2.5-flash", alias="GEMINI_MODEL")
+
     # --- Local LLM (Ollama) ---
     ollama_base_url: str = Field("http://127.0.0.1:11434", alias="OLLAMA_BASE_URL")
     llm_model: str = Field("qwen2.5:7b", alias="LLM_MODEL")
