@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -48,10 +49,20 @@ _BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 @dataclass
 class GeminiConnector:
     api_key: str
-    chat_model: str = "gemini-2.5-flash"
+    chat_model: str = "gemini-3.5-flash-lite"
     timeout_s: int = 120
     max_retries: int = 2
     _client: httpx.Client = field(init=False, repr=False)
+
+    # เพดานความยาวคำตอบ ตั้งสูงกว่าฝั่งโมเดลในเครื่องมากโดยตั้งใจ
+    #
+    # โมเดลตระกูล Gemini 3 ใช้โทเคนไป "คิดในใจ" ก่อนเขียนคำตอบ และโทเคนส่วนนั้น
+    # นับรวมในเพดานเดียวกัน วัดกับ gemini-3.6-flash: ตั้งเพดาน 400 แล้วถูกใช้ไปกับ
+    # การคิด 381 เหลือเขียนคำตอบจริง 15 โทเคน คำตอบจึงขาดกลางประโยคโดยไม่มีสัญญาณ
+    # เตือน (finishReason=MAX_TOKENS) ต้องเผื่อที่ให้ส่วนที่คิดด้วย
+    #
+    # รุ่น lite ไม่ใช้โทเคนคิดเลย ค่านี้จึงไม่มีผลกับมัน เป็นเพียงตาข่ายรองรับ
+    answer_token_cap: int = 2048
 
     def __post_init__(self) -> None:
         # ตัดช่องว่างและอักขระขึ้นบรรทัดใหม่ที่อาจติดมาตอนวางคีย์ลงไฟล์ตั้งค่า
@@ -159,9 +170,29 @@ class GeminiConnector:
         """
         เหมือน chat() แต่ทยอยคืนข้อความระหว่างที่โมเดลกำลังเขียน
 
-        ไม่มีการลองใหม่ เพราะเมื่อส่งข้อความบางส่วนออกไปแล้ว การเริ่มใหม่จะทำให้
-        ผู้ใช้เห็นคำตอบซ้ำสองรอบ (เหตุผลเดียวกับ OllamaConnector.chat_stream)
+        ลองใหม่ได้เฉพาะกรณีที่ล้มก่อนข้อความแรกจะออกไป ซึ่งครอบคลุมการชนโควตา
+        (429) ที่เจอบ่อยในชั้นใช้งานฟรี ถ้าล้มหลังส่งข้อความไปแล้วจะไม่ลองใหม่
+        เพราะผู้ใช้จะเห็นคำตอบซ้ำสองรอบ (เหตุผลเดียวกับ OllamaConnector.chat_stream)
         """
+        for attempt in range(1, self.max_retries + 2):
+            started = False
+            try:
+                for chunk in self._stream_once(messages, temperature, num_predict):
+                    started = True
+                    yield chunk
+                return
+            except LLMConnectionError:
+                if started or attempt > self.max_retries:
+                    raise
+                logger.warning("gemini stream ลองใหม่ครั้งที่ %d", attempt + 1)
+                time.sleep(2 * attempt)
+
+    def _stream_once(
+        self,
+        messages: list[ChatMessage],
+        temperature: float,
+        num_predict: int | None,
+    ) -> Iterator[str]:
         payload = self._to_payload(messages, temperature, json_mode=False, num_predict=num_predict)
         path = f"/models/{self.chat_model}:streamGenerateContent"
         try:

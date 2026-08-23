@@ -63,6 +63,10 @@ class _SplitConnector:
     def chat_model(self) -> str:
         return self._chatter.chat_model
 
+    @property
+    def answer_token_cap(self) -> int:
+        return self._chatter.answer_token_cap
+
 
 def _build_ollama() -> OllamaConnector:
     return OllamaConnector(

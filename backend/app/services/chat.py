@@ -85,14 +85,9 @@ HISTORY_LIMIT = 6
 # คำตอบกระจายอยู่หลายหน้าของเอกสารอาจตอบได้ไม่ครบเท่าเดิม
 TOP_K_CHUNKS = 3
 
-# เพดานความยาวคำตอบ (โทเคน) — เป็นตาข่ายรองรับ ไม่ใช่เป้าหมาย
-#
-# ตัวคุมความยาวจริงคือกฎในพรอมต์ซึ่งสั่งให้ตอบไม่เกิน 3 ประโยค ค่านี้ตั้งไว้สูงกว่า
-# ความยาวที่ตั้งใจมาก เพื่อกันเฉพาะกรณีที่โมเดลไม่ยอมหยุด ซึ่งบนเซิร์ฟเวอร์ที่เขียนได้
-# ราว 6 โทเคน/วินาที คำตอบหลุดยาวหนึ่งครั้งกินเวลาเป็นนาที
-#
-# ตั้งต่ำกว่านี้ไม่ได้ เพราะการตัดกลางประโยคทำให้คำตอบขาดหายโดยผู้ใช้ไม่รู้ตัว
-ANSWER_TOKEN_CAP = 400
+# เพดานความยาวคำตอบมาจาก connector ที่ใช้อยู่ (connector.answer_token_cap)
+# ไม่ได้ตั้งไว้ตรงนี้ เพราะแต่ละเจ้าต้องใช้ค่าไม่เท่ากัน — โมเดลตระกูล Gemini 3
+# ใช้โทเคนไปกับการคิดในใจก่อนเขียนคำตอบ และนับรวมในเพดานเดียวกัน
 
 
 def _load_session(db: Session, user_id: uuid.UUID, session_id: uuid.UUID | None) -> ChatSession:
@@ -354,7 +349,8 @@ def answer_question(
     else:
         # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
         # มากกว่าความหลากหลายของสำนวน
-        reply_text = get_llm_connector().chat(p.messages, temperature=0.1, num_predict=ANSWER_TOKEN_CAP).strip()
+        connector = get_llm_connector()
+        reply_text = connector.chat(p.messages, temperature=0.1, num_predict=connector.answer_token_cap).strip()
 
     _persist(db, p.session_id, message, reply_text)
 
@@ -403,7 +399,8 @@ def stream_answer(
         reply_text = p.canned
     else:
         parts: list[str] = []
-        for chunk in get_llm_connector().chat_stream(p.messages, temperature=0.1, num_predict=ANSWER_TOKEN_CAP):
+        connector = get_llm_connector()
+        for chunk in connector.chat_stream(p.messages, temperature=0.1, num_predict=connector.answer_token_cap):
             parts.append(chunk)
             yield _sse("token", {"t": chunk})
         reply_text = "".join(parts).strip()

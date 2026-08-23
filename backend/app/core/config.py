@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # เพราะเวกเตอร์ในฐานข้อมูลผูกกับโมเดลและขนาดมิติของมัน (ดู services/llm_client.py)
     llm_provider: str = Field("ollama", alias="LLM_PROVIDER")
     gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
-    gemini_model: str = Field("gemini-3.6-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field("gemini-3.5-flash-lite", alias="GEMINI_MODEL")
 
     # --- Local LLM (Ollama) ---
     ollama_base_url: str = Field("http://127.0.0.1:11434", alias="OLLAMA_BASE_URL")
