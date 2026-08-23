@@ -70,7 +70,7 @@ if [ "$PROVIDER" = "gemini" ]; then
     echo "คีย์ใช้งานได้"
 
     set_env GEMINI_API_KEY "$GEMINI_KEY"
-    set_env GEMINI_MODEL "${GEMINI_MODEL:-gemini-2.5-flash}"
+    set_env GEMINI_MODEL "${GEMINI_MODEL:-gemini-3.6-flash}"
     set_env LLM_PROVIDER gemini
     chmod 600 .env
     echo "ตั้งให้ใช้ Gemini แล้ว"
