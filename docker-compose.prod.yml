@@ -62,6 +62,11 @@ services:
       # ในเครือข่ายของ compose เรียกกันด้วยชื่อ service ไม่ใช่ 127.0.0.1
       DATABASE_URL: postgresql+psycopg://advisor_api:${ADVISOR_API_PASSWORD}@postgres:5432/course_advisor
       OLLAMA_BASE_URL: http://ollama:11434
+      # สลับผู้ให้บริการโมเดลที่เขียนคำตอบได้จาก .env โดยไม่ต้อง build ใหม่
+      # ค่าเริ่มต้นคือโมเดลในเครื่อง ตั้ง LLM_PROVIDER=gemini เมื่อมี GEMINI_API_KEY แล้ว
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       JWT_SECRET: ${JWT_SECRET:?ต้องตั้งค่าใน .env}
       LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
       EMBED_MODEL: ${EMBED_MODEL:-bge-m3}

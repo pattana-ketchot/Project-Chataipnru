@@ -65,9 +65,12 @@ async def _keep_models_warm() -> None:
         try:
             # embed อย่างเดียวไม่พอ ต้องแตะโมเดลตอบคำถามด้วยเพราะนับเวลาแยกกัน
             await asyncio.to_thread(connector.embed, "warmup")
-            await asyncio.to_thread(
-                connector.chat, [ChatMessage(role="user", content="hi")], 0.0, False
-            )
+            # อุ่นโมเดลเขียนคำตอบเฉพาะตอนที่รันในเครื่อง — ถ้าใช้ Gemini การยิงคำขอ
+            # ทุก 20 นาทีมีแต่กินโควตาเปล่าๆ เพราะฝั่งนั้นไม่มีโมเดลให้ค้างในหน่วยความจำ
+            if settings.llm_provider != "gemini":
+                await asyncio.to_thread(
+                    connector.chat, [ChatMessage(role="user", content="hi")], 0.0, False
+                )
             logger.debug("warmup ping สำเร็จ")
         except Exception as e:  # noqa: BLE001 — งานเบื้องหลัง ห้ามทำให้เซิร์ฟเวอร์ล้ม
             logger.warning("warmup ping ไม่สำเร็จ: %s", type(e).__name__)
