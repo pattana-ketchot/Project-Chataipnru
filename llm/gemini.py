@@ -54,6 +54,13 @@ class GeminiConnector:
     _client: httpx.Client = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        # ตัดช่องว่างและอักขระขึ้นบรรทัดใหม่ที่อาจติดมาตอนวางคีย์ลงไฟล์ตั้งค่า
+        #
+        # เคยเจอมาแล้ว: การคัดลอกจากเบราว์เซอร์บน Windows พ่วง CR (\r) มาด้วย
+        # httpx จึงปฏิเสธตั้งแต่ตอนประกอบคำขอด้วย "Illegal header value" ซึ่งพ่นค่า
+        # ของหัวข้อความออกมาใน traceback — นั่นแปลว่า API key หลุดลง log ทันที
+        # การตัดตรงนี้จึงกันทั้งข้อผิดพลาดที่ชี้ผิดทางและการทำคีย์รั่ว
+        self.api_key = self.api_key.strip()
         if not self.api_key:
             raise LLMConnectionError("ไม่ได้ตั้ง GEMINI_API_KEY")
         self._client = httpx.Client(
