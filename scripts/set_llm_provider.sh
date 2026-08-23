@@ -35,6 +35,14 @@ if [ "$PROVIDER" = "gemini" ]; then
     printf 'วาง GEMINI_API_KEY แล้วกด Enter (จะไม่แสดงบนจอ): '
     read -rs GEMINI_KEY
     echo
+
+    # ตัดช่องว่างและอักขระขึ้นบรรทัดใหม่ที่ติดมากับการวาง
+    #
+    # จำเป็นเพราะการคัดลอกจากเบราว์เซอร์บน Windows มัก
+    # พ่วง CR (\r) มาด้วย ซึ่งใส่ลงหัวข้อความ HTTP ไม่ได้ตามข้อกำหนดของโปรโตคอล
+    # อาการที่ได้คือ 401 จาก Google ซึ่งชี้ไปผิดทางว่าคีย์ไม่ถูกต้อง
+    GEMINI_KEY=$(printf '%s' "$GEMINI_KEY" | tr -d '[:space:]')
+
     [ -n "$GEMINI_KEY" ] || { echo "ไม่ได้ใส่คีย์ ยกเลิก" >&2; exit 1; }
 
     set_env GEMINI_API_KEY "$GEMINI_KEY"

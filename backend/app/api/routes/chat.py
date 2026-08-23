@@ -7,6 +7,7 @@ endpoint นี้จำบทสนทนาได้และตอบเป�
 ใช้ rate_limiter เช่นเดียวกับ /recommend เพราะเรียก LLM (หนึ่งเทิร์นอาจเรียกถึง
 สองครั้ง: เขียนคำถามใหม่ + ตอบ)
 """
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -30,6 +31,18 @@ MODEL_BUSY = (
 )
 
 
+def _reason(e: LLMConnectionError) -> str:
+    """
+    ใช้ข้อความจริงจากตัวเชื่อมต่อถ้ามี ไม่งั้นค่อยใช้ข้อความกลางๆ
+
+    เดิมตอบ MODEL_BUSY ทุกกรณี ซึ่งบอกว่า "โมเดลกำลังโหลดหรือหน่วยความจำไม่พอ"
+    แม้ตอนที่สาเหตุจริงคือ API key ผิด ทำให้ไล่ปัญหาไปผิดทางเสียเวลา ตัวเชื่อมต่อ
+    เขียนข้อความไว้ให้ผู้ใช้อ่านรู้เรื่องอยู่แล้วและไม่มีข้อมูลลับปนอยู่
+    """
+    detail = str(e).strip()
+    return detail or MODEL_BUSY
+
+
 @router.post("", response_model=ChatReply, dependencies=[Depends(rate_limiter)])
 def chat(
     payload: ChatRequest,
@@ -43,10 +56,7 @@ def chat(
     except LLMConnectionError as e:
         # แยกจาก 500 ทั่วไป เพื่อให้หน้าเว็บบอกผู้ใช้ได้ตรงว่าเกิดอะไรขึ้น
         # แทนข้อความ "เกิดข้อผิดพลาด" ที่ไม่ช่วยให้ตัดสินใจว่าควรลองใหม่ไหม
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            MODEL_BUSY,
-        ) from e
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _reason(e)) from e
 
 
 @router.post("/stream", dependencies=[Depends(rate_limiter)])
@@ -69,9 +79,11 @@ def chat_stream(
         try:
             yield from stream_answer(db, user_id=user.id, session_id=payload.session_id, message=payload.message)
         except ValueError as e:
-            yield f'event: error\ndata: {{"detail": "{e}"}}\n\n'
-        except LLMConnectionError:
-            yield f'event: error\ndata: {{"detail": "{MODEL_BUSY}"}}\n\n'
+            # ต้องผ่าน json.dumps เสมอ ข้อความที่มีอัญประกาศหรือขึ้นบรรทัดใหม่
+            # จะทำให้ฝั่งหน้าเว็บอ่าน JSON ไม่ออกถ้าประกอบสตริงเอง
+            yield f"event: error\ndata: {json.dumps({'detail': str(e)}, ensure_ascii=False)}\n\n"
+        except LLMConnectionError as e:
+            yield f"event: error\ndata: {json.dumps({'detail': _reason(e)}, ensure_ascii=False)}\n\n"
         except Exception:
             # ต้องจับให้หมด ไม่ปล่อยให้ข้อยกเว้นหลุดออกจาก generator เพราะหัวข้อความ
             # ถูกส่งไปแล้ว การโยนต่อจะทำให้การเชื่อมต่อค้างจนหน้าเว็บรอไม่จบ
