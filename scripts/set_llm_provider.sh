@@ -45,6 +45,34 @@ if [ "$PROVIDER" = "gemini" ]; then
 
     [ -n "$GEMINI_KEY" ] || { echo "ไม่ได้ใส่คีย์ ยกเลิก" >&2; exit 1; }
 
+    # เตือนเมื่อรูปร่างไม่เหมือน API key
+    #
+    # หน้า AI Studio มีค่าอยู่หลายอย่างที่หน้าตาคล้ายกัน เคยหยิบ access token
+    # ชั่วคราว (ขึ้นต้น "AQ." ยาว ~86 ตัว) มาใส่แทน API key จริง (ขึ้นต้น "AIza"
+    # ยาว ~39 ตัว) แล้วไปเจอ 401 ตอนถามคำถามจริง ซึ่งไล่หาสาเหตุยาก
+    # เตือนอย่างเดียวไม่หยุดการทำงาน เผื่อ Google เปลี่ยนรูปแบบคีย์ในอนาคต
+    case "$GEMINI_KEY" in
+        AIza*) ;;
+        *) echo "เตือน: API key ของ Google ปกติขึ้นต้นด้วย AIza — ค่าที่ใส่มาไม่ใช่" >&2 ;;
+    esac
+
+    # ทดสอบกับ Google ก่อนบันทึก จะได้รู้ผลทันทีแทนที่จะไปเจอตอนผู้ใช้ถามคำถาม
+    echo "กำลังตรวจสอบคีย์กับ Google..."
+    HTTP_CODE=$(curl -s -o /tmp/gemini_check.$$ -w '%{http_code}' -m 20 \
+        -H "x-goog-api-key: $GEMINI_KEY" \
+        "https://generativelanguage.googleapis.com/v1beta/models" || echo 000)
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "คีย์ใช้ไม่ได้ (Google ตอบรหัส $HTTP_CODE) — ไม่ได้บันทึกอะไรลงไฟล์" >&2
+        # ตัดข้อความออกมาเฉพาะบรรทัด message ไม่พ่นคำตอบทั้งก้อนซึ่งอาจมีคีย์ปนอยู่
+        grep -o '"message"[^,]*' /tmp/gemini_check.$$ 2>/dev/null | head -1 >&2 || true
+        rm -f /tmp/gemini_check.$$
+        echo "" >&2
+        echo "สร้าง API key ที่ https://aistudio.google.com/apikey (ค่าที่ขึ้นต้นด้วย AIza)" >&2
+        exit 1
+    fi
+    rm -f /tmp/gemini_check.$$
+    echo "คีย์ใช้งานได้"
+
     set_env GEMINI_API_KEY "$GEMINI_KEY"
     set_env GEMINI_MODEL "${GEMINI_MODEL:-gemini-2.5-flash}"
     set_env LLM_PROVIDER gemini
