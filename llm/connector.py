@@ -51,6 +51,10 @@ class OllamaConnector:
     max_retries: int = 2
     _client: httpx.Client = field(init=False, repr=False)
 
+    # เพดานความยาวคำตอบที่ผู้เรียกควรใช้กับโมเดลนี้ — ดูเหตุผลที่ answer_token_cap
+    # ของ GeminiConnector ว่าทำไมแต่ละเจ้าต้องใช้ค่าไม่เท่ากัน
+    answer_token_cap: int = 400
+
     def __post_init__(self) -> None:
         self._client = httpx.Client(base_url=self.base_url, timeout=self.timeout_s)
 
