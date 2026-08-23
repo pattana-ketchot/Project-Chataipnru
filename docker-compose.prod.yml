@@ -66,7 +66,7 @@ services:
       # ค่าเริ่มต้นคือโมเดลในเครื่อง ตั้ง LLM_PROVIDER=gemini เมื่อมี GEMINI_API_KEY แล้ว
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
       JWT_SECRET: ${JWT_SECRET:?ต้องตั้งค่าใน .env}
       LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
       EMBED_MODEL: ${EMBED_MODEL:-bge-m3}
