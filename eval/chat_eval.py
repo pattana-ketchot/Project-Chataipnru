@@ -109,7 +109,9 @@ def main() -> None:
                 if d is None:
                     records.append({"group": group["id"], "question": q, "expect": expect,
                                     "got": "error", "score": 0.0, "seconds": 0, "reply": ""})
-                    total += 1
+                    # ไม่ต้องนับอะไรเพิ่ม จำนวนข้อทั้งหมดนับจาก len(group["questions"]) อยู่แล้ว
+                    # เดิมมีบรรทัด total += 1 ซึ่งอ้างถึงตัวแปรที่ไม่เคยประกาศ ทำให้ทั้งการรัน
+                    # ล้มตอนที่เรียกโมเดลไม่สำเร็จ — คือพังตอนที่ต้องการผลลัพธ์มากที่สุดพอดี
                     print(f'  ข้ามไป [error        ] เรียกโมเดลไม่สำเร็จ  {q}')
                     continue
                 got = classify(d["reply"], d["status"])
