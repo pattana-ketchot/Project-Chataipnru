@@ -15,6 +15,7 @@
 `pip install -e ../llm` แทนการ append sys.path — ที่นี่ใช้ sys.path เพื่อความง่าย
 ของ scaffold เท่านั้น
 """
+import logging
 import sys
 from pathlib import Path
 
@@ -23,27 +24,35 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from llm.connector import OllamaConnector  # noqa: E402
+from llm.connector import LLMConnectionError, OllamaConnector  # noqa: E402
 from llm.gemini import GeminiConnector  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 
 settings = get_settings()
+logger = logging.getLogger("course_advisor")
 
 _connector = None
 
 
 class _SplitConnector:
     """
-    ใช้ผู้ให้บริการคนละเจ้าสำหรับ embedding กับการเขียนคำตอบ
+    ใช้ผู้ให้บริการคนละเจ้าสำหรับ embedding กับการเขียนคำตอบ พร้อมตัวสำรอง
 
     มีเพื่อให้โค้ดที่เรียกใช้ไม่ต้องรู้เรื่องนี้เลย ทุกที่ยังเรียก connector.embed()
     และ connector.chat() บนวัตถุเดียวเหมือนเดิม การสลับผู้ให้บริการจึงไม่กระทบ
     services/chat.py หรือ services/rag.py แม้แต่บรรทัดเดียว
+
+    ตัวสำรองแก้ปัญหาที่เจอจริง: ชั้นใช้งานฟรีของ Gemini มีเพดานคำขอต่อนาที พอชน
+    แล้วผู้ใช้เห็นข้อความแดงแทนคำตอบ ซึ่งแย่กว่าการรอนาน โมเดลในเครื่องไม่มีเพดาน
+    เลยเพราะรันอยู่บนเครื่องเราเอง จึงเอามารับช่วงต่อได้ ผลคือ "เร็วเป็นปกติ ช้าบ้าง
+    เป็นบางครั้ง แต่ไม่พังให้เห็น"
     """
 
     def __init__(self, embedder: OllamaConnector, chatter: GeminiConnector) -> None:
         self._embedder = embedder
         self._chatter = chatter
+        # ตัวเดียวกับที่ใช้ embed — เป็นโมเดลในเครื่องที่พร้อมใช้อยู่แล้ว
+        self._fallback = embedder
 
     # --- ฝั่ง embedding: โมเดลในเครื่อง ---
     def embed(self, text):
@@ -52,12 +61,45 @@ class _SplitConnector:
     def embed_batch(self, texts):
         return self._embedder.embed_batch(texts)
 
-    # --- ฝั่งเขียนคำตอบ: ผู้ให้บริการที่เลือกไว้ ---
+    # --- ฝั่งเขียนคำตอบ: ใช้เจ้าหลักก่อน ล้มแล้วค่อยตกมาที่โมเดลในเครื่อง ---
+    def _fallback_kwargs(self, kwargs: dict) -> dict:
+        """
+        ปรับเพดานความยาวให้เข้ากับโมเดลในเครื่องก่อนส่งต่อ
+
+        ผู้เรียกส่ง num_predict มาเป็นเพดานของ Gemini (2048) ซึ่งเผื่อไว้สำหรับโทเคน
+        ที่โมเดลใช้คิดในใจ โมเดลในเครื่องไม่มีขั้นตอนนั้นและเขียนช้ากว่ามาก ถ้าปล่อย
+        ค่าเดิมไปคำตอบสำรองอาจยาวจนใช้เวลาหลายนาที
+        """
+        out = dict(kwargs)
+        if out.get("num_predict") is not None:
+            out["num_predict"] = min(out["num_predict"], self._fallback.answer_token_cap)
+        return out
+
     def chat(self, *args, **kwargs):
-        return self._chatter.chat(*args, **kwargs)
+        try:
+            return self._chatter.chat(*args, **kwargs)
+        except LLMConnectionError as e:
+            logger.warning("เจ้าหลักตอบไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
+            return self._fallback.chat(*args, **self._fallback_kwargs(kwargs))
 
     def chat_stream(self, *args, **kwargs):
-        return self._chatter.chat_stream(*args, **kwargs)
+        """
+        สตรีมจากเจ้าหลัก ถ้าล้ม "ก่อน" ตัวอักษรแรกออกไปค่อยเปลี่ยนไปใช้ตัวสำรอง
+
+        ต้องเช็กว่ายังไม่ได้ส่งอะไรออกไป เพราะถ้าสลับกลางคันผู้ใช้จะเห็นคำตอบสองชุด
+        ต่อกันจากคนละโมเดล ซึ่งอ่านไม่รู้เรื่องยิ่งกว่าเห็นข้อความผิดพลาด
+        """
+        started = False
+        try:
+            for chunk in self._chatter.chat_stream(*args, **kwargs):
+                started = True
+                yield chunk
+            return
+        except LLMConnectionError as e:
+            if started:
+                raise
+            logger.warning("เจ้าหลักสตรีมไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
+        yield from self._fallback.chat_stream(*args, **self._fallback_kwargs(kwargs))
 
     @property
     def chat_model(self) -> str:
