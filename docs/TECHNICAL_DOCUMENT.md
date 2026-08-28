@@ -9,7 +9,8 @@
 | Web UI | Next.js, React, TypeScript, Tailwind | Auth, แบบสอบถาม, หลักสูตร และคำแนะนำ |
 | API | FastAPI, Pydantic, SQLAlchemy | validation, JWT และ business API |
 | Data | PostgreSQL, pgvector | ผู้ใช้ หลักสูตร chunks และประวัติ |
-| AI | Ollama + Qwen/Llama + nomic-embed-text | embedding และสร้างคำอธิบาย |
+| AI — ค้นเอกสาร | Ollama + bge-m3 (1,024 มิติ) | แปลงข้อความเป็นเวกเตอร์ ทำงานในเครื่องเสมอ |
+| AI — เขียนคำตอบ | Gemini Flash Lite หรือ Ollama + Qwen | เลือกได้ด้วยค่า `LLM_PROVIDER` และสลับกลับได้ตลอด |
 | Ingestion | Python | extract → clean → chunk → embed → persist |
 
 ## Runtime flow
