@@ -1,0 +1,309 @@
+"""
+จับคู่นักเรียนกับสาขาที่เหมาะสม จากคำตอบแบบสอบถาม (/match)
+
+ต่างจาก services/rag.py อย่างไร
+------------------------------
+`/recommend` เดิมทำงานแบบ "ค้นก่อน แล้วให้โมเดลเลือกจากที่ค้นเจอ" ซึ่งถูกต้องสำหรับ
+การถาม-ตอบ แต่ผิดหลักการสำหรับการจับคู่สาขา และวัดได้ว่าให้ผลผิดจริง
+
+ทดสอบด้วยโปรไฟล์ "สายวิทย์-คณิต ชอบเขียนโค้ด สนใจเทคโนโลยีและคอมพิวเตอร์" ผลที่ได้คือ
+เทคโนโลยีผลิตภัณฑ์ชีวภาพ 65% เพียงหลักสูตรเดียว โดยวิทยาการคอมพิวเตอร์ไม่ติดอันดับเลย
+สาเหตุคือค้น 12 ชิ้นจาก 7,301 ชิ้นทั้งคลัง หลักสูตรที่ไม่มีชิ้นใดติดมาจึงไม่มีทางถูกแนะนำ
+แม้จะเหมาะที่สุด และเมื่อ 12 ชิ้นนั้นมาจากไม่กี่เล่ม พอตัดตัวซ้ำออกจึงเหลือหลักสูตรเดียว
+
+วิธีที่ใช้แทน
+------------
+คลังมีเพียง 18 หลักสูตร จึง **ให้คะแนนทุกหลักสูตร** แทนการค้นแล้วเลือก ทุกหลักสูตรได้รับ
+การพิจารณาเท่ากันเสมอ ไม่มีใครตกรอบเพราะไม่ติดการค้นหา
+
+คะแนนของหลักสูตร = ค่าเฉลี่ยความใกล้เคียงของเนื้อหาที่ตรงที่สุด k ชิ้นในเล่มนั้น
+
+ใช้ค่าเฉลี่ยของ k ชิ้น ไม่ใช่ชิ้นที่ดีที่สุดชิ้นเดียว เพราะชิ้นเดียวอาจตรงโดยบังเอิญ เช่น
+เอกสารเทคโนโลยีชีวภาพเอ่ยคำว่า "การเขียนโปรแกรม" อยู่ย่อหน้าเดียว การเฉลี่ยหลายชิ้น
+ต้องการให้ทั้งเล่มเกี่ยวข้องจริงจึงจะได้คะแนนสูง และไม่ใช้ค่าเฉลี่ยทั้งเล่มเพราะเอกสาร
+มคอ.2 มีภาคผนวก บันทึกการประชุม และแบบประเมินความพึงพอใจปนอยู่มาก ซึ่งจะกดคะแนน
+ของทุกหลักสูตรลงเท่าๆ กันจนแยกไม่ออก
+
+ตัวเลขที่ส่งออกไปคำนวณจากเวกเตอร์จริงและทำซ้ำได้ ไม่ใช่ตัวเลขที่โมเดลคิดขึ้นเอง —
+ต่างจาก `/recommend` เดิมที่ค่า score มาจากคำตอบของโมเดลโดยตรง
+
+ผลวัดล่าสุด (eval/match_eval.py, 8 โปรไฟล์)
+------------------------------------------
+    อันดับ 1 ถูกต้อง   6/8
+    ติด 3 อันดับแรก    7/8
+
+ข้อจำกัดที่ยังแก้ไม่ได้
+---------------------
+หลักสูตร "เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ" ติดอันดับต้นในเกือบทุกโปรไฟล์
+รวมถึงโปรไฟล์ที่ไม่เกี่ยวข้องเลย เป็นเอกสารฉบับใหม่ที่สุด (พ.ศ. 2568) และใช้ถ้อยคำกว้าง
+ครอบคลุมทั้งสุขภาพ อาหาร สิ่งแวดล้อม และธุรกิจ เวกเตอร์ของมันจึงอยู่ "ตรงกลาง" ของ
+ทุกหัวข้อและใกล้เคียงกับเกือบทุกโปรไฟล์พอสมควร
+
+เป็นข้อจำกัดเชิงวิธีการของการวัดความใกล้เคียงด้วยเวกเตอร์ ไม่ใช่บั๊กที่แก้ด้วยการปรับ
+ค่าน้ำหนัก การไล่ปรับน้ำหนักให้ผ่านเคสที่เหลือกับตัวอย่างเพียง 8 ชุดจะกลายเป็นการดัด
+ระบบให้เข้ากับชุดทดสอบ ไม่ใช่การทำให้แม่นขึ้นจริง ทางแก้ที่ถูกต้องคือเพิ่มจำนวนโปรไฟล์
+ทดสอบให้มากพอก่อน แล้วจึงพิจารณาวิธีถ่วงน้ำหนักตามความจำเพาะของเอกสารแต่ละเล่ม
+"""
+from __future__ import annotations
+
+import json
+import uuid
+from dataclasses import dataclass
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.services.course_scope import _distinctive_name
+from app.services.llm_client import get_llm_connector
+
+from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402
+from llm.prompts import MATCH_RATIONALE_SYSTEM_PROMPT, build_match_rationale_prompt  # noqa: E402
+
+# จำนวนเนื้อหาต่อหลักสูตรที่นำมาเฉลี่ยเป็นคะแนน
+CHUNKS_PER_COURSE = 5
+
+# ช่วงความใกล้เคียงที่ใช้แปลงเป็นเปอร์เซ็นต์สำหรับแสดงผล
+#
+# ค่า cosine similarity ของงานนี้อยู่ราว 0.35–0.75 การเอาไปคูณร้อยตรงๆ จะได้ตัวเลข
+# ที่ดูต่ำผิดความจริง (หลักสูตรที่เหมาะที่สุดได้ 62% เหมือนสอบตก) จึงยืดช่วงนี้ให้เต็ม
+# 0–100 ด้วยสูตรคงที่ ไม่ใช่การเทียบกันเองในแต่ละครั้ง
+#
+# เลือกสูตรคงที่เพราะถ้าเทียบกันเองภายในผลลัพธ์ อันดับหนึ่งจะได้ 100% เสมอแม้โปรไฟล์
+# นั้นจะไม่เข้ากับหลักสูตรใดเลย ซึ่งหลอกผู้ใช้ยิ่งกว่า
+#
+# ค่าดิบยังส่งออกไปในฟิลด์ score ด้วยเสมอ ผู้ตรวจสอบจึงย้อนดูได้ว่าเปอร์เซ็นต์มาจากอะไร
+_PCT_FLOOR, _PCT_CEILING = 0.35, 0.72
+
+MAX_RESULTS = 5
+
+# น้ำหนักของความใกล้เคียงกับ "ชื่อหลักสูตร" เทียบกับความใกล้เคียงของเนื้อหา
+# เหตุผลที่ต้องมีอยู่ในหมายเหตุของ match_programs()
+_TITLE_WEIGHT = 0.5
+
+# เวกเตอร์ของชื่อหลักสูตรทั้ง 18 เล่ม คำนวณครั้งเดียวต่อโปรเซส
+_TITLE_CACHE: dict[uuid.UUID, list[float]] | None = None
+
+
+@dataclass
+class ProgramMatch:
+    course_id: uuid.UUID
+    title: str
+    score: float          # ความใกล้เคียงดิบ 0-1 คำนวณจากเวกเตอร์
+    match_percent: int    # ค่าเดียวกันที่แปลงเป็นเปอร์เซ็นต์เพื่อแสดงผล
+    rationale: str
+    evidence_chunk_ids: list[uuid.UUID]
+
+
+def build_profile_text(answers: dict) -> str:
+    """
+    ประกอบคำตอบทั้งหมดเป็นข้อความเดียว — ใช้แสดงผลและใช้เขียนเหตุผล
+
+    เขียนเป็นประโยคที่มีคำบอกหัวข้อกำกับ ไม่ใช่การต่อคำด้วยจุลภาคเฉยๆ เพราะโมเดล
+    embedding จับความหมายจากบริบท คำว่า "อาหาร" ลอยๆ ต่างจาก "สนใจด้านอาหาร"
+    ในแง่ของเวกเตอร์ที่ได้
+    """
+    parts: list[str] = []
+    if v := answers.get("study_track"):
+        parts.append(f"เรียนสาย{v}")
+    parts.extend(_topic_parts(answers))
+    if v := answers.get("career_goal"):
+        parts.append("เป้าหมายอาชีพคือ " + ", ".join(v) if isinstance(v, list) else f"เป้าหมายอาชีพคือ {v}")
+    if v := answers.get("work_environment"):
+        parts.append("อยากทำงานแบบ " + ", ".join(v))
+    return " ".join(parts)
+
+
+def _topic_parts(answers: dict) -> list[str]:
+    parts: list[str] = []
+    if v := answers.get("favorite_subjects"):
+        parts.append("ชอบวิชา " + ", ".join(v))
+    if v := answers.get("interests"):
+        parts.append("สนใจด้าน " + ", ".join(v))
+    if v := answers.get("aptitudes"):
+        parts.append("ถนัด " + ", ".join(v))
+    if v := answers.get("extra"):
+        parts.append(v)
+    return parts
+
+
+def build_match_query(answers: dict) -> str:
+    """
+    ข้อความที่ใช้แปลงเป็นเวกเตอร์จริง — ตัดคำตอบที่ไม่บอกว่าสนใจ "เรื่องอะไร" ออก
+
+    เป้าหมายอาชีพ สภาพแวดล้อมการทำงาน และสายการเรียน เป็นคำที่เข้าได้กับแทบทุก
+    หลักสูตร ("ทำงานเป็นทีม" "ทำงานเพื่อสังคม" "สายวิทย์-คณิต") การใส่รวมไปด้วยจึง
+    เจือจางสัญญาณที่แยกแยะได้จริงจนอันดับเพี้ยน
+
+    วัดกับโปรไฟล์ที่ระบุว่า "สนใจการนวดและการใช้สมุนไพรรักษาโรค"
+        ใส่ทุกช่อง      การแพทย์แผนไทยประยุกต์ ไม่ติดแม้แต่ 9 อันดับแรก
+        ตัดสองช่องออก   ขึ้นมาติด 3 อันดับแรก
+
+    แต่ **ไม่ตัดเป้าหมายอาชีพ** แม้จะดูเป็นคำกลางๆ เพราะบางคำตอบชี้เฉพาะเจาะจงมาก
+    เช่น "เป็นผู้ประกอบการ" ตรงกับสาขา "เทคโนโลยีอาหารและความเป็นผู้ประกอบการ
+    สมัยใหม่" โดยตรง การตัดทิ้งทั้งหมวดเคยทำให้เคสนี้หล่นจากอันดับ 1 ไปอันดับ 3
+
+    คำตอบที่ตัดออกไม่ได้ถูกทิ้ง ยังส่งให้โมเดลใช้เขียนเหตุผลผ่าน build_profile_text()
+    เพราะมันมีความหมายกับคนอ่าน แม้จะไม่ช่วยในการจัดอันดับ
+    """
+    parts = _topic_parts(answers)
+    if v := answers.get("career_goal"):
+        parts.append("เป้าหมายอาชีพคือ " + ", ".join(v) if isinstance(v, list) else f"เป้าหมายอาชีพคือ {v}")
+    return " ".join(parts)
+
+
+def score_all_programs(db: Session, profile_embedding: list[float]) -> list[dict]:
+    """
+    ให้คะแนนทุกหลักสูตรที่เปิดใช้งาน เรียงจากเหมาะที่สุด
+
+    ทำใน SQL ครั้งเดียวแทนการวนลูปถามทีละหลักสูตร เพราะการจัดอันดับภายในแต่ละเล่ม
+    ต้องใช้ window function อยู่แล้ว และการดึงเวกเตอร์ 7,301 ชิ้นออกมาคำนวณฝั่ง Python
+    จะช้ากว่ามากโดยไม่ได้อะไรเพิ่ม
+    """
+    rows = db.execute(
+        text("""
+            WITH ranked AS (
+                SELECT ch.course_id,
+                       ch.id AS chunk_id,
+                       1 - (ch.embedding <=> CAST(:q AS vector)) AS sim,
+                       row_number() OVER (
+                           PARTITION BY ch.course_id
+                           ORDER BY ch.embedding <=> CAST(:q AS vector)
+                       ) AS rn
+                FROM course_chunks ch
+                JOIN courses c ON c.id = ch.course_id
+                WHERE c.is_active
+            )
+            SELECT r.course_id,
+                   c.title,
+                   avg(r.sim) AS score,
+                   array_agg(r.chunk_id ORDER BY r.sim DESC) AS chunk_ids
+            FROM ranked r
+            JOIN courses c ON c.id = r.course_id
+            WHERE r.rn <= :k
+            GROUP BY r.course_id, c.title
+            ORDER BY score DESC
+        """),
+        {"q": str(profile_embedding), "k": CHUNKS_PER_COURSE},
+    ).all()
+    return [
+        {"course_id": r.course_id, "title": r.title, "score": float(r.score), "chunk_ids": list(r.chunk_ids)}
+        for r in rows
+    ]
+
+
+def _collapse_editions(scored: list[dict]) -> list[dict]:
+    """
+    รวมหลักสูตรเดียวกันที่มีหลายปีการศึกษาให้เหลือรายการเดียว
+
+    คลังนี้มี 4 หลักสูตรที่เก็บไว้สองปีการศึกษา (เช่น วิทยาการคอมพิวเตอร์ 2561 และ 2566)
+    ถ้าไม่รวม ผู้ใช้จะเห็นชื่อเดียวกันสองบรรทัดติดกันในผลลัพธ์ ซึ่งดูเหมือนระบบทำงานผิด
+    เก็บฉบับที่ได้คะแนนสูงกว่าไว้ เพราะเป็นฉบับที่เนื้อหาตรงกับผู้ใช้มากที่สุด
+    """
+    best: dict[str, dict] = {}
+    for item in scored:  # เรียงคะแนนมากไปน้อยมาแล้ว ตัวแรกที่เจอจึงดีที่สุดเสมอ
+        best.setdefault(_distinctive_name(item["title"]), item)
+    return list(best.values())
+
+
+def _to_percent(score: float) -> int:
+    ratio = (score - _PCT_FLOOR) / (_PCT_CEILING - _PCT_FLOOR)
+    return max(0, min(100, round(ratio * 100)))
+
+
+def _fetch_evidence(db: Session, chunk_ids: list[uuid.UUID]) -> str:
+    rows = db.execute(
+        text("SELECT page_number, content FROM course_chunks WHERE id = ANY(:ids)"),
+        {"ids": chunk_ids},
+    ).all()
+    return "\n\n".join(f"[หน้า {r.page_number}]\n{r.content}" for r in rows)
+
+
+def _title_vectors(db: Session, connector) -> dict[uuid.UUID, list[float]]:
+    """
+    เวกเตอร์ของ "ชื่อหลักสูตร" แต่ละเล่ม คำนวณครั้งเดียวแล้วเก็บไว้ใช้ซ้ำ
+
+    มีเพียง 18 หลักสูตร การคำนวณครั้งแรกจึงใช้เวลาไม่ถึงสองวินาที และหลังจากนั้น
+    ไม่มีค่าใช้จ่ายอีกเลยตลอดอายุของโปรเซส
+    """
+    global _TITLE_CACHE
+    if _TITLE_CACHE is None:
+        rows = db.execute(text("SELECT id, title FROM courses WHERE is_active")).all()
+        _TITLE_CACHE = {r.id: connector.embed(_distinctive_name(r.title)) for r in rows}
+    return _TITLE_CACHE
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return dot / (na * nb) if na and nb else 0.0
+
+
+def match_programs(db: Session, answers: dict, limit: int = MAX_RESULTS) -> list[ProgramMatch]:
+    connector = get_llm_connector()
+    profile_text = build_profile_text(answers)
+    query_text = build_match_query(answers)
+    if not query_text.strip():
+        raise ValueError("ต้องตอบอย่างน้อยหนึ่งข้อในหัวข้อวิชาที่ชอบ ความสนใจ หรือความถนัด")
+
+    profile_vec = connector.embed(query_text)
+    scored = score_all_programs(db, profile_vec)
+
+    # ผสมความใกล้เคียงกับ "ชื่อหลักสูตร" เข้ากับความใกล้เคียงของเนื้อหา
+    #
+    # เนื้อหาอย่างเดียวแยกแยะได้ไม่ดีพอ เพราะเอกสาร มคอ.2 ทุกเล่มใช้ข้อความมาตรฐาน
+    # ร่วมกันมาก (ชื่อมหาวิทยาลัย ชื่อคณะ หัวข้อตามแบบฟอร์ม เกณฑ์มาตรฐานหลักสูตร)
+    # คะแนนของทุกหลักสูตรจึงกระจุกอยู่ในช่วงแคบราว 0.59-0.68 จนอันดับสลับกันได้ง่าย
+    # ด้วยส่วนต่างเพียง 0.005
+    #
+    # ชื่อหลักสูตรเป็นสัญญาณที่แยกแยะได้ดีที่สุดและสั้นจนไม่มีอะไรเจือปน นักเรียนที่
+    # ตอบว่าสนใจสิ่งแวดล้อมควรถูกจับคู่กับหลักสูตรที่ชื่อมีคำว่าสิ่งแวดล้อมตั้งแต่ต้น
+    for s in scored:
+        s["score"] = (1 - _TITLE_WEIGHT) * s["score"] + _TITLE_WEIGHT * _cosine(
+            profile_vec, _title_vectors(db, connector)[s["course_id"]]
+        )
+    scored.sort(key=lambda s: s["score"], reverse=True)
+
+    scored = _collapse_editions(scored)[:limit]
+
+    # ขอเหตุผลทั้งชุดในการเรียกโมเดลครั้งเดียว ไม่ใช่หลักสูตรละครั้ง เพราะการเรียกทีละ
+    # หลักสูตรทำให้ผู้ใช้รอเป็นจำนวนเท่าของหลักสูตรที่แนะนำ และเปลืองโควตาโดยไม่จำเป็น
+    evidence = [
+        {"title": s["title"], "excerpt": _fetch_evidence(db, s["chunk_ids"][:2])[:1500]}
+        for s in scored
+    ]
+    rationales = _generate_rationales(connector, profile_text, evidence)
+
+    return [
+        ProgramMatch(
+            course_id=s["course_id"],
+            title=s["title"],
+            score=round(s["score"], 4),
+            match_percent=_to_percent(s["score"]),
+            rationale=rationales.get(s["title"], ""),
+            evidence_chunk_ids=s["chunk_ids"][:CHUNKS_PER_COURSE],
+        )
+        for s in scored
+    ]
+
+
+def _generate_rationales(connector, profile_text: str, evidence: list[dict]) -> dict[str, str]:
+    """
+    ให้โมเดลเขียนเหตุผลของแต่ละหลักสูตร คืน dict ว่างถ้าล้ม
+
+    การจัดอันดับไม่ได้พึ่งขั้นตอนนี้เลย ถ้าโมเดลเรียกไม่ได้หรือตอบผิดรูปแบบ ผู้ใช้ยังได้
+    รายการที่เรียงถูกต้องพร้อมเปอร์เซ็นต์ครบ ขาดแค่คำอธิบาย ซึ่งดีกว่าไม่ได้ผลอะไรเลย
+    """
+    try:
+        raw = connector.chat(
+            [
+                LLMMessage(role="system", content=MATCH_RATIONALE_SYSTEM_PROMPT),
+                LLMMessage(role="user", content=build_match_rationale_prompt(profile_text, evidence)),
+            ],
+            temperature=0.2,
+            json_mode=True,
+        )
+        data = json.loads(raw)
+        return {str(k): str(v) for k, v in data.get("rationales", {}).items()}
+    except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError):
+        return {}
