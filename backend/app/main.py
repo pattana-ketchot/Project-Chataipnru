@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.routes import auth, chat, courses, match, recommend, search, users
+from app.api.routes import auth, chat, compare, courses, match, recommend, search, users
 from app.core.config import get_settings
 from app.db.session import engine
 
@@ -115,6 +115,7 @@ app.include_router(search.router)
 app.include_router(recommend.router)
 app.include_router(chat.router)
 app.include_router(match.router)
+app.include_router(compare.router)
 
 
 @app.get("/health")
