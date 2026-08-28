@@ -130,6 +130,63 @@ export default function MatchTestPage() {
     ["6. สภาพแวดล้อมการทำงาน", "work_environment", false],
   ];
 
+  // เมื่อมีผลลัพธ์แล้วให้แทนที่แบบสอบถามทั้งหน้า ไม่ใช่ต่อท้ายด้านล่าง
+  //
+  // เดิมแสดงผลต่อท้ายฟอร์มซึ่งยาวเจ็ดข้อ ผู้ใช้จึงไม่เห็นว่ามีอะไรเปลี่ยนเพราะผลอยู่นอกจอ
+  // และเข้าใจว่าระบบค้าง — แบบร่างของหน้าเว็บจริงก็แยกผลลัพธ์เป็นขั้นตอนต่างหากเช่นกัน
+  if (result) {
+    return (
+      <main className="mx-auto max-w-4xl px-5 py-10">
+        <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
+        <h1 className="mt-4 text-3xl font-black">สาขาที่แนะนำสำหรับคุณ</h1>
+
+        {result.confidence === "low" && (
+          <div className="mt-4 rounded-2xl bg-lime/40 p-4 text-sm">
+            <strong>ผลลัพธ์ใกล้เคียงกันมาก</strong> แนะนำให้ดูหลายสาขาประกอบกัน
+            ไม่ควรยึดอันดับ 1 อย่างเดียว
+          </div>
+        )}
+
+        <div className="mt-5 space-y-3">
+          {result.matches.map((m, i) => (
+            <article key={m.course_id} className="panel p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-black text-sage">อันดับ {i + 1}</p>
+                  <h3 className="mt-1 text-lg font-black">{shortTitle(m.title)}</h3>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-2xl font-black">{m.match_percent}%</div>
+                  <div className="text-xs text-ink/45">ดิบ {m.score.toFixed(3)}</div>
+                </div>
+              </div>
+              <div className="mt-3 h-2 w-full rounded-full bg-ink/10">
+                <div className="h-2 rounded-full bg-sage" style={{ width: `${m.match_percent}%` }} />
+              </div>
+              {m.rationale && <p className="mt-3 text-sm leading-6 text-ink/65">{m.rationale}</p>}
+            </article>
+          ))}
+        </div>
+
+        {/* เปิดให้เห็นว่าระบบเข้าใจคำตอบว่าอย่างไร ช่วยหาสาเหตุเวลาผลดูแปลก */}
+        <details className="panel mt-4 p-5 text-sm">
+          <summary className="cursor-pointer font-bold text-sage">ระบบเข้าใจคำตอบของคุณว่าอย่างไร</summary>
+          <p className="mt-3 text-ink/65">{result.profile_text}</p>
+          <p className="mt-2 text-xs text-ink/45">
+            ความมั่นใจ: {result.confidence} · โมเดล: {result.model_used}
+          </p>
+        </details>
+
+        <div className="mt-6 flex gap-3">
+          <button className="btn-secondary" onClick={() => setResult(null)}>ย้อนกลับไปแก้คำตอบ</button>
+          <button className="btn-primary" onClick={() => { setAnswers({}); setExtra(""); setResult(null); }}>
+            เริ่มทำใหม่
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-4xl px-5 py-10">
       <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
@@ -171,49 +228,6 @@ export default function MatchTestPage() {
         {error && <div role="alert" className="rounded-2xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
       </div>
 
-      {result && (
-        <section className="mt-8">
-          <h2 className="text-2xl font-black">ผลลัพธ์</h2>
-
-          {/* เตือนเมื่อผลเกาะกลุ่มกัน — เกณฑ์มาจากการวัดจริง ดู services/program_match.py */}
-          {result.confidence === "low" && (
-            <div className="mt-3 rounded-2xl bg-lime/40 p-4 text-sm">
-              <strong>ผลลัพธ์ใกล้เคียงกันมาก</strong> แนะนำให้ดูหลายสาขาประกอบกัน
-              ไม่ควรยึดอันดับ 1 อย่างเดียว
-            </div>
-          )}
-
-          <div className="mt-4 space-y-3">
-            {result.matches.map((m, i) => (
-              <article key={m.course_id} className="panel p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-black text-sage">อันดับ {i + 1}</p>
-                    <h3 className="mt-1 text-lg font-black">{shortTitle(m.title)}</h3>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-2xl font-black">{m.match_percent}%</div>
-                    <div className="text-xs text-ink/45">ดิบ {m.score.toFixed(3)}</div>
-                  </div>
-                </div>
-                <div className="mt-3 h-2 w-full rounded-full bg-ink/10">
-                  <div className="h-2 rounded-full bg-sage" style={{ width: `${m.match_percent}%` }} />
-                </div>
-                {m.rationale && <p className="mt-3 text-sm leading-6 text-ink/65">{m.rationale}</p>}
-              </article>
-            ))}
-          </div>
-
-          {/* เปิดให้เห็นว่าระบบเข้าใจคำตอบว่าอย่างไร เป็นข้อมูลที่ช่วยตอนหาสาเหตุเวลาผลดูแปลก */}
-          <details className="panel mt-4 p-5 text-sm">
-            <summary className="cursor-pointer font-bold text-sage">ระบบเข้าใจคำตอบของคุณว่าอย่างไร</summary>
-            <p className="mt-3 text-ink/65">{result.profile_text}</p>
-            <p className="mt-2 text-xs text-ink/45">
-              ความมั่นใจ: {result.confidence} · โมเดล: {result.model_used}
-            </p>
-          </details>
-        </section>
-      )}
     </main>
   );
 }
