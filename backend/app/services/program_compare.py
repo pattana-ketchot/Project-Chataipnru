@@ -38,7 +38,11 @@ from app.services.llm_client import get_llm_connector
 from app.services.vector_search import search_similar_chunks
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402
-from llm.prompts import COMPARE_SYSTEM_PROMPT, build_compare_prompt  # noqa: E402
+from llm.prompts import (  # noqa: E402
+    COMPARE_SUMMARY_SYSTEM_PROMPT,
+    COMPARE_SYSTEM_PROMPT,
+    build_compare_prompt,
+)
 
 # หัวข้อที่นำมาเทียบ พร้อมข้อความที่ใช้ค้นเนื้อหาของหัวข้อนั้นในแต่ละเล่ม
 #
@@ -114,45 +118,80 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
             ) or "(ไม่พบเนื้อหาที่เกี่ยวข้อง)"
         evidence.append({"title": course.title, "sections": per_dimension})
 
-    extracted = _extract(connector, evidence)
+    # สรุปทีละหลักสูตร ไม่ส่งทุกเล่มเข้าไปพร้อมกัน
+    #
+    # เดิมส่งเนื้อหาของทุกหลักสูตรไปในการเรียกครั้งเดียวเพื่อประหยัดเวลา แล้วเจอว่าโมเดล
+    # ลอกรายวิชาข้ามคอลัมน์ — ตรวจสอบแล้วพบว่าวิชา "ดิจิทัลแพลตฟอร์ม" ปรากฏในคอลัมน์
+    # คอมพิวเตอร์แอนิเมชัน ทั้งที่คำนี้มีอยู่เฉพาะในเอกสารเทคโนโลยีสารสนเทศเท่านั้น
+    #
+    # เป็นความผิดพลาดที่ร้ายแรงที่สุดของตารางเปรียบเทียบ เพราะผู้อ่านกำลังดูว่าสองสาขา
+    # "ต่างกันตรงไหน" ข้อมูลที่ไหลข้ามช่องจึงทำลายสิ่งเดียวที่ตารางนี้มีไว้เพื่อบอก
+    #
+    # การแยกเรียกทีละเล่มทำให้เกิดไม่ได้เชิงโครงสร้าง เพราะโมเดลไม่เคยเห็นเนื้อหาของ
+    # เล่มอื่นเลย ดีกว่าการเขียนกฎห้ามในพรอมต์ซึ่งเป็นการขอความร่วมมือเท่านั้น
+    # แลกด้วยเวลาที่เพิ่มขึ้นตามจำนวนหลักสูตร ซึ่งมากสุดสี่เล่มจึงยังรับได้
+    table = {item["title"]: _extract_one(connector, item) for item in evidence}
+
+    rows = [
+        {
+            "dimension": label,
+            "values": [table.get(c.title, {}).get(label, "ไม่พบข้อมูลในเอกสาร") for c in ordered],
+        }
+        for label, _ in DIMENSIONS
+    ]
 
     return {
         "programs": [{"course_id": c.id, "title": c.title} for c in ordered],
-        "rows": [
-            {
-                "dimension": label,
-                "values": [
-                    extracted.get(c.title, {}).get(label, "ไม่พบข้อมูลในเอกสาร")
-                    for c in ordered
-                ],
-            }
-            for label, _ in DIMENSIONS
-        ],
-        "summary": extracted.get("__summary__", ""),
+        "rows": rows,
+        # สรุปความต่างจาก "ตารางที่สรุปเสร็จแล้ว" ไม่ใช่จากเนื้อหาดิบ พรอมต์จึงสั้นมาก
+        # และโมเดลพูดถึงได้เฉพาะสิ่งที่ปรากฏในตารางซึ่งผู้ใช้เห็นอยู่ตรงหน้าเท่านั้น
+        "summary": _summarise(connector, [c.title for c in ordered], rows),
     }
 
 
-def _extract(connector, evidence: list[dict]) -> dict:
+def _extract_one(connector, item: dict) -> dict:
     """
-    ให้โมเดลสรุปเนื้อหาที่ค้นมาลงในแต่ละช่องของตาราง คืน dict ว่างถ้าล้ม
+    สรุปเนื้อหาของหลักสูตรเดียวลงในทุกหัวข้อ คืน dict ว่างถ้าล้ม
 
-    ถ้าขั้นนี้ล้ม ผู้ใช้จะยังได้ตารางที่มีชื่อหลักสูตรและหัวข้อครบ เพียงแต่ทุกช่องขึ้นว่า
-    ไม่พบข้อมูล ซึ่งอ่านแล้วรู้ว่าระบบมีปัญหา ดีกว่าหน้าจอว่างเปล่าที่ไม่บอกอะไรเลย
+    ถ้าล้ม คอลัมน์ของหลักสูตรนั้นจะขึ้นว่าไม่พบข้อมูลทุกช่อง ส่วนคอลัมน์อื่นยังใช้ได้
+    ผู้ใช้จึงเห็นว่าเกิดปัญหาเฉพาะเล่มไหน แทนที่จะเสียทั้งตาราง
     """
     try:
         raw = connector.chat(
             [
                 LLMMessage(role="system", content=COMPARE_SYSTEM_PROMPT),
-                LLMMessage(role="user", content=build_compare_prompt(evidence)),
+                LLMMessage(role="user", content=build_compare_prompt([item])),
             ],
             temperature=0.1,
             json_mode=True,
             num_predict=connector.answer_token_cap,
         )
-        data = json.loads(raw)
+        data = json.loads(raw).get("programs") or {}
     except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError):
         return {}
 
-    out: dict = {str(k): v for k, v in (data.get("programs") or {}).items() if isinstance(v, dict)}
-    out["__summary__"] = str(data.get("summary") or "")
-    return out
+    # โมเดลอาจคืนคีย์เป็นชื่อหลักสูตรที่ตัดทอนหรือเว้นวรรคต่างจากที่ส่งไป จึงไม่จับคู่
+    # ด้วยชื่อ แต่หยิบก้อนแรกที่เป็น dict มาใช้ เพราะส่งไปเล่มเดียวย่อมมีคำตอบเดียว
+    for value in data.values():
+        if isinstance(value, dict):
+            return {str(k): str(v) for k, v in value.items()}
+    return {}
+
+
+def _summarise(connector, titles: list[str], rows: list[dict]) -> str:
+    """เขียนสรุปความต่างจากตารางที่สรุปเสร็จแล้ว คืนสตริงว่างถ้าล้ม"""
+    lines = []
+    for row in rows:
+        for title, value in zip(titles, row["values"]):
+            lines.append(f"{title} | {row['dimension']}: {value}")
+    try:
+        return connector.chat(
+            [
+                LLMMessage(role="system", content=COMPARE_SUMMARY_SYSTEM_PROMPT),
+                LLMMessage(role="user", content="ตารางเปรียบเทียบ:\n" + "\n".join(lines)),
+            ],
+            temperature=0.2,
+            num_predict=connector.answer_token_cap,
+        ).strip()
+    except LLMConnectionError:
+        return ""
