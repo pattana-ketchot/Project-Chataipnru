@@ -36,4 +36,8 @@ class ProgramMatchOut(BaseModel):
 class MatchResponse(BaseModel):
     profile_text: str          # ข้อความที่ใช้แปลงเป็นเวกเตอร์จริง — เปิดให้ตรวจสอบได้ว่าระบบเข้าใจว่าอย่างไร
     model_used: str
+    # "high"  = อันดับ 1 ทิ้งห่างชัดเจน แสดงเป็นคำตอบหลักได้
+    # "low"   = ผลลัพธ์เกาะกลุ่มกัน ควรชวนผู้ใช้ดูหลายตัวเลือกแทนการชูอันดับ 1
+    #           (ดูที่มาของเกณฑ์ใน services/program_match.py -> confidence_of)
+    confidence: str
     matches: list[ProgramMatchOut]

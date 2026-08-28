@@ -20,7 +20,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.match import MatchRequest, MatchResponse, ProgramMatchOut
 from app.services.llm_client import get_llm_connector
-from app.services.program_match import build_profile_text, match_programs
+from app.services.program_match import build_profile_text, confidence_of, match_programs
 
 from llm.connector import LLMConnectionError  # noqa: E402
 
@@ -49,5 +49,6 @@ def match(
     return MatchResponse(
         profile_text=build_profile_text(answers),
         model_used=get_llm_connector().chat_model,
+        confidence=confidence_of(matches),
         matches=[ProgramMatchOut(**m.__dict__) for m in matches],
     )
