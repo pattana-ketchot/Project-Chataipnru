@@ -48,7 +48,7 @@ def main() -> None:
         token = c.post("/auth/login", json={"email": email, "password": "password123"}).json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        top1 = top3 = 0
+        top1 = top3 = skipped = 0
         records = []
         for case in cases:
             t0 = time.time()
@@ -60,6 +60,20 @@ def main() -> None:
             ranked = [_short(m["title"]) for m in data["matches"]]
 
             want = case["expect_top"]
+            if not want:
+                # โปรไฟล์ที่จงใจไม่ชี้ไปทางไหน ไม่มีคำตอบถูก จึงไม่นับรวมคะแนน
+                # แต่รายงานเปอร์เซ็นต์อันดับ 1 ไว้ดู ถ้ายังสูงเท่าโปรไฟล์ที่ชัดเจน
+                # แปลว่าตัวเลขไม่ได้สะท้อนความมั่นใจจริง ซึ่งเป็นข้อมูลสำคัญกว่าผ่าน/ไม่ผ่าน
+                top = data["matches"][0] if data["matches"] else None
+                print(f'ข้าม  {time.time()-t0:4.1f}s  {case["name"]}')
+                if top:
+                    print(f'   อันดับ 1 ได้ {top["match_percent"]}%  {_short(top["title"])}'
+                          f'   <- ควรต่ำกว่าโปรไฟล์ที่ชัดเจน')
+                skipped += 1
+                records.append({"case": case["name"], "expect": None, "ranked": ranked,
+                                "percents": [m["match_percent"] for m in data["matches"]]})
+                continue
+
             hit1 = bool(ranked) and want in ranked[0]
             top1 += hit1
             # ต้องอยู่ใน 3 อันดับแรกด้วย ซึ่งเป็นเกณฑ์ที่ผ่อนกว่าและสะท้อนหน้าเว็บจริง
@@ -80,10 +94,12 @@ def main() -> None:
                             "percents": [m["match_percent"] for m in data["matches"]],
                             "profile_text": data["profile_text"]})
 
-        n = len(cases)
+        n = len(cases) - skipped
         print("\n" + "=" * 60)
         print(f"  อันดับ 1 ถูกต้อง : {top1}/{n}")
         print(f"  ติด 3 อันดับแรก  : {top3}/{n}")
+        if skipped:
+            print(f"  (ไม่นับ {skipped} โปรไฟล์ที่จงใจไม่มีคำตอบถูก)")
 
     if args.out:
         Path(args.out).write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
