@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 
 from app.models.course import Course
 from app.services.llm_client import get_llm_connector
+from app.services.tuition import describe as describe_fee, fee_for
 from app.services.vector_search import search_similar_chunks
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402
@@ -139,6 +140,17 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
         }
         for label, _ in DIMENSIONS
     ]
+
+    # แถวค่าเทอมมาจากประกาศของคณะ ไม่ได้ผ่านการค้นเอกสารและไม่ได้ผ่านโมเดลเลย
+    # จึงต่อท้ายตรงนี้แทนที่จะรวมอยู่ใน DIMENSIONS ซึ่งเป็นหัวข้อที่ดึงจาก มคอ.2
+    # วางไว้บนสุดเพราะเป็นข้อมูลที่นักเรียนดูก่อนเป็นอันดับแรกเวลาเทียบที่เรียน
+    rows.insert(0, {
+        "dimension": "ค่าเทอม",
+        "values": [
+            describe_fee(fee) if (fee := fee_for(c.title)) else "ไม่มีในประกาศค่าเทอมของคณะ"
+            for c in ordered
+        ],
+    })
 
     return {
         "programs": [{"course_id": c.id, "title": c.title} for c in ordered],
