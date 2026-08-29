@@ -97,7 +97,7 @@ bash scripts/backup_db.sh
 **ส่งไฟล์ขึ้นเซิร์ฟเวอร์** (แทน `<ไฟล์>` และ `<IP>` ด้วยของจริง)
 
 ```bash
-scp -i <ไฟล์กุญแจ> backups/<ไฟล์>.sql.gz ubuntu@<IP>:~/Project-Chataipnru/backups/
+scp -i <ไฟล์กุญแจ> backups/<ไฟล์>.sql.gz ubuntu@<IP>:~/course-advisor-system/backups/
 ```
 
 **บนเซิร์ฟเวอร์** กู้ข้อมูล
