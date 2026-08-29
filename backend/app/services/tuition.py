@@ -56,19 +56,26 @@ def _normalise(name: str) -> str:
     return name.replace(" ", "").strip()
 
 
-def _variants(name: str) -> list[str]:
+def _variants(name: str, aliases: list[str] | None = None) -> list[str]:
     """
     รูปแบบของชื่อสาขาที่ผู้ใช้อาจพิมพ์จริง
 
     คนไม่พิมพ์คำนำหน้าอย่าง "การ" ที่อยู่ในชื่อทางการ เช่น ตารางเขียนว่า
     "การแพทย์แผนไทยประยุกต์" แต่ผู้ใช้พิมพ์ "แพทย์แผนไทยประยุกต์" ซึ่งไม่ใช่
     สตริงย่อยของกันและกัน จึงต้องเทียบทั้งสองแบบ
+
+    aliases คือชื่อใหม่ของสาขาที่คณะปรับปรุงหลักสูตรแล้วเปลี่ยนชื่อ ตารางค่าเทอมยัง
+    ใช้ชื่อเดิมอยู่ ขณะที่คลังเอกสารใช้ชื่อใหม่ ถ้าไม่ผูกไว้จะกลายเป็นคนละสาขากัน
+    ทั้งที่เป็นหลักสูตรเดียวกันที่ปรับปรุงมา
     """
-    base = _normalise(name)
-    out = [base]
-    for prefix in ("การ", "วิทยาการ", "เทคโนโลยี", "วิทยาศาสตร์"):
-        if base.startswith(prefix) and len(base) > len(prefix) + 3:
-            out.append(base[len(prefix):])
+    aliases = aliases or []
+    out: list[str] = []
+    for raw in [name, *aliases]:
+        base = _normalise(raw)
+        out.append(base)
+        for prefix in ("การ", "วิทยาการ", "เทคโนโลยี", "วิทยาศาสตร์"):
+            if base.startswith(prefix) and len(base) > len(prefix) + 3:
+                out.append(base[len(prefix):])
     return out
 
 
@@ -84,7 +91,7 @@ def find_program(text: str, expand: bool = True) -> dict | None:
     """
     target = _normalise(expand_query(text) if expand else text)
     for item in sorted(_data()["programs"], key=lambda p: len(p["name"]), reverse=True):
-        if any(v in target for v in _variants(item["name"])):
+        if any(v in target for v in _variants(item["name"], item.get("aliases"))):
             return item
     return None
 
@@ -126,7 +133,16 @@ def answer(question: str) -> str:
             f"ลองระบุชื่อสาขาที่สนใจมาด้วย เช่น {names} หรือสาขาอื่นในคณะ" + tail
         )
 
-    lines = [f"สาขา{item['name']} ({item['degree']}) ค่าเทอม{describe(item)}"]
+    # ถ้าผู้ใช้ถามด้วยชื่อใหม่ ให้ตอบด้วยชื่อใหม่ แล้วบอกว่าประกาศยังใช้ชื่อเดิม
+    # ไม่งั้นผู้ใช้ที่พิมพ์ "เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่" จะได้คำตอบ
+    # ขึ้นต้นว่า "สาขาวิทยาศาสตร์และเทคโนโลยีการอาหาร" ซึ่งอ่านแล้วเหมือนตอบผิดสาขา
+    asked = _normalise(expand_query(question))
+    current = next((a for a in item.get("aliases", []) if _normalise(a) in asked), None)
+    shown = current or item["name"]
+
+    lines = [f"สาขา{shown} ({item['degree']}) ค่าเทอม{describe(item)}"]
+    if current:
+        lines.append(f"(ประกาศค่าเทอมยังใช้ชื่อเดิมว่า \"{item['name']}\" ซึ่งเป็นหลักสูตรเดียวกันที่ปรับปรุงมา)")
     if item["regular"] >= 20000:
         # ค่าเทอมที่สูงกว่าสาขาอื่นเท่าตัวควรบอกให้ชัด ไม่ให้ผู้ใช้เข้าใจว่าพิมพ์ผิด
         lines.append("สาขานี้มีค่าเทอมสูงกว่าสาขาอื่นในคณะซึ่งส่วนใหญ่อยู่ที่ 12,000 บาท")
