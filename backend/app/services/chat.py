@@ -28,6 +28,7 @@ from app.services.course_scope import resolve_scope
 from app.services.llm_client import get_llm_connector
 from app.services.query_expansion import expand_query
 from app.services.small_talk import match_small_talk
+from app.services.tuition import answer as tuition_answer, is_tuition_question
 from app.services.vector_search import search_similar_chunks
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
@@ -284,6 +285,23 @@ def prepare_answer(
             best_score=0.0,
             citations=[],
             canned=canned,
+            messages=[],
+        )
+
+    # --- 0.5 คำถามค่าเทอม -> ตอบจากตารางประกาศของคณะ ไม่ค้นเอกสาร มคอ.2 ---
+    #
+    # เอกสาร มคอ.2 ไม่มีค่าเทอม มีแต่งบประมาณที่มหาวิทยาลัยใช้ต่อนักศึกษาหนึ่งคน
+    # (ราว 22,000 บาท) ซึ่งเคยถูกหยิบมาตอบแทนค่าเทอมจริง (12,000 บาท) มาแล้ว
+    # การลัดมาตอบจากตารางจึงกันความเข้าใจผิดนั้นตั้งแต่ต้นทาง ดูเหตุผลเต็มใน
+    # services/tuition.py
+    if is_tuition_question(message):
+        return Prepared(
+            session_id=session.id,
+            status="answered",
+            search_query=message,
+            best_score=0.0,
+            citations=[],
+            canned=tuition_answer(message),
             messages=[],
         )
 
