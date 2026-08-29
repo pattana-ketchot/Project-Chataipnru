@@ -26,7 +26,7 @@ from __future__ import annotations
 import re
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.chat import ChatMessage, ChatSession
@@ -54,6 +54,21 @@ def _title(first_question: str | None) -> str:
     return text if len(text) <= TITLE_MAX_CHARS else text[: TITLE_MAX_CHARS - 1].rstrip() + "…"
 
 
+def user_first():
+    """
+    ตัวช่วยเรียงลำดับ ให้คำถามมาก่อนคำตอบเมื่อเวลาเท่ากันเป๊ะ
+
+    คำถามกับคำตอบถูกบันทึกใน transaction เดียวกัน และ now() ของ PostgreSQL คืนค่า
+    เวลาที่ transaction เริ่ม ไม่ใช่เวลาที่รันคำสั่ง ทั้งสองแถวจึงได้ created_at
+    เท่ากันทุกหลักทศนิยม การเรียงตามเวลาอย่างเดียวจึงไม่แน่นอน — ฐานข้อมูลคืนแถวไหน
+    ก่อนก็ได้ และเคยเห็นคำตอบขึ้นก่อนคำถามในผลทดสอบ
+
+    ใช้ร่วมกับ created_at เสมอ ไม่ใช้เดี่ยวๆ: มันแยกลำดับได้เฉพาะภายในคู่ถาม-ตอบ
+    ที่เกิดพร้อมกันเท่านั้น
+    """
+    return case((ChatMessage.role == "user", 0), else_=1)
+
+
 def _first_question_subquery():
     """
     คำถามแรกของแต่ละบทสนทนา ในรูปแบบที่ใช้ร่วมกับ GROUP BY ได้
@@ -64,7 +79,7 @@ def _first_question_subquery():
     return (
         select(ChatMessage.content)
         .where(ChatMessage.session_id == ChatSession.id, ChatMessage.role == "user")
-        .order_by(ChatMessage.created_at)
+        .order_by(ChatMessage.created_at, user_first())
         .limit(1)
         .correlate(ChatSession)
         .scalar_subquery()
@@ -142,7 +157,7 @@ def get_session(db: Session, user_id: uuid.UUID, session_id: uuid.UUID) -> ChatS
     rows = db.scalars(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at)
+        .order_by(ChatMessage.created_at, user_first())
     ).all()
 
     first_question = next((m.content for m in rows if m.role == "user"), None)
