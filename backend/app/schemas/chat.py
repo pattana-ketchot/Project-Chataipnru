@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -31,3 +32,36 @@ class ChatReply(BaseModel):
     status: Literal["answered", "not_found", "out_of_scope", "small_talk"]
     in_scope: bool  # ผ่านเกณฑ์ความใกล้เคียงหรือไม่ (not_found ก็ถือว่าผ่าน)
     citations: list[ChatCitation]
+
+
+# --- ประวัติการสนทนา (แถบข้างในหน้าแชท) ---
+
+
+class ChatSessionSummary(BaseModel):
+    session_id: uuid.UUID
+    # ย่อจากคำถามแรกของผู้ใช้ ไม่ได้เก็บในฐานข้อมูล — เหตุผลอยู่ใน services/chat_history.py
+    title: str
+    started_at: datetime
+    # เวลาข้อความล่าสุด ใช้จัดกลุ่ม "วันนี้ / เมื่อวาน / ก่อนหน้านี้" ในแถบข้าง
+    last_message_at: datetime
+    message_count: int
+
+
+class ChatSessionList(BaseModel):
+    sessions: list[ChatSessionSummary]
+    total: int
+    # บอกตรงๆ ว่ายังมีของเหลือไหม หน้าเว็บจะได้ไม่ต้องคำนวณจาก total/limit/offset เอง
+    has_more: bool
+
+
+class ChatMessageOut(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+    created_at: datetime
+
+
+class ChatSessionDetail(BaseModel):
+    session_id: uuid.UUID
+    title: str
+    started_at: datetime
+    messages: list[ChatMessageOut]

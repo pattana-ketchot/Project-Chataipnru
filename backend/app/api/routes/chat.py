@@ -9,16 +9,18 @@ endpoint นี้จำบทสนทนาได้และตอบเป�
 """
 import json
 import logging
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, rate_limiter
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.chat import ChatReply, ChatRequest
+from app.schemas.chat import ChatReply, ChatRequest, ChatSessionDetail, ChatSessionList
 from app.services.chat import answer_question, stream_answer
+from app.services.chat_history import DEFAULT_LIMIT, MAX_LIMIT, get_session, list_sessions
 
 from llm.connector import LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
 
@@ -98,3 +100,33 @@ def chat_stream(
         # การทยอยส่งไม่มีผลอะไรเลย ผู้ใช้ยังคงเห็นหน้าจอว่างจนกว่าจะเขียนเสร็จ
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/sessions", response_model=ChatSessionList)
+def list_chat_sessions(
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChatSessionList:
+    """
+    รายการบทสนทนาเก่าของผู้ใช้ สำหรับแถบข้างในหน้าแชท
+
+    ไม่ผ่าน rate_limiter เพราะไม่ได้เรียก LLM — เป็นการอ่านฐานข้อมูลล้วนๆ
+    ซึ่งหน้าเว็บต้องยิงทุกครั้งที่เปิดหน้า การไปกินโควตาเดียวกับการถามคำถามจะทำให้
+    ผู้ใช้ถูกกันไม่ให้ถามทั้งที่ยังไม่ได้ถามอะไรเลย
+    """
+    return list_sessions(db, user_id=user.id, limit=limit, offset=offset)
+
+
+@router.get("/sessions/{session_id}", response_model=ChatSessionDetail)
+def get_chat_session(
+    session_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChatSessionDetail:
+    """ข้อความทั้งหมดในบทสนทนาหนึ่ง เรียงจากเก่าไปใหม่"""
+    try:
+        return get_session(db, user_id=user.id, session_id=session_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
