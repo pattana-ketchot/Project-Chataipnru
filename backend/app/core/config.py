@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # --- Local LLM (Ollama) ---
     ollama_base_url: str = Field("http://127.0.0.1:11434", alias="OLLAMA_BASE_URL")
-    llm_model: str = Field("qwen2.5:7b", alias="LLM_MODEL")
+    llm_model: str = Field("qwen2.5:3b", alias="LLM_MODEL")
     embed_model: str = Field("nomic-embed-text", alias="EMBED_MODEL")
     embed_dim: int = Field(768, alias="EMBED_DIM")
     llm_request_timeout_s: int = 120
