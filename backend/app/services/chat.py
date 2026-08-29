@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
+from app.services.chat_history import user_first
 from app.services.course_scope import resolve_scope
 from app.services.llm_client import get_llm_connector
 from app.services.query_expansion import expand_query
@@ -128,10 +129,18 @@ def _load_session(db: Session, user_id: uuid.UUID, session_id: uuid.UUID | None)
 
 
 def _load_history(db: Session, session_id: uuid.UUID) -> list[ChatMessage]:
+    """
+    ดึงข้อความล่าสุดมาใส่ prompt
+
+    เรียงย้อนหลังก่อนแล้วค่อยกลับด้าน เพราะต้องการ "ล่าสุด HISTORY_LIMIT ข้อความ"
+    ไม่ใช่ข้อความแรกๆ ตัวช่วย user_first() จึงต้องกลับด้านตามไปด้วย เพื่อให้ผลที่
+    กลับด้านแล้วได้คำถามมาก่อนคำตอบในคู่ที่บันทึกเวลาเดียวกัน (ดูเหตุผลใน
+    chat_history.user_first)
+    """
     rows = db.scalars(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.desc())
+        .order_by(ChatMessage.created_at.desc(), user_first().desc())
         .limit(HISTORY_LIMIT)
     ).all()
     return list(reversed(rows))  # เรียงเก่า -> ใหม่ ก่อนส่งเข้า prompt
