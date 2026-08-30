@@ -55,6 +55,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -314,7 +315,7 @@ def match_programs(db: Session, answers: dict, limit: int = MAX_RESULTS) -> list
             title=s["title"],
             score=round(s["score"], 4),
             match_percent=_to_percent(s["score"]),
-            rationale=rationales.get(s["title"], ""),
+            rationale=_rationale_for(rationales, s["title"]),
             evidence_chunk_ids=s["chunk_ids"][:CHUNKS_PER_COURSE],
         )
         for s in scored
@@ -341,3 +342,38 @@ def _generate_rationales(connector, profile_text: str, evidence: list[dict]) -> 
         return {str(k): str(v) for k, v in data.get("rationales", {}).items()}
     except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError):
         return {}
+
+
+def _rationale_key(title: str) -> str:
+    """
+    ชื่อหลักสูตรในรูปที่ใช้จับคู่คำตอบของโมเดลกับรายการจริง
+
+    ระบุชื่อปริญญาเป็นคำเต็มทีละคำ ไม่ใช้รูปแบบทั่วไปอย่าง [ก-๙]*บัณฑิต เพราะมันจับ
+    แบบตะกละจนกลืนชื่อสาขาไปด้วย (เหตุผลเดียวกับใน services/tuition.py)
+    """
+    text = re.sub(r"\s*\(.*?\)\s*", "", title)
+    text = re.sub(r"(หลักสูตร|สาขาวิชา|สาขา|วิทยาศาสตรบัณฑิต|ศิลปศาสตรบัณฑิต|บัณฑิต)", "", text)
+    return text.replace(" ", "").strip()
+
+
+def _rationale_for(rationales: dict[str, str], title: str) -> str:
+    """
+    หาเหตุผลของหลักสูตรหนึ่งจากที่โมเดลเขียนมา
+
+    พรอมต์สั่งให้ใช้ชื่อหลักสูตรเป็นคีย์แบบตรงตัวอักษร แต่โมเดลไม่ได้ทำตามเสมอ —
+    บางครั้งตัดคำว่า "หลักสูตร" หรือปีในวงเล็บออก การเทียบชื่อแบบตรงตัวอย่างเดียวจึง
+    พลาดทั้งชุดในคราวเดียว ผลคือทุกหลักสูตรได้เหตุผลเป็นข้อความว่าง
+
+    วัดจากการเรียกจริงสามรอบด้วยคำถามเดียวกัน หนึ่งรอบคืนคีย์คนละรูปแบบจนว่างทั้ง 6
+    รายการ ทั้งที่การจัดอันดับและคะแนนถูกต้องครบ
+
+    เทียบแบบตรงตัวก่อนเสมอ เพราะเมื่อสาขาหนึ่งมีเอกสารสองฉบับ ชื่อที่ตัดปีออกแล้วจะ
+    ซ้ำกัน การเทียบแบบหลวมอย่างเดียวจะทำให้ทั้งสองฉบับได้เหตุผลอันเดียวกัน
+    """
+    if (exact := rationales.get(title)) is not None:
+        return exact
+    wanted = _rationale_key(title)
+    for key, text in rationales.items():
+        if _rationale_key(key) == wanted:
+            return text
+    return ""
