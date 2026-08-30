@@ -55,6 +55,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from dataclasses import dataclass
@@ -66,7 +67,10 @@ from app.services.course_scope import _distinctive_name
 from app.services.llm_client import get_llm_connector
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402
+
 from llm.prompts import MATCH_RATIONALE_SYSTEM_PROMPT, build_match_rationale_prompt  # noqa: E402
+
+logger = logging.getLogger("course_advisor")
 
 # จำนวนเนื้อหาต่อหลักสูตรที่นำมาเฉลี่ยเป็นคะแนน
 CHUNKS_PER_COURSE = 5
@@ -329,6 +333,7 @@ def _generate_rationales(connector, profile_text: str, evidence: list[dict]) -> 
     การจัดอันดับไม่ได้พึ่งขั้นตอนนี้เลย ถ้าโมเดลเรียกไม่ได้หรือตอบผิดรูปแบบ ผู้ใช้ยังได้
     รายการที่เรียงถูกต้องพร้อมเปอร์เซ็นต์ครบ ขาดแค่คำอธิบาย ซึ่งดีกว่าไม่ได้ผลอะไรเลย
     """
+    raw = ""
     try:
         raw = connector.chat(
             [
@@ -339,8 +344,15 @@ def _generate_rationales(connector, profile_text: str, evidence: list[dict]) -> 
             json_mode=True,
         )
         data = json.loads(raw)
-        return {str(k): str(v) for k, v in data.get("rationales", {}).items()}
-    except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError):
+        out = {str(k): str(v) for k, v in data.get("rationales", {}).items()}
+        if not out:
+            # JSON ถูกต้องแต่ไม่มีเนื้อหา — คนละอาการกับเรียกโมเดลไม่ได้ และเป็นอาการ
+            # ที่เคยเกิดจริงประมาณหนึ่งในสี่ของการเรียก โดยไม่มีร่องรอยอะไรทิ้งไว้เลย
+            logger.warning("เขียนเหตุผลไม่สำเร็จ: คำตอบไม่มีคีย์ rationales — %r", raw[:200])
+        return out
+    except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError) as e:
+        # เดิมกลืนข้อยกเว้นเงียบๆ ทำให้เวลาเหตุผลหายไปทั้งชุดไล่หาสาเหตุไม่ได้เลย
+        logger.warning("เขียนเหตุผลไม่สำเร็จ (%s) — %r", type(e).__name__, raw[:200])
         return {}
 
 
