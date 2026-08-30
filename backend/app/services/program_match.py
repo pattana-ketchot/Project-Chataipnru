@@ -342,6 +342,12 @@ def _generate_rationales(connector, profile_text: str, evidence: list[dict]) -> 
             ],
             temperature=0.2,
             json_mode=True,
+            # ต้องกำหนดเพดานเอง ไม่ปล่อยให้ใช้ค่าตั้งต้นของผู้ให้บริการ
+            #
+            # วัดจาก Gemini โดยตรง: ไม่ส่ง maxOutputTokens ไป ได้คำตอบยาวสุด 512 โทเคน
+            # ซึ่งไม่พอสำหรับเหตุผลภาษาไทยหกหลักสูตร JSON จึงถูกตัดกลางประโยคแล้วอ่าน
+            # ไม่ออก ทำให้เหตุผลหายไปทั้งชุดประมาณครึ่งหนึ่งของการเรียก
+            num_predict=connector.answer_token_cap,
         )
         data = json.loads(raw)
         out = {str(k): str(v) for k, v in data.get("rationales", {}).items()}
