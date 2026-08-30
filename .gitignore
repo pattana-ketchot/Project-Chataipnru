@@ -31,3 +31,7 @@ Thumbs.db
 .vscode/
 .idea/
 backups/
+
+# Build/test caches — เกิดใหม่ทุกครั้งที่ build ไม่ควรอยู่ใน git
+frontend/tsconfig.tsbuildinfo
+frontend/.vitest-cache/
