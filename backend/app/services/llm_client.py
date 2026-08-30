@@ -33,6 +33,26 @@ logger = logging.getLogger("course_advisor")
 
 _connector = None
 
+# ข้อความเมื่อไม่ยอมใช้ตัวสำรอง — ผู้ใช้ต้องเข้าใจว่าให้รอแล้วถามใหม่ ไม่ใช่ระบบพัง
+FALLBACK_DECLINED = (
+    "ตอนนี้ระบบหลักตอบไม่ได้ชั่วคราว และคำถามนี้ต้องการตัวเลขที่ถูกต้องแม่นยำ "
+    "ระบบจึงขอไม่ตอบด้วยโมเดลสำรอง เพราะตัวเลขที่ผิดเสียหายกว่าการไม่ตอบ "
+    "รบกวนลองถามใหม่อีกครั้งในอีกสักครู่ครับ"
+)
+
+
+def no_fallback_kwargs(connector, allow: bool) -> dict:
+    """
+    kwargs สำหรับสั่งห้ามใช้ตัวสำรอง คืน dict ว่างเมื่อสั่งไม่ได้หรือไม่ต้องสั่ง
+
+    มีไว้ให้ services/chat.py ไม่ต้องรู้ว่า connector ตัวไหนมีตัวสำรองบ้าง —
+    เมื่อตั้งค่าให้ใช้โมเดลในเครื่องล้วน ตัวที่ตอบก็เป็นตัวหลักอยู่แล้ว ไม่มีตัวสำรอง
+    ให้ห้าม และ OllamaConnector ก็ไม่รู้จักพารามิเตอร์นี้
+    """
+    if allow or not isinstance(connector, _SplitConnector):
+        return {}
+    return {"allow_fallback": False}
+
 
 class _SplitConnector:
     """
@@ -75,14 +95,16 @@ class _SplitConnector:
             out["num_predict"] = min(out["num_predict"], self._fallback.answer_token_cap)
         return out
 
-    def chat(self, *args, **kwargs):
+    def chat(self, *args, allow_fallback: bool = True, **kwargs):
         try:
             return self._chatter.chat(*args, **kwargs)
         except LLMConnectionError as e:
+            if not allow_fallback:
+                raise LLMConnectionError(FALLBACK_DECLINED) from e
             logger.warning("เจ้าหลักตอบไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
             return self._fallback.chat(*args, **self._fallback_kwargs(kwargs))
 
-    def chat_stream(self, *args, **kwargs):
+    def chat_stream(self, *args, allow_fallback: bool = True, **kwargs):
         """
         สตรีมจากเจ้าหลัก ถ้าล้ม "ก่อน" ตัวอักษรแรกออกไปค่อยเปลี่ยนไปใช้ตัวสำรอง
 
@@ -98,6 +120,8 @@ class _SplitConnector:
         except LLMConnectionError as e:
             if started:
                 raise
+            if not allow_fallback:
+                raise LLMConnectionError(FALLBACK_DECLINED) from e
             logger.warning("เจ้าหลักสตรีมไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
         yield from self._fallback.chat_stream(*args, **self._fallback_kwargs(kwargs))
 

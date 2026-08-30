@@ -26,7 +26,7 @@ from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.chat_history import user_first
 from app.services.course_scope import resolve_scope
-from app.services.llm_client import get_llm_connector
+from app.services.llm_client import get_llm_connector, no_fallback_kwargs
 from app.services.query_expansion import expand_query
 from app.services.small_talk import match_small_talk
 from app.services.tuition import answer as tuition_answer, is_tuition_question
@@ -267,6 +267,38 @@ class Prepared:
     canned: str | None
     # ข้อความที่จะส่งให้โมเดลเขียนคำตอบ — ว่างเมื่อ canned ไม่ใช่ None
     messages: list[LLMMessage]
+    # False = ห้ามตกไปใช้โมเดลสำรอง ดูเหตุผลใน _asks_for_a_number()
+    allow_fallback: bool = True
+
+
+# คำที่บ่งชี้ว่าผู้ใช้ถามหาตัวเลขเจาะจง ไม่ใช่คำอธิบายกว้างๆ
+_NUMERIC_WORDS = (
+    "กี่หน่วยกิต", "จำนวนหน่วยกิต", "กี่ปี", "กี่เทอม", "กี่ภาคการศึกษา",
+    "กี่วิชา", "กี่รายวิชา", "กี่ชั่วโมง", "กี่คน", "เท่าไหร่", "เท่าไร",
+)
+
+
+def _asks_for_a_number(text: str) -> bool:
+    """
+    คำถามนี้ต้องการตัวเลขที่ผิดไม่ได้หรือไม่
+
+    ใช้ตัดสินว่าจะยอมให้ตกไปใช้โมเดลสำรองไหม เมื่อเจ้าหลักตอบไม่ได้
+
+    ที่มา: ตอนรันชุดประเมิน 113 ข้อ คำถาม "หลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2565
+    ต้องเรียนทั้งหมดกี่หน่วยกิต" ตกไปที่โมเดลสำรองแล้วตอบว่า 180 หน่วยกิต ทั้งที่
+    เอกสารเขียนไว้ 147 — เลข 180 ในเอกสารนั้นเป็นเลขหน้า เป็นยอดเงินค่าลงทะเบียน
+    และเป็นชั่วโมงฝึกปฏิบัติ ไม่มีที่ไหนเป็นหน่วยกิตเลย
+
+    ชุดประเมินนับข้อนั้นว่า "ผ่าน" เพราะมันวัดแค่ว่ายอมตอบหรือปฏิเสธ ไม่ได้ตรวจว่า
+    ตัวเลขถูกไหม ความผิดพลาดแบบนี้จึงมองไม่เห็นจากคะแนนรวม
+
+    เหตุผลที่ยอมไม่ตอบดีกว่า: คนที่ได้ตัวเลขผิดไปวางแผนเรียนต่อไม่มีทางรู้ว่าผิด
+    ส่วนคนที่ได้ข้อความว่ายังตอบไม่ได้ตอนนี้ รู้ทันทีว่าต้องถามใหม่หรือไปหาจากที่อื่น
+
+    ข้อจำกัด: กันได้เฉพาะตอนที่เจ้าหลักล้มแล้วจะตกไปตัวสำรองเท่านั้น ถ้าตั้งค่าให้ใช้
+    โมเดลในเครื่องเป็นตัวหลักอยู่แล้ว ตัวกรองนี้ไม่ช่วยอะไร
+    """
+    return any(w in text for w in _NUMERIC_WORDS)
 
 
 def _persist(db: Session, session_id: uuid.UUID, question: str, reply: str) -> None:
@@ -376,6 +408,7 @@ def prepare_answer(
         citations=citations,
         canned=reply_text,
         messages=messages,
+        allow_fallback=not _asks_for_a_number(message),
     )
 
 
@@ -393,7 +426,12 @@ def answer_question(
         # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
         # มากกว่าความหลากหลายของสำนวน
         connector = get_llm_connector()
-        reply_text = connector.chat(p.messages, temperature=0.1, num_predict=connector.answer_token_cap).strip()
+        reply_text = connector.chat(
+            p.messages,
+            temperature=0.1,
+            num_predict=connector.answer_token_cap,
+            **no_fallback_kwargs(connector, p.allow_fallback),
+        ).strip()
 
     _persist(db, p.session_id, message, reply_text)
 
@@ -443,7 +481,12 @@ def stream_answer(
     else:
         parts: list[str] = []
         connector = get_llm_connector()
-        for chunk in connector.chat_stream(p.messages, temperature=0.1, num_predict=connector.answer_token_cap):
+        for chunk in connector.chat_stream(
+            p.messages,
+            temperature=0.1,
+            num_predict=connector.answer_token_cap,
+            **no_fallback_kwargs(connector, p.allow_fallback),
+        ):
             parts.append(chunk)
             yield _sse("token", {"t": chunk})
         reply_text = "".join(parts).strip()
