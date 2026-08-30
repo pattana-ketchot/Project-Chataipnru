@@ -28,6 +28,14 @@ export default function CompareTestPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // เลือกสาขาไว้ให้ล่วงหน้าเมื่อมาจากการ์ดในหน้าแรก (/compare?course=<id>)
+  // ผู้ใช้กด "เปรียบเทียบสาขานี้" แล้วต้องเห็นว่าสาขานั้นถูกเลือกไว้แล้วจริงๆ
+  // ไม่งั้นจะเหมือนกดแล้วไม่มีอะไรเกิดขึ้น เหลือแค่หน้าเปล่าให้เลือกใหม่ทั้งหมด
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("course");
+    if (id) setPicked([id]);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
