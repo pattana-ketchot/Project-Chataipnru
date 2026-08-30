@@ -16,7 +16,10 @@ export default function App() {
   const navigate = (next: View) => { if (["survey", "chat"].includes(next) && !token) setView("auth"); else setView(next); };
   const logout = () => { window.localStorage.removeItem("course_advisor_token"); setToken(null); setUser(null); setView("home"); };
   return <main className="min-h-screen">
-    <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5"><Logo/><nav className="hidden items-center gap-6 text-sm font-bold md:flex"><button onClick={() => navigate("courses")}>หลักสูตร</button><button onClick={() => navigate("survey")}>แบบสอบถาม</button><button onClick={() => navigate("chat")}>คุยกับที่ปรึกษา</button></nav><div>{user ? <button className="btn-secondary !px-4 !py-2" onClick={logout}><LogOut size={16}/>ออกจากระบบ</button> : <button className="btn-secondary !px-4 !py-2" onClick={() => setView("auth")}>เข้าสู่ระบบ</button>}</div></header>
+    <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5"><Logo/><nav className="hidden items-center gap-6 text-sm font-bold md:flex"><button onClick={() => navigate("courses")}>หลักสูตร</button><button onClick={() => navigate("survey")}>แบบสอบถาม</button><button onClick={() => navigate("chat")}>คุยกับที่ปรึกษา</button>{/* หน้า /match กับ /compare เป็นคนละ route ไม่ใช่ view ในหน้านี้ จึงใช้ลิงก์จริง
+      ไม่ใช่ navigate() — และตั้งใจไม่ทำเป็น view เพราะเป็นหน้าสำหรับทดสอบด้วยมือ
+      ที่จะถูกแทนด้วยดีไซน์จริงของหน้าเว็บใหม่ */}
+      <a href="/match">ค้นหาสาขาที่เหมาะกับฉัน</a><a href="/compare">เปรียบเทียบสาขา</a></nav><div>{user ? <button className="btn-secondary !px-4 !py-2" onClick={logout}><LogOut size={16}/>ออกจากระบบ</button> : <button className="btn-secondary !px-4 !py-2" onClick={() => setView("auth")}>เข้าสู่ระบบ</button>}</div></header>
     {view === "home" && <Home onStart={() => navigate("survey")} onCourses={() => navigate("courses")}/>} 
     {view === "auth" && <Auth onSuccess={(t,u) => { window.localStorage.setItem("course_advisor_token", t); setToken(t); setUser(u); setView("survey"); }}/>} 
     {view === "survey" && token && <Survey token={token} onDone={() => setView("results")}/>}
