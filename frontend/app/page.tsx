@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, BookOpen, Check, LogOut, MessageCircle, Search, Sparkles, UserRound } from "lucide-react";
+import { ArrowRight, BookOpen, Calculator, Check, ChefHat, ChevronLeft, ChevronRight, Clapperboard, Cpu, FlaskConical, HeartPulse, Leaf, LogOut, MessageCircle, Microscope, Search, Server, Sparkles, Sprout, Stethoscope, UserRound, Utensils } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { api, ApiError, chatStream, type ChatMeta } from "@/lib/api";
+import { latestEditions, shortTitle } from "@/lib/programs";
 import type { ChatTurn, Course, Profile, Recommendation, User } from "@/lib/types";
 
 type View = "home" | "auth" | "survey" | "results" | "courses" | "chat";
@@ -16,11 +17,8 @@ export default function App() {
   const navigate = (next: View) => { if (["survey", "chat"].includes(next) && !token) setView("auth"); else setView(next); };
   const logout = () => { window.localStorage.removeItem("course_advisor_token"); setToken(null); setUser(null); setView("home"); };
   return <main className="min-h-screen">
-    <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5"><Logo/><nav className="hidden items-center gap-6 text-sm font-bold md:flex"><button onClick={() => navigate("courses")}>หลักสูตร</button><button onClick={() => navigate("survey")}>แบบสอบถาม</button><button onClick={() => navigate("chat")}>คุยกับที่ปรึกษา</button>{/* หน้า /match กับ /compare เป็นคนละ route ไม่ใช่ view ในหน้านี้ จึงใช้ลิงก์จริง
-      ไม่ใช่ navigate() — และตั้งใจไม่ทำเป็น view เพราะเป็นหน้าสำหรับทดสอบด้วยมือ
-      ที่จะถูกแทนด้วยดีไซน์จริงของหน้าเว็บใหม่ */}
-      <a href="/match">ค้นหาสาขาที่เหมาะกับฉัน</a><a href="/compare">เปรียบเทียบสาขา</a></nav><div>{user ? <button className="btn-secondary !px-4 !py-2" onClick={logout}><LogOut size={16}/>ออกจากระบบ</button> : <button className="btn-secondary !px-4 !py-2" onClick={() => setView("auth")}>เข้าสู่ระบบ</button>}</div></header>
-    {view === "home" && <Home onStart={() => navigate("survey")} onCourses={() => navigate("courses")}/>} 
+    <Header view={view} navigate={navigate} user={user} onLogin={() => setView("auth")} logout={logout}/>
+    {view === "home" && <Home onStart={() => navigate("survey")} onCourses={() => navigate("courses")}/>}
     {view === "auth" && <Auth onSuccess={(t,u) => { window.localStorage.setItem("course_advisor_token", t); setToken(t); setUser(u); setView("survey"); }}/>} 
     {view === "survey" && token && <Survey token={token} onDone={() => setView("results")}/>}
     {view === "results" && token && <Results token={token} onChat={() => setView("chat")}/>}
@@ -29,8 +27,44 @@ export default function App() {
   </main>;
 }
 
+/**
+ * แถบเมนูบนสุด
+ *
+ * เมนูสองอันขวาสุดเป็นคนละ route (/match, /compare) จึงใช้ลิงก์จริง ไม่ใช่ navigate()
+ * ที่สลับ view ภายในหน้านี้
+ */
+function Header({ view, navigate, user, onLogin, logout }: {
+  view: View; navigate(v: View): void; user: User | null; onLogin(): void; logout(): void;
+}) {
+  const items: [string, () => void, boolean][] = [
+    ["หน้าแรก", () => navigate("home"), view === "home"],
+    ["หลักสูตรทั้งหมด", () => navigate("courses"), view === "courses"],
+    ["แบบสอบถาม", () => navigate("survey"), view === "survey"],
+    ["คุยกับที่ปรึกษา", () => navigate("chat"), view === "chat"],
+  ];
+  return <header className="sticky top-0 z-20 border-b border-ink/10 bg-sage text-white">
+    <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
+      <button onClick={() => navigate("home")} aria-label="กลับหน้าแรก"><Logo/></button>
+      <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-bold">
+        {items.map(([label, go, active]) =>
+          <button key={label} onClick={go} className={active ? "border-b-2 border-lime pb-0.5" : "text-white/80 hover:text-white"}>{label}</button>
+        )}
+        <a className="text-white/80 hover:text-white" href="/match">ค้นหาสาขาที่เหมาะกับฉัน</a>
+        <a className="text-white/80 hover:text-white" href="/compare">เปรียบเทียบสาขา</a>
+      </nav>
+      <div className="ms-auto">
+        {user
+          ? <button className="btn-secondary !px-4 !py-2" onClick={logout}><LogOut size={16}/>ออกจากระบบ</button>
+          : <button className="btn-secondary !px-4 !py-2" onClick={onLogin}>เข้าสู่ระบบ</button>}
+      </div>
+    </div>
+  </header>;
+}
+
 function Home({ onStart, onCourses }: { onStart(): void; onCourses(): void }) { return <>
-  <section className="mx-auto grid max-w-7xl gap-10 px-5 pb-20 pt-14 lg:grid-cols-[1.1fr_.9fr] lg:items-center"><div><span className="inline-flex items-center gap-2 rounded-full bg-lime px-4 py-2 text-xs font-black uppercase tracking-widest"><Sparkles size={15}/>ค้นพบเส้นทางของคุณ</span><h1 className="mt-7 max-w-3xl text-5xl font-black leading-[1.05] tracking-[-.05em] md:text-7xl">หลักสูตรที่ใช่<br/><span className="text-sage">เริ่มจากตัวคุณ</span></h1><p className="mt-6 max-w-xl text-lg leading-8 text-ink/65">บอกเป้าหมาย ทักษะ และสิ่งที่คุณสนใจ ให้ AI ช่วยค้นหาและอธิบายหลักสูตรที่เหมาะกับคุณจากข้อมูลจริง</p><div className="mt-9 flex flex-wrap gap-3"><button className="btn-primary" onClick={onStart}>เริ่มทำแบบสอบถาม <ArrowRight size={18}/></button><button className="btn-secondary" onClick={onCourses}><Search size={18}/>สำรวจหลักสูตร</button></div><div className="mt-10 flex flex-wrap gap-5 text-sm text-ink/60">{["ใช้งานฟรี", "ข้อมูลเป็นส่วนตัว", "คำแนะนำพร้อมเหตุผล"].map(x => <span className="flex items-center gap-2" key={x}><Check className="text-sage" size={17}/>{x}</span>)}</div></div><div className="relative"><div className="panel rotate-2 bg-sage p-8 text-white"><p className="text-sm text-white/65">คำแนะนำสำหรับคุณ</p><h2 className="mt-3 text-3xl font-black">Data Analytics<br/>for Decision Making</h2><p className="mt-5 leading-7 text-white/75">ตรงกับเป้าหมายด้าน Business Intelligence และต่อยอดทักษะ Excel ที่คุณมี</p><div className="mt-8 flex justify-between border-t border-white/20 pt-5"><span>ความเหมาะสม</span><strong className="text-lime">94%</strong></div></div><div className="absolute -bottom-5 -left-4 rounded-2xl bg-coral px-5 py-4 font-bold shadow-soft">เรียนได้แบบ Online ✦</div></div></section>
+  <section className="bg-sage px-5 pb-20 pt-14 text-white"><div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.1fr_.9fr] lg:items-center"><div><span className="inline-flex items-center gap-2 rounded-full bg-lime px-4 py-2 text-xs font-black uppercase tracking-widest text-ink"><Sparkles size={15}/>คณะวิทยาศาสตร์และเทคโนโลยี</span><h1 className="mt-7 max-w-3xl text-5xl font-black leading-[1.05] tracking-[-.05em] md:text-7xl">หลักสูตรที่ใช่<br/><span className="text-lime">เริ่มจากตัวคุณ</span></h1><p className="mt-6 max-w-xl text-lg leading-8 text-white/75">บอกเป้าหมาย ทักษะ และสิ่งที่คุณสนใจ ให้ AI ช่วยค้นหาและอธิบายหลักสูตรที่เหมาะกับคุณ จากเอกสารหลักสูตรจริงของคณะ</p><div className="mt-9 flex flex-wrap gap-3"><a className="btn-primary !bg-lime !text-ink hover:!bg-white" href="/match">ค้นหาสาขาที่เหมาะกับฉัน <ArrowRight size={18}/></a><button className="btn-secondary" onClick={onCourses}><Search size={18}/>ดูหลักสูตรทั้งหมด</button></div><div className="mt-10 flex flex-wrap gap-5 text-sm text-white/70">{["ตอบจากเอกสารหลักสูตรจริง", "บอกที่มาของทุกคำตอบ", "ใช้งานฟรี"].map(x => <span className="flex items-center gap-2" key={x}><Check className="text-lime" size={17}/>{x}</span>)}</div></div><div className="relative"><div className="panel rotate-2 bg-white p-8 text-ink"><p className="text-sm text-ink/55">ตัวอย่างผลการวิเคราะห์</p><h2 className="mt-3 text-3xl font-black">วิทยาการคอมพิวเตอร์</h2><p className="mt-5 leading-7 text-ink/65">ตรงกับความสนใจด้านเทคโนโลยีและความถนัดในการแก้โจทย์ปัญหาที่คุณเลือกไว้</p><div className="mt-8 flex justify-between border-t border-ink/10 pt-5"><span>ความเหมาะสม</span><strong className="text-sage">สูง</strong></div></div><div className="absolute -bottom-5 -left-4 rounded-2xl bg-coral px-5 py-4 font-bold text-ink shadow-soft">เทียบกับสาขาอื่นได้ ✦</div></div></div></section>
+  <ProgramCarousel onSeeAll={onCourses}/>
+  <section className="mx-auto max-w-7xl px-5 py-4"><button className="btn-secondary" onClick={onStart}>เริ่มทำแบบสอบถาม <ArrowRight size={18}/></button></section>
   <section className="bg-ink px-5 py-16 text-white"><div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-3">{[[UserRound,"รู้จักคุณ","ตอบคำถามสั้น ๆ เกี่ยวกับพื้นฐานและเป้าหมาย"],[Search,"ค้นหาอย่างเข้าใจ","ระบบค้นจากเนื้อหาหลักสูตร ไม่ใช่แค่ชื่อ"],[MessageCircle,"อธิบายทุกคำแนะนำ","ถามต่อและดูเหตุผลว่าทำไมหลักสูตรจึงเหมาะ"]].map(([Icon,title,text]) => { const I=Icon as typeof UserRound; return <div key={String(title)}><I className="mb-5 text-lime"/><h3 className="text-xl font-black">{String(title)}</h3><p className="mt-2 text-sm leading-6 text-white/60">{String(text)}</p></div>; })}</div></section>
   </> }
 
@@ -132,6 +166,71 @@ function Chat({token,name}:{token:string;name:string}){
         <button aria-label="ส่งคำถาม" className="btn-primary !px-4" disabled={loading||!input.trim()}><ArrowRight size={19}/></button>
       </form>
     </div>
+  </section>;
+}
+
+/**
+ * ไอคอนประจำหลักสูตร เลือกจากคำในชื่อ
+ *
+ * เว็บของคณะใช้โลโก้ที่แต่ละสาขาออกแบบเอง ซึ่งเราไม่มีไฟล์และไม่ควรหยิบของเขามาใช้
+ * จึงใช้ไอคอนกลางๆ ที่สื่อความหมายแทน ได้ผลใกล้เคียงกันคือแยกใบการ์ดออกจากกันได้
+ * ตั้งแต่ยังไม่ทันอ่านชื่อ
+ *
+ * เรียงจากคำเฉพาะไปคำกว้าง เพราะชื่อหลายหลักสูตรมีคำกว้างปนอยู่ด้วย เช่น
+ * "เทคโนโลยีสารสนเทศ" มีคำว่า "เทคโนโลยี" ที่หลักสูตรอื่นก็มี
+ */
+const PROGRAM_ICONS: [string, typeof Cpu][] = [
+  ["แอนิเมชัน", Clapperboard], ["สารสนเทศ", Server], ["คอมพิวเตอร์", Cpu],
+  ["คณิตศาสตร์", Calculator], ["เครื่องสำอาง", FlaskConical], ["แพทย์", Stethoscope],
+  ["สุขภาพ", HeartPulse], ["อาหาร", Utensils], ["คหกรรม", ChefHat],
+  ["เกษตร", Sprout], ["สิ่งแวดล้อม", Leaf], ["ชีวภาพ", Microscope],
+];
+
+function programIcon(title: string) {
+  return PROGRAM_ICONS.find(([word]) => title.includes(word))?.[1] ?? BookOpen;
+}
+
+/**
+ * แถบเลื่อนหลักสูตรที่เปิดสอน
+ *
+ * เลื่อนด้วย scrollBy ตามความกว้างของกรอบ ไม่ได้เก็บ index ของการ์ดปัจจุบันไว้ เพราะ
+ * จำนวนการ์ดที่เห็นพร้อมกันเปลี่ยนตามขนาดจอ การนับเป็นใบจึงคลาดกับสิ่งที่ตาเห็น
+ */
+function ProgramCarousel({ onSeeAll }: { onSeeAll(): void }) {
+  const [items, setItems] = useState<Course[]>([]);
+  const [error, setError] = useState(false);
+  const rail = useRef<HTMLDivElement>(null);
+  useEffect(() => { api.courses().then(cs => setItems(latestEditions(cs))).catch(() => setError(true)); }, []);
+  const scroll = (dir: 1 | -1) => rail.current?.scrollBy({ left: dir * (rail.current.clientWidth * 0.8), behavior: "smooth" });
+
+  return <section className="mx-auto max-w-7xl px-5 py-16">
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-black uppercase tracking-widest text-coral">Programs</p>
+        <h2 className="mt-2 text-4xl font-black">หลักสูตรที่เปิดสอน</h2>
+      </div>
+      <button className="text-sm font-bold text-sage" onClick={onSeeAll}>ดูทั้งหมด →</button>
+    </div>
+
+    {error
+      ? <Empty text="โหลดรายชื่อหลักสูตรไม่ได้ กรุณาลองใหม่อีกครั้ง"/>
+      : <div className="relative mt-8">
+          {/* ปุ่มเลื่อนซ่อนบนจอเล็ก เพราะปัดด้วยนิ้วได้อยู่แล้วและปุ่มจะไปบังการ์ด */}
+          <button aria-label="เลื่อนไปทางซ้าย" onClick={() => scroll(-1)} className="absolute -left-4 top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-sage p-2 text-white shadow-soft md:block"><ChevronLeft size={20}/></button>
+          <button aria-label="เลื่อนไปทางขวา" onClick={() => scroll(1)} className="absolute -right-4 top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-sage p-2 text-white shadow-soft md:block"><ChevronRight size={20}/></button>
+          <div ref={rail} className="flex snap-x gap-5 overflow-x-auto pb-4">
+            {items.map(c => { const I = programIcon(c.title); return (
+              <article key={c.id} className="panel flex w-64 shrink-0 snap-start flex-col p-6">
+                <div className="grid h-24 place-items-center rounded-2xl bg-cream"><I className="text-sage" size={40}/></div>
+                <h3 className="mt-5 text-lg font-black leading-7">{shortTitle(c.title)}</h3>
+                {/* ลิงก์ไปหน้าเปรียบเทียบโดยเลือกสาขานี้ไว้ให้แล้ว — ระบบยังไม่มีหน้า
+                    รายละเอียดรายสาขา จึงเขียนป้ายตามสิ่งที่มันทำจริง */}
+                <a className="mt-auto pt-5 text-sm font-bold text-sage" href={`/compare?course=${c.id}`}>เปรียบเทียบสาขานี้ →</a>
+              </article>
+            ); })}
+            {items.length === 0 && <p className="py-10 text-sm text-ink/50">กำลังโหลดหลักสูตร…</p>}
+          </div>
+        </div>}
   </section>;
 }
 
