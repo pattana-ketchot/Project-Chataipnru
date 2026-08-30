@@ -69,7 +69,10 @@ export default function CompareTestPage() {
     const names = result.programs.map((p) => shortTitle(p.title));
     return (
       <main className="mx-auto max-w-6xl px-5 py-10">
-        <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
+        <div className="flex items-center gap-3">
+          <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
+          <a className="text-sm font-bold text-sage" href="/">← กลับหน้าแรก</a>
+        </div>
         <h1 className="mt-4 text-3xl font-black">เปรียบเทียบสาขา</h1>
 
         {/* ตารางต้องเลื่อนแนวนอนได้เองเมื่อเทียบ 4 สาขา ไม่ใช่ดันให้ทั้งหน้าเลื่อน */}
@@ -116,7 +119,10 @@ export default function CompareTestPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
-      <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
+      <div className="flex items-center gap-3">
+        <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
+        <a className="text-sm font-bold text-sage" href="/">← กลับหน้าแรก</a>
+      </div>
       <h1 className="mt-4 text-3xl font-black">เปรียบเทียบสาขา</h1>
       <p className="mt-2 text-sm text-ink/55">
         เลือก 2-4 สาขาที่อยากเทียบ ({picked.length}/{MAX_PICK})

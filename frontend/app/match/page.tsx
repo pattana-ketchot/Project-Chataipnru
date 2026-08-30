@@ -137,7 +137,10 @@ export default function MatchTestPage() {
   if (result) {
     return (
       <main className="mx-auto max-w-4xl px-5 py-10">
+        <div className="flex items-center gap-3">
         <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
+        <a className="text-sm font-bold text-sage" href="/">← กลับหน้าแรก</a>
+      </div>
         <h1 className="mt-4 text-3xl font-black">สาขาที่แนะนำสำหรับคุณ</h1>
 
         {result.confidence === "low" && (
@@ -189,7 +192,10 @@ export default function MatchTestPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-10">
-      <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
+      <div className="flex items-center gap-3">
+        <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
+        <a className="text-sm font-bold text-sage" href="/">← กลับหน้าแรก</a>
+      </div>
       <h1 className="mt-4 text-3xl font-black">ค้นหาสาขาที่เหมาะกับคุณ</h1>
       <p className="mt-2 text-sm text-ink/55">
         กดเลือกคำตอบแล้วกดปุ่มด้านล่าง ไม่ต้องตอบครบทุกข้อ — ลองตอบน้อยๆ หรือตอบกำกวมดูก็ได้
