@@ -17,7 +17,7 @@
  */
 import type { NextRequest } from "next/server";
 
-const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN ?? "http://127.0.0.1:9000";
+const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN ?? "http://127.0.0.1:8000";
 
 // บอก Next ว่าห้ามแคชและห้ามพยายาม render ล่วงหน้า — ทุกคำขอต้องวิ่งไป backend จริง
 export const dynamic = "force-dynamic";
