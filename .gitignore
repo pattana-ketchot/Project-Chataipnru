@@ -35,3 +35,6 @@ backups/
 # Build/test caches — เกิดใหม่ทุกครั้งที่ build ไม่ควรอยู่ใน git
 frontend/tsconfig.tsbuildinfo
 frontend/.vitest-cache/
+
+# หน้าเว็บที่ build แล้วของทีมออกแบบ อยู่คนละ repo คัดลอกขึ้นเซิร์ฟเวอร์ตอน deploy
+web/
