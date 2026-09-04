@@ -89,10 +89,38 @@ services:
     environment:
       # อ่านตอนรันโดย app/api/[...path]/route.ts — ย้าย backend ได้โดยไม่ต้อง build ใหม่
       BACKEND_ORIGIN: http://backend:8000
+    # ไม่เปิดพอร์ตออกภายนอกแล้ว Caddy เป็นตัวเดียวที่รับคำขอจากข้างนอก
+    expose:
+      - "3000"
+
+  # ตัวรับคำขอจากภายนอก ทำหน้าที่ขอและต่ออายุใบรับรอง HTTPS ให้อัตโนมัติ
+  #
+  # ต้องเปิดพอร์ต 443 ทั้งใน Security List ของ OCI และใน iptables ของเครื่องเอง
+  # (กับดักสองชั้นเดียวกับตอนเปิดพอร์ต 80 — ดู docs/DEPLOY_ORACLE_CLOUD.md)
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    environment:
+      # ชื่อโดเมนที่ขอใบรับรอง ถ้ายังไม่มีโดเมนให้ปล่อยว่างไว้ ระบบยังเข้าทาง IP ได้ปกติ
+      # ค่าตั้งต้นเป็น localhost โดยตั้งใจ ไม่ใช่ค่าว่าง — ค่าว่างทำให้ Caddyfile มีบล็อก
+      # ที่ไม่มีชื่อเว็บ ซึ่งเป็นไวยากรณ์ผิดและ Caddy จะไม่ยอมเริ่มทำงานเลย แปลว่าเว็บ
+      # ล่มทั้งเว็บเพียงเพราะยังไม่ได้ตั้งชื่อโดเมน
+      SITE_DOMAIN: ${SITE_DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # เก็บใบรับรองไว้ข้ามการรีสตาร์ต ไม่งั้นจะขอใหม่ทุกครั้งจนชนเพดานของ
+      # Let's Encrypt (ออกให้ชื่อเดิมได้ 5 ใบต่อสัปดาห์) แล้วขอไม่ได้ไปทั้งสัปดาห์
+      - caddy_data:/data
+      - caddy_config:/config
     ports:
-      # พอร์ตเดียวที่เปิดสู่ภายนอก
-      - "80:3000"
+      - "80:80"
+      - "443:443"
 
 volumes:
+  caddy_data:
+  caddy_config:
   pgdata:
   ollama_models:
