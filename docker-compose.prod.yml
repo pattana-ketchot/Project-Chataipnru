@@ -110,6 +110,9 @@ services:
       SITE_DOMAIN: ${SITE_DOMAIN:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # ไฟล์ที่ build แล้วของหน้าเว็บที่ทีมออกแบบทำ อยู่คนละ repo กัน จึงไม่ได้ track
+      # ไว้ที่นี่ — ต้อง build แล้วคัดลอกขึ้นมาเอง (ดู docs/DEPLOY_WEB.md)
+      - ./web:/srv/web:ro
       # เก็บใบรับรองไว้ข้ามการรีสตาร์ต ไม่งั้นจะขอใหม่ทุกครั้งจนชนเพดานของ
       # Let's Encrypt (ออกให้ชื่อเดิมได้ 5 ใบต่อสัปดาห์) แล้วขอไม่ได้ไปทั้งสัปดาห์
       - caddy_data:/data

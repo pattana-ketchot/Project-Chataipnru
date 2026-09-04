@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.routes import auth, chat, compare, courses, match, recommend, search, users
+from app.api.routes import auth, chat, compare, courses, match, recommend, search, users, web_compat
 from app.core.config import get_settings
 from app.db.session import engine
 
@@ -116,6 +116,8 @@ app.include_router(recommend.router)
 app.include_router(chat.router)
 app.include_router(match.router)
 app.include_router(compare.router)
+# เส้นทางในรูปแบบที่หน้าเว็บของทีมออกแบบเรียก — ดู routes/web_compat.py
+app.include_router(web_compat.router)
 
 
 @app.get("/health")
