@@ -27,6 +27,7 @@ from app.schemas.chat import ChatReply, ChatCitation
 from app.services.chat_history import user_first
 from app.services.course_scope import resolve_scope
 from app.services.llm_client import get_llm_connector, no_fallback_kwargs
+from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
 from app.services.small_talk import match_small_talk
 from app.services.tuition import answer as tuition_answer, is_tuition_question
@@ -185,9 +186,20 @@ def _condense(connector, history: list[ChatMessage], message: str) -> str:
 
 
 def _format_chunks(chunks) -> str:
-    return "\n\n".join(
-        f'[หลักสูตร: {c.course_title} | หน้า {c.page_number}]\n{c.content}' for c in chunks
-    )
+    """
+    จัดเนื้อหาที่ค้นเจอให้โมเดลอ่าน พร้อมกำกับชื่อภาษาอังกฤษของหลักสูตรไว้ในหัวข้อ
+
+    ใส่ชื่อภาษาอังกฤษจากตารางที่ตรวจแล้ว ไม่ปล่อยให้โมเดลไปหยิบจากเนื้อหาเอง เพราะ
+    เอกสารเล่มหนึ่งเอ่ยชื่อภาษาอังกฤษของหลักสูตรอื่นปนอยู่ด้วย (ดู services/program_names.py)
+    """
+    parts = []
+    for c in chunks:
+        en = english_name(c.course_title)
+        head = f"[หลักสูตร: {c.course_title}"
+        if en:
+            head += f" | ชื่อภาษาอังกฤษ: {en}"
+        parts.append(f"{head} | หน้า {c.page_number}]\n{c.content}")
+    return "\n\n".join(parts)
 
 
 def _retrieve(db: Session, connector, question: str):
