@@ -1,0 +1,21 @@
+{
+  "_source": "ชื่อภาษาอังกฤษของหลักสูตร ตามที่ระบุไว้ในหัวข้อ 'ชื่อหลักสูตร (ภาษาอังกฤษ)' ของเอกสาร มคอ.2 แต่ละเล่ม",
+  "_why": "เอกสารเล่มหนึ่งเอ่ยชื่อภาษาอังกฤษของหลักสูตรอื่นด้วย (ตารางเปรียบเทียบกับหลักสูตรเดิม รายชื่อหลักสูตรที่เกี่ยวข้อง) การให้โมเดลหยิบชื่อจากเนื้อหาที่ค้นเจอเองจึงหยิบผิดเล่มได้ — เอกสารคหกรรมศาสตร์มีทั้ง 'Bachelor of Arts Program in Home Economics' ซึ่งถูกต้อง และ 'Bachelor of Science Program in Home Economics' ซึ่งไม่ใช่ปริญญาที่หลักสูตรนี้ให้ ตารางนี้จึงกำหนดชื่อที่ถูกต้องไว้ตายตัวหนึ่งชื่อต่อหนึ่งหลักสูตร",
+  "_key_note": "คีย์คือชื่อสาขาที่ตัดคำนำหน้าและปีออกแล้ว (services/tuition.py::_normalise) ทั้งฉบับเดิมและฉบับปรับปรุงจึงใช้ชื่อภาษาอังกฤษเดียวกัน",
+  "programs": {
+    "การแพทย์แผนไทยประยุกต์": "Bachelor of Applied Thai Traditional Medicine Program",
+    "การจัดการเทคโนโลยีการเกษตรสมัยใหม่": "Bachelor of Science Program in Modern Agricultural Technology Management",
+    "การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ": "Bachelor of Science Program in Environmental and Natural Resource Management",
+    "คณิตศาสตร์": "Bachelor of Science Program in Mathematics",
+    "คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย": "Bachelor of Science Program in Computer Animation and Multimedia",
+    "เทคโนโลยีการจัดการสุขภาพ": "Bachelor of Science Program in Technology of Health Management",
+    "เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ": "Bachelor of Science Program in Biological Product Technology and Entrepreneurship",
+    "เทคโนโลยีสารสนเทศ": "Bachelor of Science Program in Information Technology",
+    "เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่": "Bachelor of Science Program in Food Technology and Modern Entrepreneurship",
+    "วิทยาการคอมพิวเตอร์": "Bachelor of Science Program in Computer Science",
+    "วิทยาศาสตร์เครื่องสำอาง": "Bachelor of Science Program in Cosmetic Science",
+    "วิทยาศาสตร์และเทคโนโลยีการอาหาร": "Bachelor of Science Program in Food Science and Technology",
+    "วิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อม": "Bachelor of Science Program in Environmental Science and Technology",
+    "คหกรรมศาสตร์": "Bachelor of Arts Program in Home Economics"
+  }
+}
