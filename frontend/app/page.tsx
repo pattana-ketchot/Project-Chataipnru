@@ -1,23 +1,55 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, BookOpen, Calculator, Check, ChefHat, ChevronLeft, ChevronRight, Clapperboard, Cpu, FlaskConical, HeartPulse, Leaf, LogOut, MessageCircle, Microscope, Search, Server, Sparkles, Sprout, Stethoscope, UserRound, Utensils } from "lucide-react";
-import { Logo } from "@/components/logo";
+import { SiteNav } from "@/components/site-nav";
 import { api, ApiError, chatStream, type ChatMeta } from "@/lib/api";
 import { latestEditions, shortTitle } from "@/lib/programs";
 import type { ChatTurn, Course, Profile, Recommendation, User } from "@/lib/types";
 
 type View = "home" | "auth" | "survey" | "results" | "courses" | "chat";
+const VIEWS: View[] = ["home", "auth", "survey", "results", "courses", "chat"];
+/** view ที่ต้องเข้าสู่ระบบก่อน */
+const GUARDED: View[] = ["survey", "chat"];
 const emptyProfile: Profile = { education_level: "", field_of_study: "", current_role: "", career_goal: "", skills: [], interests: [], language_preference: "th" };
+
+/**
+ * view ที่ขอมาทาง ?view= — คืน null ถ้าไม่ได้ระบุหรือระบุมาไม่ตรงกับที่มีจริง
+ *
+ * แถบเมนูบนหน้า /match กับ /compare กลับมาหน้านี้ด้วยลิงก์ จึงต้องบอกได้ว่าให้เปิด
+ * ส่วนไหน ตรวจกับรายการที่มีจริงเสมอ ไม่เอาค่าจาก URL ไปตั้งเป็น state ตรงๆ
+ */
+function requestedView(): View | null {
+  const raw = new URLSearchParams(window.location.search).get("view");
+  return VIEWS.includes(raw as View) ? (raw as View) : null;
+}
 
 export default function App() {
   const [view, setView] = useState<View>("home");
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  useEffect(() => { const saved = window.localStorage.getItem("course_advisor_token"); if (saved) { setToken(saved); api.me(saved).then(u => { setUser(u); setView("chat"); }).catch(() => window.localStorage.removeItem("course_advisor_token")); } }, []);
-  const navigate = (next: View) => { if (["survey", "chat"].includes(next) && !token) setView("auth"); else setView(next); };
+  useEffect(() => {
+    const wanted = requestedView();
+    const guard = (v: View | null) => v && setView(GUARDED.includes(v) ? "auth" : v);
+    const saved = window.localStorage.getItem("course_advisor_token");
+    if (!saved) { guard(wanted); return; }
+    setToken(saved);
+    api.me(saved)
+      // ไม่มี ?view= แล้วเคยเข้าสู่ระบบไว้ ให้เปิดหน้าแชทเหมือนเดิม
+      .then(u => { setUser(u); setView(wanted ?? "chat"); })
+      .catch(() => { window.localStorage.removeItem("course_advisor_token"); guard(wanted); });
+  }, []);
+  const navigate = (next: View) => { if (GUARDED.includes(next) && !token) setView("auth"); else setView(next); };
   const logout = () => { window.localStorage.removeItem("course_advisor_token"); setToken(null); setUser(null); setView("home"); };
   return <main className="min-h-screen">
-    <Header view={view} navigate={navigate} user={user} onLogin={() => setView("auth")} logout={logout}/>
+    <SiteNav
+      active={view}
+      onNavigate={v => navigate(v as View)}
+      right={user
+        /* ต้องระบุ text-ink เอง — ปุ่มพื้นขาวอยู่ในแถบเมนูที่ตั้ง text-white ไว้
+           ถ้าปล่อยให้สืบทอดมา ตัวหนังสือจะขาวบนพื้นขาวจนหายไปทั้งปุ่ม */
+        ? <button className="btn-secondary !px-4 !py-2 text-ink" onClick={logout}><LogOut size={16}/>ออกจากระบบ</button>
+        : <button className="btn-secondary !px-4 !py-2 text-ink" onClick={() => setView("auth")}>เข้าสู่ระบบ</button>}
+    />
     {view === "home" && <Home onStart={() => navigate("survey")} onCourses={() => navigate("courses")}/>}
     {view === "auth" && <Auth onSuccess={(t,u) => { window.localStorage.setItem("course_advisor_token", t); setToken(t); setUser(u); setView("survey"); }}/>} 
     {view === "survey" && token && <Survey token={token} onDone={() => setView("results")}/>}
@@ -25,42 +57,6 @@ export default function App() {
     {view === "courses" && <Courses/>}
     {view === "chat" && token && <Chat token={token} name={user?.full_name ?? "คุณ"}/>} 
   </main>;
-}
-
-/**
- * แถบเมนูบนสุด
- *
- * เมนูสองอันขวาสุดเป็นคนละ route (/match, /compare) จึงใช้ลิงก์จริง ไม่ใช่ navigate()
- * ที่สลับ view ภายในหน้านี้
- */
-function Header({ view, navigate, user, onLogin, logout }: {
-  view: View; navigate(v: View): void; user: User | null; onLogin(): void; logout(): void;
-}) {
-  const items: [string, () => void, boolean][] = [
-    ["หน้าแรก", () => navigate("home"), view === "home"],
-    ["หลักสูตรทั้งหมด", () => navigate("courses"), view === "courses"],
-    ["แบบสอบถาม", () => navigate("survey"), view === "survey"],
-    ["คุยกับที่ปรึกษา", () => navigate("chat"), view === "chat"],
-  ];
-  return <header className="sticky top-0 z-20 border-b border-ink/10 bg-sage text-white">
-    <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
-      <button onClick={() => navigate("home")} aria-label="กลับหน้าแรก"><Logo/></button>
-      <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-bold">
-        {items.map(([label, go, active]) =>
-          <button key={label} onClick={go} className={active ? "border-b-2 border-lime pb-0.5" : "text-white/80 hover:text-white"}>{label}</button>
-        )}
-        <a className="text-white/80 hover:text-white" href="/match">ค้นหาสาขาที่เหมาะกับฉัน</a>
-        <a className="text-white/80 hover:text-white" href="/compare">เปรียบเทียบสาขา</a>
-      </nav>
-      <div className="ms-auto">
-        {user
-          /* ต้องระบุ text-ink เอง — ปุ่มพื้นขาวอยู่ในแถบเมนูที่ตั้ง text-white ไว้
-             ถ้าปล่อยให้สืบทอดมา ตัวหนังสือจะขาวบนพื้นขาวจนหายไปทั้งปุ่ม */
-          ? <button className="btn-secondary !px-4 !py-2 text-ink" onClick={logout}><LogOut size={16}/>ออกจากระบบ</button>
-          : <button className="btn-secondary !px-4 !py-2 text-ink" onClick={onLogin}>เข้าสู่ระบบ</button>}
-      </div>
-    </div>
-  </header>;
 }
 
 function Home({ onStart, onCourses }: { onStart(): void; onCourses(): void }) { return <>
