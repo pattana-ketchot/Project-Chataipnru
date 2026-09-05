@@ -22,6 +22,7 @@ from pathlib import Path
 from app.services.tuition import _normalise as normalise_title
 
 _DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "program_names_en.json"
+_FACTS_FILE = Path(__file__).resolve().parent.parent / "data" / "program_facts.json"
 
 
 @lru_cache(maxsize=1)
@@ -39,3 +40,45 @@ def english_name(course_title: str) -> str | None:
     ชื่อภาษาอังกฤษในกรณีของคณะนี้
     """
     return _table().get(normalise_title(course_title))
+
+
+@lru_cache(maxsize=1)
+def _facts() -> dict[str, dict]:
+    raw = json.loads(_FACTS_FILE.read_text(encoding="utf-8"))["programs"]
+    return {normalise_title(k): v for k, v in raw.items()}
+
+
+def program_facts(course_title: str) -> dict:
+    """
+    ข้อมูลสรุปของหลักสูตรสำหรับหน้ารายละเอียด — ประกอบจากสามแหล่งที่ตรวจแล้ว
+
+    ทุกค่ามีที่มาชัดเจน ไม่มีค่าไหนที่โมเดลเป็นคนคิด:
+        หน่วยกิต ภาษาที่ใช้   เอกสาร มคอ.2 (data/program_facts.json)
+        ชื่อปริญญาอังกฤษ      เอกสาร มคอ.2 (data/program_names_en.json)
+        ค่าเทอม รูปแบบการเรียน ประกาศของคณะ (data/tuition.json)
+
+    ไม่คำนวณ "ค่าใช้จ่ายตลอดหลักสูตร" ให้ แม้หน้าเว็บจะมีช่องนั้น เพราะต้องเดาว่า
+    เรียนกี่ภาคการศึกษาและไม่มีเอกสารฉบับใดระบุยอดรวมไว้ การคูณค่าเทอมด้วยแปดแล้ว
+    แสดงเป็นตัวเลขทางการคือการสร้างข้อมูลขึ้นเอง
+    """
+    from app.services.tuition import describe, fee_for
+
+    facts = _facts().get(normalise_title(course_title))
+    if facts is None:
+        return {}
+
+    out: dict[str, object] = {
+        "level": "ปริญญาตรี",
+        "duration": "4 ปี",
+        "credits": f"{facts['credits']} หน่วยกิต",
+        "language": facts["language"],
+    }
+    if (en := english_name(course_title)) is not None:
+        out["degree_en"] = en
+
+    fee = fee_for(course_title)
+    if fee is not None:
+        out["degree"] = fee["degree"]
+        out["tuition_per_semester"] = f"{fee['regular']:,} บาท"
+        out["study_format"] = describe(fee)
+    return out

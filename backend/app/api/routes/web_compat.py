@@ -30,6 +30,7 @@ from app.db.session import get_db
 from app.services.chat import stream_answer
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
+from app.services.program_names import program_facts
 from app.services.web_compat import label_of, labels_of, match_by_title, normalise_title, shared_user
 
 from llm.connector import LLMConnectionError  # noqa: E402
@@ -126,6 +127,24 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
         media_type="text/plain; charset=utf-8",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/course-facts")
+def course_facts_web(title: str, db: Session = Depends(get_db)) -> dict:
+    """
+    ข้อมูลสรุปของหลักสูตรหนึ่ง สำหรับเติมช่องที่ว่างในหน้ารายละเอียดของหน้าเว็บ
+
+    หน้าเว็บดึงข้อมูลชุดนี้จากฐานข้อมูลของตัวเองซึ่งยังไม่มีใครกรอก จึงขึ้นว่า
+    "ไม่ระบุ" ทุกช่อง ทั้งที่เอกสาร มคอ.2 ระบุไว้ครบ
+
+    รับชื่อสาขาเป็นข้อความ ไม่ใช่รหัส เพราะฐานข้อมูลสองฝั่งใช้รหัสคนละชุดกัน
+
+    คืน {} เมื่อไม่มีเอกสารของสาขานั้น ผู้เรียกต้องคงค่าเดิมของตัวเองไว้
+    """
+    matched, _ = match_by_title(db, [{"id": "", "title": title}])
+    if not matched:
+        return {}
+    return program_facts(matched[0][1].title)
 
 
 def _row_value(rows, dimension: str, index: int) -> str | None:
