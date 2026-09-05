@@ -30,7 +30,7 @@ from app.db.session import get_db
 from app.services.chat import stream_answer
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
-from app.services.web_compat import match_by_title, normalise_title, shared_user
+from app.services.web_compat import label_of, labels_of, match_by_title, normalise_title, shared_user
 
 from llm.connector import LLMConnectionError  # noqa: E402
 
@@ -192,13 +192,17 @@ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_
     ชื่อช่องในแบบสอบถามของหน้าเว็บไม่ตรงกับของเรา (skills/goals/track) จึงแปลงก่อน
     """
     a = payload.answers
+    # แปลรหัสตัวเลือกเป็นข้อความไทยที่ผู้ใช้เห็นก่อนเสมอ — หน้าเว็บส่งรหัสอย่าง "tech"
+    # หรือ "career-growth" มา ซึ่งแทบไม่มีความหมายให้เทียบกับเอกสารภาษาไทย
+    # (ดูเหตุผลและตารางใน services/web_compat.py)
     answers = {
-        "study_track": a.get("track") or None,
-        "favorite_subjects": a.get("subjects") or [],
-        "interests": a.get("interests") or [],
-        "aptitudes": a.get("skills") or [],
-        "career_goal": a.get("goals") or [],
-        "work_environment": [a["environment"]] if a.get("environment") else [],
+        "study_track": label_of("track", a["track"]) if a.get("track") else None,
+        # ข้อวิชาที่ชอบส่งเป็นชื่อวิชาภาษาไทยอยู่แล้ว label_of จึงคืนค่าเดิมไป
+        "favorite_subjects": labels_of("subjects", a.get("subjects")),
+        "interests": labels_of("interests", a.get("interests")),
+        "aptitudes": labels_of("skills", a.get("skills")),
+        "career_goal": labels_of("goals", a.get("goals")),
+        "work_environment": [label_of("environment", a["environment"])] if a.get("environment") else [],
     }
 
     try:
