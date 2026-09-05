@@ -30,7 +30,7 @@ from app.db.session import get_db
 from app.services.chat import stream_answer
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
-from app.services.program_names import program_facts
+from app.services.program_names import program_about, program_facts
 from app.services.web_compat import label_of, labels_of, match_by_title, normalise_title, shared_user
 
 from llm.connector import LLMConnectionError  # noqa: E402
@@ -144,7 +144,8 @@ def course_facts_web(title: str, db: Session = Depends(get_db)) -> dict:
     matched, _ = match_by_title(db, [{"id": "", "title": title}])
     if not matched:
         return {}
-    return program_facts(matched[0][1].title)
+    course_title = matched[0][1].title
+    return {**program_facts(course_title), **program_about(course_title)}
 
 
 def _row_value(rows, dimension: str, index: int) -> str | None:

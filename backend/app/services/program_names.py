@@ -23,6 +23,7 @@ from app.services.tuition import _normalise as normalise_title
 
 _DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "program_names_en.json"
 _FACTS_FILE = Path(__file__).resolve().parent.parent / "data" / "program_facts.json"
+_ABOUT_FILE = Path(__file__).resolve().parent.parent / "data" / "program_about.json"
 
 
 @lru_cache(maxsize=1)
@@ -82,3 +83,23 @@ def program_facts(course_title: str) -> dict:
         out["tuition_per_semester"] = f"{fee['regular']:,} บาท"
         out["study_format"] = describe(fee)
     return out
+
+
+@lru_cache(maxsize=1)
+def _about() -> dict[str, dict]:
+    raw = json.loads(_ABOUT_FILE.read_text(encoding="utf-8"))["programs"]
+    return {normalise_title(k): v for k, v in raw.items()}
+
+
+def program_about(course_title: str) -> dict:
+    """
+    คำอธิบายสาขาและรายชื่ออาจารย์ผู้รับผิดชอบหลักสูตร คืน {} ถ้าไม่มี
+
+    สรุปไว้ล่วงหน้าครั้งเดียวแล้วเก็บเป็นไฟล์ ไม่ได้เรียกโมเดลตอนมีคนเปิดหน้า เพราะ
+    จะทำให้หน้ารายละเอียดช้าลงหลายวินาที และข้อความจะเปลี่ยนไปทุกครั้งที่รีเฟรช
+    ทั้งที่เนื้อหาต้นทางไม่ได้เปลี่ยน
+
+    รายชื่ออาจารย์ตรวจแล้วทีละคนว่านามสกุลปรากฏในเอกสารของหลักสูตรนั้นจริง เพราะเป็น
+    ชื่อคนจริงที่จะขึ้นบนเว็บสาธารณะ การหยิบผิดเล่มจึงเสียหายกว่าการไม่แสดงอะไรเลย
+    """
+    return _about().get(normalise_title(course_title), {})
