@@ -27,7 +27,7 @@ from app.schemas.chat import ChatReply, ChatCitation
 from app.services.chat_history import user_first
 from app.services.course_scope import resolve_scope
 from app.services.llm_client import get_llm_connector, no_fallback_kwargs
-from app.services.query_expansion import expand_query
+from app.services.query_expansion import expand_query, thai_only_query
 from app.services.small_talk import match_small_talk
 from app.services.tuition import answer as tuition_answer, is_tuition_question
 from app.services.vector_search import search_similar_chunks
@@ -376,6 +376,15 @@ def prepare_answer(
             alt_score = alt[0].score if alt else 0.0
             if alt_score > best_score:
                 chunks, best_score, search_query = alt, alt_score, rewritten
+
+    # --- 2.5 คำถามภาษาอังกฤษ: ลองค้นด้วยคำไทยที่แปลได้ แล้วเลือกอันที่ดีกว่า ---
+    # เอกสารเป็นภาษาไทยล้วน การเติมคำไทยต่อท้ายคำถามอังกฤษยังไม่พอเพราะถ้อยคำอังกฤษ
+    # กินสัดส่วนส่วนใหญ่ของเวกเตอร์ (ดูตัวเลขที่วัดไว้ใน query_expansion.thai_only_query)
+    if not written_in_thai(message) and (thai_query := thai_only_query(message)):
+        alt = _retrieve(db, connector, thai_query)
+        alt_score = alt[0].score if alt else 0.0
+        if alt_score > best_score:
+            chunks, best_score, search_query = alt, alt_score, thai_query
 
     # --- 3. ตัดสินว่าจะตอบ ปฏิเสธ หรือบอกว่าไม่มีข้อมูล ---
     citations: list[ChatCitation] = []
