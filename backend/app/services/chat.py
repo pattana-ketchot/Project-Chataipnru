@@ -38,7 +38,9 @@ from llm.prompts import (  # noqa: E402
     CONDENSE_SYSTEM_PROMPT,
     GROUNDING_CHECK_SYSTEM_PROMPT,
     NOT_FOUND_REPLY,
+    NOT_FOUND_REPLY_EN,
     OUT_OF_SCOPE_REPLY,
+    OUT_OF_SCOPE_REPLY_EN,
     SCOPE_CHECK_SYSTEM_PROMPT,
     build_chat_prompt,
     build_condense_prompt,
@@ -278,6 +280,17 @@ _NUMERIC_WORDS = (
 )
 
 
+def written_in_thai(text: str) -> bool:
+    """
+    ข้อความนี้เขียนด้วยอักษรไทยหรือไม่ ใช้เลือกภาษาของข้อความที่ตอบจากโค้ดโดยตรง
+
+    ตรวจจากตัวอักษรไทยแม้แต่ตัวเดียว ไม่ได้นับสัดส่วน เพราะคนไทยพิมพ์คำอังกฤษปนไทย
+    เป็นปกติ ("comsci ล่ะ", "เรียน AI ไหม") ซึ่งควรได้คำตอบภาษาไทย ส่วนคำถามที่เป็น
+    อังกฤษล้วนจะไม่มีอักษรไทยเลยจึงแยกออกจากกันได้ชัด
+    """
+    return any("฀" <= ch <= "๿" for ch in text)
+
+
 def _asks_for_a_number(text: str) -> bool:
     """
     คำถามนี้ต้องการตัวเลขที่ผิดไม่ได้หรือไม่
@@ -367,16 +380,20 @@ def prepare_answer(
     # --- 3. ตัดสินว่าจะตอบ ปฏิเสธ หรือบอกว่าไม่มีข้อมูล ---
     citations: list[ChatCitation] = []
     status: str
+    # ข้อความสำเร็จรูปด้านล่างไม่ผ่านโมเดล จึงต้องเลือกภาษาเองจากคำถามของผู้ใช้
+    thai = written_in_thai(message)
+    out_of_scope = OUT_OF_SCOPE_REPLY if thai else OUT_OF_SCOPE_REPLY_EN
+    not_found = NOT_FOUND_REPLY if thai else NOT_FOUND_REPLY_EN
     if best_score < OFF_TOPIC_THRESHOLD:
         # ต่ำขนาดนี้คือไม่มีอะไรในคลังใกล้เคียงเลย ตัดจบโดยไม่ต้องเสียเวลาเรียก LLM
-        reply_text, status = OUT_OF_SCOPE_REPLY, "out_of_scope"
+        reply_text, status = out_of_scope, "out_of_scope"
     # ช่วงก้ำกึ่ง: คะแนนแยกไม่ออกว่า "นอกเรื่อง" หรือ "ในเรื่องแต่เอกสารไม่ครอบคลุม"
     # จึงถามเรื่องหัวข้อเพิ่มอีกหนึ่งคำถาม เฉพาะในช่วงนี้เท่านั้น เพื่อไม่ให้คำถาม
     # ที่คะแนนสูงอยู่แล้ว (ซึ่งอยู่ในเรื่องแน่นอน) ต้องเสียเวลาเรียก LLM เพิ่ม
     elif best_score < AMBIGUOUS_UNTIL and not _is_about_scope(connector, search_query):
-        reply_text, status = OUT_OF_SCOPE_REPLY, "out_of_scope"
+        reply_text, status = out_of_scope, "out_of_scope"
     elif not _can_answer_from(connector, chunks, search_query):
-        reply_text, status = NOT_FOUND_REPLY, "not_found"
+        reply_text, status = not_found, "not_found"
     else:
         status = "answered"
 
