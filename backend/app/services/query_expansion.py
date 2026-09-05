@@ -120,11 +120,35 @@ def _alias_present(alias: str, lowered: str) -> bool:
     return alias in lowered
 
 
-def expand_query(query: str) -> str:
-    """เติมชื่อหลักสูตรเต็มต่อท้ายถ้าพบคำย่อ คืนข้อความเดิมถ้าไม่พบ"""
+def _matched_terms(query: str) -> list[str]:
     lowered = query.lower()
     additions: list[str] = []
     for alias, full in (*ALIASES.items(), *TOPIC_TERMS.items()):
         if _alias_present(alias, lowered) and full not in query and full not in " ".join(additions):
             additions.append(full)
+    return additions
+
+
+def expand_query(query: str) -> str:
+    """เติมชื่อหลักสูตรเต็มต่อท้ายถ้าพบคำย่อ คืนข้อความเดิมถ้าไม่พบ"""
+    additions = _matched_terms(query)
     return f"{query} {' '.join(additions)}" if additions else query
+
+
+def thai_only_query(query: str) -> str:
+    """
+    เหลือเฉพาะคำไทยที่แปลมาได้ ทิ้งถ้อยคำเดิมของผู้ใช้ไป — ใช้กับคำถามภาษาอังกฤษ
+
+    ทำไมต้องมีนอกเหนือจาก expand_query: การเติมคำไทยต่อท้ายคำถามอังกฤษช่วยได้ไม่พอ
+    เพราะถ้อยคำอังกฤษยังกินสัดส่วนส่วนใหญ่ของเวกเตอร์อยู่ วัดจากระบบจริง
+
+        "How many credits is the mathematics programme?" (เติมคำไทยต่อท้าย)
+            คะแนน 0.5955 และไปเจอเอกสารวิทยาการคอมพิวเตอร์ ไม่ใช่คณิตศาสตร์
+        "หลักสูตรคณิตศาสตร์เรียนกี่หน่วยกิต"
+            คะแนน 0.7277 เจอเอกสารคณิตศาสตร์ถูกเล่ม
+
+    ผู้เรียกต้องค้นด้วยคำถามเดิมก่อนเสมอ แล้วค่อยลองอันนี้เป็นทางเลือก และเลือกอันที่
+    คะแนนดีกว่า — แบบเดียวกับที่ทำกับคำถามต่อเนื่องที่ถูกเขียนใหม่ ไม่ใช่แทนที่ทันที
+    เพราะตารางคำแปลครอบคลุมไม่ครบทุกคำ การทิ้งคำถามเดิมไปเลยจึงเสี่ยงเสียความหมาย
+    """
+    return " ".join(_matched_terms(query))
