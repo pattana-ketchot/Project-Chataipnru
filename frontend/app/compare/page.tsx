@@ -6,6 +6,7 @@
  * origin นี้ การเปิดไฟล์ HTML จากเครื่องตัวเองจะถูก CORS ปฏิเสธ
  */
 import { useEffect, useState } from "react";
+import { SiteNav } from "@/components/site-nav";
 
 type Course = { id: string; title: string };
 type Row = { dimension: string; values: string[] };
@@ -76,11 +77,8 @@ export default function CompareTestPage() {
   if (result) {
     const names = result.programs.map((p) => shortTitle(p.title));
     return (
-      <main className="mx-auto max-w-6xl px-5 py-10">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
-          <a className="text-sm font-bold text-sage" href="/">← กลับหน้าแรก</a>
-        </div>
+      <><SiteNav active="/compare"/><main className="mx-auto max-w-6xl px-5 py-10">
+        <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
         <h1 className="mt-4 text-3xl font-black">เปรียบเทียบสาขา</h1>
 
         {/* ตารางต้องเลื่อนแนวนอนได้เองเมื่อเทียบ 4 สาขา ไม่ใช่ดันให้ทั้งหน้าเลื่อน */}
@@ -121,16 +119,13 @@ export default function CompareTestPage() {
         <div className="mt-6 flex gap-3">
           <button className="btn-secondary" onClick={() => setResult(null)}>เลือกสาขาใหม่</button>
         </div>
-      </main>
+      </main></>
     );
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10">
-      <div className="flex items-center gap-3">
-        <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
-        <a className="text-sm font-bold text-sage" href="/">← กลับหน้าแรก</a>
-      </div>
+    <><SiteNav active="/compare"/><main className="mx-auto max-w-5xl px-5 py-10">
+      <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
       <h1 className="mt-4 text-3xl font-black">เปรียบเทียบสาขา</h1>
       <p className="mt-2 text-sm text-ink/55">
         เลือก 2-4 สาขาที่อยากเทียบ ({picked.length}/{MAX_PICK})
@@ -164,6 +159,6 @@ export default function CompareTestPage() {
 
         {error && <div role="alert" className="mt-4 rounded-2xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
       </div>
-    </main>
+    </main></>
   );
 }

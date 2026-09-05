@@ -9,6 +9,7 @@
  * (backend อนุญาตเฉพาะ origin ของหน้าเว็บนี้) แต่เรียกจากที่นี่เป็น origin เดียวกัน
  */
 import { useEffect, useState } from "react";
+import { SiteNav } from "@/components/site-nav";
 
 const OPTIONS = {
   study_track: ["วิทย์-คณิต", "ศิลป์-คำนวณ", "ศิลป์-ภาษา", "ปวช.-ปวส.", "อื่นๆ"],
@@ -136,11 +137,8 @@ export default function MatchTestPage() {
   // และเข้าใจว่าระบบค้าง — แบบร่างของหน้าเว็บจริงก็แยกผลลัพธ์เป็นขั้นตอนต่างหากเช่นกัน
   if (result) {
     return (
-      <main className="mx-auto max-w-4xl px-5 py-10">
-        <div className="flex items-center gap-3">
+      <><SiteNav active="/match"/><main className="mx-auto max-w-4xl px-5 py-10">
         <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
-        <a className="text-sm font-bold text-sage" href="/">← กลับหน้าแรก</a>
-      </div>
         <h1 className="mt-4 text-3xl font-black">สาขาที่แนะนำสำหรับคุณ</h1>
 
         {result.confidence === "low" && (
@@ -186,16 +184,13 @@ export default function MatchTestPage() {
             เริ่มทำใหม่
           </button>
         </div>
-      </main>
+      </main></>
     );
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-5 py-10">
-      <div className="flex items-center gap-3">
-        <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
-        <a className="text-sm font-bold text-sage" href="/">← กลับหน้าแรก</a>
-      </div>
+    <><SiteNav active="/match"/><main className="mx-auto max-w-4xl px-5 py-10">
+      <span className="inline-flex rounded-full bg-lime px-3 py-1 text-xs font-black">หน้าทดลองระบบ</span>
       <h1 className="mt-4 text-3xl font-black">ค้นหาสาขาที่เหมาะกับคุณ</h1>
       <p className="mt-2 text-sm text-ink/55">
         กดเลือกคำตอบแล้วกดปุ่มด้านล่าง ไม่ต้องตอบครบทุกข้อ — ลองตอบน้อยๆ หรือตอบกำกวมดูก็ได้
@@ -234,6 +229,6 @@ export default function MatchTestPage() {
         {error && <div role="alert" className="rounded-2xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
       </div>
 
-    </main>
+    </main></>
   );
 }
