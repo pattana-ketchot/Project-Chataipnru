@@ -64,6 +64,8 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       # สลับผู้ให้บริการโมเดลที่เขียนคำตอบได้จาก .env โดยไม่ต้อง build ใหม่
       # ค่าเริ่มต้นคือโมเดลในเครื่อง ตั้ง LLM_PROVIDER=gemini เมื่อมี GEMINI_API_KEY แล้ว
+      # จำนวนเอกสารที่ส่งให้โมเดลต่อหนึ่งคำถาม ปรับเพื่อวัดผลได้โดยไม่ต้อง build ใหม่
+      CHAT_TOP_K: ${CHAT_TOP_K:-8}
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
