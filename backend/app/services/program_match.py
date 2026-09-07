@@ -97,7 +97,21 @@ _CONFIDENCE_GAP = 10
 # เหตุผลที่ต้องมีอยู่ในหมายเหตุของ match_programs()
 _TITLE_WEIGHT = 0.5
 
-# เวกเตอร์ของชื่อหลักสูตรทั้ง 18 เล่ม คำนวณครั้งเดียวต่อโปรเซส
+# เงื่อนไข SQL คัดเฉพาะหลักสูตรที่ผู้ใช้ระบบนี้สมัครได้จริง
+#
+# ผู้ใช้คือนักเรียนที่กำลังเลือกที่เรียนต่อระดับปริญญาตรี แต่คลังเอกสารมีหลักสูตร
+# ปริญญาโทและปริญญาเอกของคณะรวมอยู่ด้วย ถ้าไม่กันออก ระบบจะเสนอหลักสูตรปริญญาเอก
+# ให้เด็ก ม.6 ได้ ซึ่งเป็นคำแนะนำที่ผิดจนใช้ไม่ได้ ไม่ใช่แค่ไม่ตรงใจ
+#
+# คัดจากชื่อหลักสูตรแทนการเพิ่มคอลัมน์ เพราะระดับปริญญาอยู่ในชื่อเสมอตามระเบียบการ
+# ตั้งชื่อหลักสูตรของ สกอ. ("...มหาบัณฑิต" = โท, "...ดุษฎีบัณฑิต" = เอก) เอกสารที่
+# เพิ่มเข้ามาทีหลังจึงถูกคัดถูกต้องเองโดยไม่ต้องไปตั้งค่าอะไรเพิ่ม
+#
+# หมายเหตุ: กันออกจาก "การจับคู่" เท่านั้น ถามตรงๆ ในแชทว่าคณะมีปริญญาโทอะไรบ้าง
+# ยังตอบได้ตามปกติ เพราะการค้นเอกสารตอนแชทไม่ได้ใช้เงื่อนไขนี้
+_UNDERGRAD_ONLY = "c.is_active AND c.title NOT LIKE '%มหาบัณฑิต%' AND c.title NOT LIKE '%ดุษฎีบัณฑิต%'"
+
+# เวกเตอร์ของชื่อหลักสูตรทุกเล่มที่ใช้จับคู่ได้ คำนวณครั้งเดียวต่อโปรเซส
 _TITLE_CACHE: dict[uuid.UUID, list[float]] | None = None
 
 
@@ -177,7 +191,7 @@ def score_all_programs(db: Session, profile_embedding: list[float]) -> list[dict
     จะช้ากว่ามากโดยไม่ได้อะไรเพิ่ม
     """
     rows = db.execute(
-        text("""
+        text(f"""
             WITH ranked AS (
                 SELECT ch.course_id,
                        ch.id AS chunk_id,
@@ -188,7 +202,7 @@ def score_all_programs(db: Session, profile_embedding: list[float]) -> list[dict
                        ) AS rn
                 FROM course_chunks ch
                 JOIN courses c ON c.id = ch.course_id
-                WHERE c.is_active
+                WHERE {_UNDERGRAD_ONLY}
             )
             SELECT r.course_id,
                    c.title,
@@ -260,12 +274,12 @@ def _title_vectors(db: Session, connector) -> dict[uuid.UUID, list[float]]:
     """
     เวกเตอร์ของ "ชื่อหลักสูตร" แต่ละเล่ม คำนวณครั้งเดียวแล้วเก็บไว้ใช้ซ้ำ
 
-    มีเพียง 18 หลักสูตร การคำนวณครั้งแรกจึงใช้เวลาไม่ถึงสองวินาที และหลังจากนั้น
-    ไม่มีค่าใช้จ่ายอีกเลยตลอดอายุของโปรเซส
+    มีหลักสูตรระดับปริญญาตรีไม่กี่สิบเล่ม การคำนวณครั้งแรกจึงใช้เวลาไม่ถึงสองวินาที
+    และหลังจากนั้นไม่มีค่าใช้จ่ายอีกเลยตลอดอายุของโปรเซส
     """
     global _TITLE_CACHE
     if _TITLE_CACHE is None:
-        rows = db.execute(text("SELECT id, title FROM courses WHERE is_active")).all()
+        rows = db.execute(text(f"SELECT id, title FROM courses c WHERE {_UNDERGRAD_ONLY}")).all()
         _TITLE_CACHE = {r.id: connector.embed(_distinctive_name(r.title)) for r in rows}
     return _TITLE_CACHE
 

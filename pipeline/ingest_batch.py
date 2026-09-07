@@ -6,6 +6,11 @@
 ชื่อหลักสูตร (title) อ่านจาก <dir>/titles.json ถ้ามี — รูปแบบ {"<ชื่อไฟล์ไม่รวม .pdf>": "<ชื่อหลักสูตร>"}
 ถ้าไม่มีไฟล์นั้นหรือไม่มี key ของไฟล์นั้น จะใช้ชื่อไฟล์เป็น title แทน
 
+รหัสหลักสูตร (course_code) ปกติใช้ชื่อไฟล์ แต่ override ได้ที่ <dir>/codes.json
+รูปแบบเดียวกัน — จำเป็นเมื่อเอกสารคนละไฟล์เป็นหลักสูตรเดียวกัน เช่น มคอ.2 ฉบับเต็ม
+กับใบสรุปหลักสูตรของสาขาเดียวกัน ต้องผูกเข้า course เดิม ไม่งั้นหน้าเว็บจะขึ้นสาขา
+เดียวกันสองรายการ
+
 ทำไมต้องมีสคริปต์นี้: ingest.py รับทีละไฟล์ตาม design (หนึ่งเอกสาร = หนึ่ง
 transaction) แต่การ ingest คลังทั้งชุดต้องทำซ้ำทุกครั้งที่แก้ pipeline การพิมพ์
 คำสั่งเองทีละ 18 บรรทัดทั้งช้าและพลาดง่าย
@@ -52,14 +57,21 @@ def main() -> None:
     else:
         logger.warning("ไม่พบ %s — จะใช้ชื่อไฟล์เป็นชื่อหลักสูตรแทน", titles_path)
 
+    codes_path = folder / "codes.json"
+    codes: dict[str, str] = {}
+    if codes_path.is_file():
+        codes = json.loads(codes_path.read_text(encoding="utf-8"))
+        logger.info("อ่านรหัสหลักสูตรจาก %s (%d รายการ)", codes_path, len(codes))
+
     ok, failed = 0, []
     started = time.time()
     for i, pdf in enumerate(pdfs, start=1):
         title = titles.get(pdf.stem, pdf.stem)
-        logger.info("[%d/%d] %s — %s", i, len(pdfs), pdf.name, title)
+        code = codes.get(pdf.stem, pdf.stem)
+        logger.info("[%d/%d] %s — %s (รหัส %s)", i, len(pdfs), pdf.name, title, code)
         t0 = time.time()
         try:
-            run(str(pdf), title=title, course_code=pdf.stem, provider=args.provider)
+            run(str(pdf), title=title, course_code=code, provider=args.provider)
             ok += 1
             logger.info("[%d/%d] เสร็จใน %.1f วินาที", i, len(pdfs), time.time() - t0)
         except Exception as e:
