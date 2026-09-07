@@ -45,9 +45,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     folder = Path(args.dir)
-    pdfs = sorted(folder.glob("*.pdf"))
+    # รับไฟล์ข้อความด้วย สำหรับหลักสูตรที่คณะไม่ได้เผยแพร่ มคอ.2 เป็นไฟล์
+    pdfs = sorted([*folder.glob("*.pdf"), *folder.glob("*.txt")])
     if not pdfs:
-        raise SystemExit(f"ไม่พบไฟล์ PDF ใน {folder}")
+        raise SystemExit(f"ไม่พบไฟล์เอกสารใน {folder}")
 
     titles_path = Path(args.titles) if args.titles else folder / "titles.json"
     titles: dict[str, str] = {}

@@ -35,7 +35,7 @@ from llm.connector import OllamaConnector  # noqa: E402
 from pipeline.chunker import chunk_document  # noqa: E402
 from pipeline.clean import clean_document  # noqa: E402
 from pipeline.embed import embed_chunks  # noqa: E402
-from pipeline.extract_pdf import ExtractedDocument, ExtractedPage, extract_pdf  # noqa: E402
+from pipeline.extract_pdf import ExtractedDocument, ExtractedPage, extract_document  # noqa: E402
 from pipeline.ocr import UNREADABLE  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -179,7 +179,7 @@ def run(pdf_path: str, title: str, course_code: str | None, provider: str | None
     embed_model = os.environ.get("EMBED_MODEL", "nomic-embed-text")
 
     logger.info("extracting %s", pdf_path)
-    raw_doc = extract_pdf(pdf_path)
+    raw_doc = extract_document(pdf_path)
 
     # ถามก่อนว่าเคยนำเข้าไฟล์นี้แล้วหรือยัง การ extract ใช้เวลาไม่กี่วินาที
     # แต่การ embed ใช้เป็นชั่วโมงบนเครื่องที่ไม่มีการ์ดจอ
