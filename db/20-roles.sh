@@ -50,7 +50,11 @@ psql -v ON_ERROR_STOP=1 \
     CREATE ROLE advisor_ingest LOGIN PASSWORD :'ingest_password';
 
     GRANT USAGE ON SCHEMA public TO advisor_ingest;
-    GRANT SELECT, INSERT, UPDATE ON courses, course_documents, course_chunks TO advisor_ingest;
+    GRANT SELECT, INSERT, UPDATE ON courses, course_documents TO advisor_ingest;
+    -- ต้องมีสิทธิ์ DELETE เฉพาะ course_chunks เพราะการนำเข้าเอกสารเล่มเดิมซ้ำ
+    -- (เช่น หลังจากเติมข้อความจาก OCR) ต้องล้าง chunk ชุดเก่าของเล่มนั้นก่อน
+    -- ไม่งั้นจะได้เนื้อหาซ้ำสองชุดในคลัง และชนกับ unique (document_id, chunk_index)
+    GRANT SELECT, INSERT, UPDATE, DELETE ON course_chunks TO advisor_ingest;
     -- ไม่ให้สิทธิ์ users/user_profiles/recommendations โดยเจตนา:
     -- pipeline ไม่มีเหตุผลต้องอ่านข้อมูลส่วนบุคคลของผู้ใช้เลย
 

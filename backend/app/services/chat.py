@@ -19,7 +19,7 @@ import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -255,6 +255,34 @@ def _is_about_scope(connector, question: str) -> bool:
     )
 
 
+# ชื่อเฉพาะของหลักสูตรทุกเล่มในคลัง อ่านครั้งเดียวต่อโปรเซส
+_PROGRAM_NAMES: list[str] | None = None
+
+
+def _names_a_program(db: Session, question: str) -> bool:
+    """
+    คำถามนี้เอ่ยชื่อหลักสูตรที่มีอยู่จริงในคลังหรือไม่
+
+    ใช้ลัดการถามโมเดลว่าคำถามอยู่ในขอบเขตไหม เพราะถ้าผู้ใช้เอ่ยชื่อหลักสูตรของคณะ
+    มาตรงๆ คำถามนั้นอยู่ในขอบเขตแน่นอน ไม่มีกรณีที่ต้องตีความ
+
+    ที่ต้องมีเพราะตัวคัดกรองที่เป็นโมเดลตัดสินผิดกับชื่อสาขาที่พ้องกับชื่อศาสตร์
+    ทั่วไป วัดได้กับคำถามจริง: "สาขาสาธารณสุขศาสตร์มีวิชาบังคับอะไรบ้าง" ถูกตอบว่า
+    อยู่นอกขอบเขต ทั้งที่ถามถึงหลักสูตรของคณะตรงๆ — โมเดลอ่านคำว่าสาธารณสุขเป็น
+    เรื่องสุขภาพ ไม่ใช่เรื่องมหาวิทยาลัย ส่วนคำถามเดียวกันที่ขึ้นต้นด้วยคำว่า
+    "หลักสูตร" กลับผ่าน ความต่างระดับนี้ไม่ควรเป็นตัวตัดสินว่าผู้ใช้จะได้คำตอบไหม
+
+    เทียบแบบตรงตัวพอ เพราะผู้ใช้ที่ถามถึงสาขาหนึ่งมักพิมพ์ชื่อสาขานั้นตามที่เห็น
+    ในหน้าเว็บ และการเดาชื่อที่พิมพ์ผิดจะทำให้ด่านนี้กว้างเกินจนไม่กรองอะไรเลย
+    """
+    global _PROGRAM_NAMES
+    if _PROGRAM_NAMES is None:
+        rows = db.execute(text("SELECT title FROM courses WHERE is_active")).all()
+        # ชื่อสั้นๆ ตัดทิ้ง เพราะเสี่ยงไปตรงกับคำทั่วไปในประโยคที่ไม่ได้พูดถึงหลักสูตร
+        _PROGRAM_NAMES = sorted({n for r in rows if len(n := _distinctive_name(r.title)) >= 6})
+    return any(name in question for name in _PROGRAM_NAMES)
+
+
 def _can_answer_from(connector, chunks, question: str) -> bool:
     """เนื้อหาที่ค้นเจอมีข้อเท็จจริงตอบคำถามนี้ได้จริงไหม"""
     return _ask_json_flag(
@@ -484,13 +512,22 @@ def prepare_answer(
     thai = written_in_thai(message)
     out_of_scope = OUT_OF_SCOPE_REPLY if thai else OUT_OF_SCOPE_REPLY_EN
     not_found = NOT_FOUND_REPLY if thai else NOT_FOUND_REPLY_EN
-    if best_score < OFF_TOPIC_THRESHOLD:
+    # ผู้ใช้เอ่ยชื่อหลักสูตรของคณะมาเอง คำถามจึงอยู่ในขอบเขตแน่นอน ไม่ว่าคะแนนค้นหา
+    # จะต่ำแค่ไหน คะแนนต่ำในกรณีนี้แปลว่า "เอกสารไม่มีเรื่องที่ถาม" ไม่ใช่ "ถามนอกเรื่อง"
+    # ซึ่งต้องตอบคนละแบบ — เจอจริงกับหลักสูตรสาธารณสุขศาสตร์ที่คลังมีแต่ข้อมูลจากหน้าเว็บ
+    # ไม่มีรายวิชา ผู้ใช้ถามถึงวิชาบังคับแล้วถูกตอบว่าถามนอกเรื่อง
+    names_program = _names_a_program(db, message)
+    if best_score < OFF_TOPIC_THRESHOLD and not names_program:
         # ต่ำขนาดนี้คือไม่มีอะไรในคลังใกล้เคียงเลย ตัดจบโดยไม่ต้องเสียเวลาเรียก LLM
         reply_text, status = out_of_scope, "out_of_scope"
     # ช่วงก้ำกึ่ง: คะแนนแยกไม่ออกว่า "นอกเรื่อง" หรือ "ในเรื่องแต่เอกสารไม่ครอบคลุม"
     # จึงถามเรื่องหัวข้อเพิ่มอีกหนึ่งคำถาม เฉพาะในช่วงนี้เท่านั้น เพื่อไม่ให้คำถาม
     # ที่คะแนนสูงอยู่แล้ว (ซึ่งอยู่ในเรื่องแน่นอน) ต้องเสียเวลาเรียก LLM เพิ่ม
-    elif best_score < AMBIGUOUS_UNTIL and not _is_about_scope(connector, search_query):
+    elif (
+        best_score < AMBIGUOUS_UNTIL
+        and not names_program
+        and not _is_about_scope(connector, search_query)
+    ):
         reply_text, status = out_of_scope, "out_of_scope"
     elif not _can_answer_from(connector, chunks, search_query):
         reply_text, status = not_found, "not_found"

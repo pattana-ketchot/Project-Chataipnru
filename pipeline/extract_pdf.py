@@ -73,6 +73,34 @@ def extract_pdf(path: str | Path) -> ExtractedDocument:
     return ExtractedDocument(file_sha256=file_hash, page_count=len(pages), pages=pages)
 
 
+def extract_text_file(path: str | Path) -> ExtractedDocument:
+    """
+    อ่านเอกสารที่เป็นไฟล์ข้อความล้วน ให้ผลรูปแบบเดียวกับที่อ่านจาก PDF
+
+    มีไว้สำหรับหลักสูตรที่คณะไม่ได้เผยแพร่ มคอ.2 เป็นไฟล์ ข้อมูลที่เป็นทางการที่สุด
+    ที่มีอยู่คือหน้ารายละเอียดหลักสูตรบนเว็บคณะ ซึ่งบันทึกไว้เป็นไฟล์ข้อความได้
+    ถ้าไม่มีทางนี้ ระบบจะไม่รู้จักหลักสูตรนั้นเลยทั้งที่หน้าเว็บแสดงรายชื่อมันอยู่
+    ผู้ใช้ถามแล้วได้คำตอบว่าไม่มีข้อมูล ซึ่งดูเหมือนระบบพัง
+
+    แบ่ง "หน้า" ตามบรรทัดว่างสองบรรทัด เพื่อให้เลขหน้าที่อ้างอิงกลับไปหาต้นทางได้
+    ตรงกับหัวข้อในไฟล์ ไม่ใช่เลขที่ไม่มีความหมาย
+    """
+    path = Path(path)
+    raw_bytes = path.read_bytes()
+    text = raw_bytes.decode("utf-8")
+    blocks = [b.strip() for b in text.split("\n\n") if b.strip()]
+    return ExtractedDocument(
+        file_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+        page_count=len(blocks),
+        pages=[ExtractedPage(page_number=i, text=b) for i, b in enumerate(blocks, start=1)],
+    )
+
+
+def extract_document(path: str | Path) -> ExtractedDocument:
+    """เลือกวิธีอ่านตามชนิดไฟล์"""
+    return extract_text_file(path) if Path(path).suffix.lower() == ".txt" else extract_pdf(path)
+
+
 if __name__ == "__main__":
     import sys
 
