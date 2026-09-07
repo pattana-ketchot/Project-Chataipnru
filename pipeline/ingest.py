@@ -15,6 +15,7 @@ SECURITY:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -34,7 +35,8 @@ from llm.connector import OllamaConnector  # noqa: E402
 from pipeline.chunker import chunk_document  # noqa: E402
 from pipeline.clean import clean_document  # noqa: E402
 from pipeline.embed import embed_chunks  # noqa: E402
-from pipeline.extract_pdf import extract_pdf  # noqa: E402
+from pipeline.extract_pdf import ExtractedDocument, ExtractedPage, extract_pdf  # noqa: E402
+from pipeline.ocr import UNREADABLE  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("pipeline.ingest")
@@ -42,6 +44,61 @@ logger = logging.getLogger("pipeline.ingest")
 # อ่าน .env ที่ root ของ repo (override=False -> env var จริงที่ตั้งไว้แล้วชนะเสมอ
 # เพื่อให้ override ตอนรันใน CI/container ได้)
 load_dotenv(_REPO_ROOT / ".env", override=False)
+
+
+def apply_ocr(doc: ExtractedDocument, filename: str, ocr_path: str | None) -> ExtractedDocument:
+    """
+    เติมข้อความจาก OCR ลงหน้าที่เป็นภาพสแกน
+
+    รับผลที่ pipeline/ocr.py ถอดไว้ล่วงหน้าเป็นไฟล์ JSON แทนการเรียก OCR ตอนนำเข้า
+    ด้วยเหตุผลสองข้อ: การนำเข้าใหม่แต่ละรอบจะได้ไม่ต้องจ่ายค่า OCR ซ้ำ และผลของ OCR
+    ตรวจด้วยตาได้ก่อนว่าจะให้เข้าคลังหรือไม่ ซึ่งจำเป็นเพราะ OCR ผิดคือข้อมูลผิด
+    ที่ระบบจะเอาไปตอบอย่างมั่นใจ
+
+    ต่อท้ายข้อความเดิมของหน้านั้น ไม่ทับ เพราะหน้าสแกนมักมีหัวกระดาษกับเลขหน้าเป็น
+    ข้อความจริงอยู่แล้ว ซึ่งเป็นตัวบอกว่าเนื้อหาอยู่หน้าไหนของเล่ม
+    """
+    if not ocr_path:
+        return doc
+    table = json.loads(Path(ocr_path).read_text(encoding="utf-8"))
+
+    pages, filled = [], 0
+    for page in doc.pages:
+        extra = table.get(f"{filename}#{page.page_number}", "").strip()
+        # หน้าที่ OCR อ่านไม่ออกให้ปล่อยว่างไว้ตามเดิม ดีกว่าใส่ข้อความที่ไม่มีความหมาย
+        if extra and UNREADABLE not in extra:
+            pages.append(ExtractedPage(page.page_number, f"{page.text}\n{extra}"))
+            filled += 1
+        else:
+            pages.append(page)
+
+    if filled:
+        logger.info("เติมข้อความจาก OCR ลง %d หน้า", filled)
+    return ExtractedDocument(file_sha256=doc.file_sha256, page_count=doc.page_count, pages=pages)
+
+
+def already_ingested(database_url: str, sha256: str) -> bool:
+    """
+    เคยนำเข้าไฟล์นี้ไปแล้วหรือยัง — ถามก่อนเริ่มทำ embedding
+
+    เดิมโค้ดเช็คซ้ำหลังทำ embedding เสร็จ เพราะ ON CONFLICT อยู่ตอน insert อยู่แล้ว
+    ผลคือการนำเข้าซ้ำทั้งโฟลเดอร์ต้องเสีย embedding ใหม่ทุก chunk ก่อนจะรู้ว่าไม่ต้องใช้
+    วัดจริงตอนเพิ่มไฟล์เดียวเข้าคลัง 19 เล่ม: ต้องคำนวณ 7,301 chunk ทิ้งบนเครื่องที่
+    ไม่มีการ์ดจอ ราวสองชั่วโมง เพื่อจะเก็บของจริงแค่ 140 chunk
+
+    เช็คด้วย sha256 ของไฟล์เหมือนกับที่ ON CONFLICT ใช้ ผลจึงตรงกันเสมอ และยังเก็บ
+    ON CONFLICT ไว้เป็นด่านสุดท้ายกันสองงานที่รันพร้อมกันเขียนซ้ำ
+
+    นับเฉพาะที่ทำเสร็จแล้ว (status = done) การนำเข้าที่ค้างหรือพังกลางทางจะเหลือ
+    แถวที่ยังไม่มี chunk อยู่ ถ้านับว่า "เคยนำเข้าแล้ว" ด้วย เอกสารเล่มนั้นจะถูกข้าม
+    ตลอดไปและหายไปจากคลังเงียบๆ โดยไม่มีอะไรฟ้อง
+    """
+    with psycopg.connect(database_url) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM course_documents WHERE file_sha256 = %s AND extraction_status = 'done'",
+            (sha256,),
+        )
+        return cur.fetchone() is not None
 
 
 def get_or_create_course(conn: psycopg.Connection, course_code: str | None, title: str, provider: str | None) -> uuid.UUID:
@@ -65,13 +122,22 @@ def insert_document(conn: psycopg.Connection, course_id: uuid.UUID, filename: st
             INSERT INTO course_documents
                 (course_id, original_filename, file_sha256, storage_path, page_count, extraction_status)
             VALUES (%s, %s, %s, %s, %s, 'processing')
-            ON CONFLICT (course_id, file_sha256) DO NOTHING
+            ON CONFLICT (course_id, file_sha256) DO UPDATE
+                SET extraction_status = 'processing',
+                    extraction_error = NULL,
+                    page_count = EXCLUDED.page_count
+                WHERE course_documents.extraction_status <> 'done'
             RETURNING id
             """,
             (course_id, filename, sha256, storage_path, page_count),
         )
         row = cur.fetchone()
-        return row[0] if row else None  # None = ไฟล์นี้เคย ingest แล้ว (dedupe ด้วย sha256)
+        # None = มีแถวนี้อยู่แล้วและทำเสร็จไปแล้ว จึงไม่ต้องทำซ้ำ
+        #
+        # ถ้าแถวเดิมยังไม่ done (ค้างหรือพังกลางทาง) จะยึดแถวนั้นมาทำต่อแทนการข้าม
+        # เดิมใช้ DO NOTHING ซึ่งทำให้เอกสารที่นำเข้าไม่สำเร็จติดค้างถาวร — รันใหม่
+        # กี่ครั้งก็ถูกมองว่าซ้ำ ต้องเข้าไปลบแถวใน DB เองถึงจะแก้ได้
+        return row[0] if row else None
 
 
 def mark_document_status(conn: psycopg.Connection, document_id: uuid.UUID, status: str, error: str | None = None) -> None:
@@ -88,6 +154,9 @@ def insert_chunks(conn: psycopg.Connection, course_id: uuid.UUID, document_id: u
         for c, emb in zip(chunks, embeddings)
     ]
     with conn.cursor() as cur:
+        # ล้างของเดิมก่อน เผื่อเป็นการทำซ้ำเอกสารที่นำเข้าค้างไว้ ไม่งั้นจะชน
+        # unique (document_id, chunk_index) หรือได้เนื้อหาซ้ำสองชุดในคลัง
+        cur.execute("DELETE FROM course_chunks WHERE document_id = %s", (document_id,))
         cur.executemany(
             """
             INSERT INTO course_chunks
@@ -111,6 +180,14 @@ def run(pdf_path: str, title: str, course_code: str | None, provider: str | None
 
     logger.info("extracting %s", pdf_path)
     raw_doc = extract_pdf(pdf_path)
+
+    # ถามก่อนว่าเคยนำเข้าไฟล์นี้แล้วหรือยัง การ extract ใช้เวลาไม่กี่วินาที
+    # แต่การ embed ใช้เป็นชั่วโมงบนเครื่องที่ไม่มีการ์ดจอ
+    if already_ingested(database_url, raw_doc.file_sha256):
+        logger.info("document already ingested (sha256 match) — skipping before embedding")
+        return
+
+    raw_doc = apply_ocr(raw_doc, Path(pdf_path).name, os.environ.get("OCR_TEXT_JSON"))
     cleaned_doc = clean_document(raw_doc)
     chunks = chunk_document(cleaned_doc)
     logger.info("produced %d chunks from %d pages", len(chunks), cleaned_doc.page_count)
