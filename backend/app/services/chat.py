@@ -25,7 +25,7 @@ from app.db.session import SessionLocal
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.chat_history import user_first
-from app.services.course_scope import resolve_scope
+from app.services.course_scope import _distinctive_name, resolve_scope
 from app.services.llm_client import get_llm_connector, no_fallback_kwargs
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
@@ -303,6 +303,67 @@ def written_in_thai(text: str) -> bool:
     return any("฀" <= ch <= "๿" for ch in text)
 
 
+# คำที่บ่งชี้ว่าผู้ใช้กำลังขอ "คำแนะนำว่าควรเรียนสาขาไหน" ไม่ใช่ถามข้อเท็จจริงในเอกสาร
+_RECOMMEND_WORDS = (
+    "เหมาะกับ", "เหมาะสำหรับ", "แนะนำสาขา", "แนะนำหลักสูตร", "ควรเรียนสาขา",
+    "ควรเลือกสาขา", "เลือกสาขาไหน", "สาขาไหนดี", "เรียนอะไรดี", "เรียนสาขาไหนดี",
+    "which major", "which program", "what should i study", "recommend a major",
+)
+
+
+def _asks_for_a_recommendation(text: str) -> bool:
+    """
+    คำถามนี้ขอให้ช่วยเลือกสาขาหรือไม่
+
+    ทำไมต้องแยกออกมา
+    ---------------
+    ด่านตรวจ _can_answer_from() ถามโมเดลว่า "เนื้อหาที่ค้นเจอมีข้อเท็จจริงตอบคำถามนี้
+    ได้จริงไหม" ซึ่งเป็นคำถามที่ถูกต้องสำหรับคำถามเชิงข้อเท็จจริง แต่ผิดสำหรับคำถามขอ
+    คำแนะนำ เพราะไม่มีเอกสารเล่มไหนเขียนว่า "หลักสูตรนี้เหมาะกับคนชอบคอมพิวเตอร์"
+
+    ผลคือคำถามที่เป็นหัวใจของเว็บนี้ถูกปฏิเสธแบบสุ่ม วัดจากระบบจริงด้วยคำถามเดียวกัน
+    หกครั้ง: ปฏิเสธ 3 ตอบได้ 3
+
+    คำถามแบบนี้จึงส่งไปให้ระบบจับคู่สาขาแทน ซึ่งคิดคะแนนจากความใกล้เคียงระหว่างสิ่งที่
+    ผู้ใช้บอกกับเนื้อหาจริงในเอกสารทุกเล่ม เป็นการคำนวณที่ทำซ้ำได้ ไม่ใช่ให้โมเดลเดา
+    """
+    lowered = text.lower()
+    return any(w in lowered for w in _RECOMMEND_WORDS)
+
+
+def _recommendation_reply(db: Session, message: str) -> str | None:
+    """
+    ตอบคำถามขอคำแนะนำด้วยผลจากระบบจับคู่สาขา คืน None ถ้าจัดอันดับไม่ได้
+
+    บอกที่มาของอันดับไว้ในคำตอบเสมอ และถ้าคะแนนเกาะกลุ่มกันจนแยกไม่ออกก็บอกตรงๆ
+    ไม่ชูอันดับ 1 ราวกับมั่นใจ
+    """
+    from app.services.program_match import confidence_of, match_programs
+
+    try:
+        matches = match_programs(db, {"extra": message}, limit=3)
+    except (ValueError, LLMConnectionError):
+        return None
+    if not matches:
+        return None
+
+    lines = ["จากสิ่งที่คุณบอกมา สาขาที่ใกล้เคียงที่สุดในคณะคือ"]
+    for i, m in enumerate(matches, 1):
+        name = _distinctive_name(m.title)
+        lines.append(f"{i}. {name} ({m.match_percent}%)")
+        if m.rationale.strip():
+            lines.append(f"   {m.rationale.strip()}")
+
+    if confidence_of(matches) == "low":
+        lines.append("")
+        lines.append("คะแนนของหลายสาขาใกล้เคียงกันมาก แนะนำให้ดูทุกสาขาประกอบกัน ไม่ควรยึดอันดับ 1 อย่างเดียว")
+
+    lines.append("")
+    lines.append("อันดับนี้คำนวณจากความใกล้เคียงกับเนื้อหาในเอกสารหลักสูตรของทุกสาขา "
+                 "ถามรายละเอียดของสาขาไหนต่อได้เลยครับ")
+    return "\n".join(lines)
+
+
 def _asks_for_a_number(text: str) -> bool:
     """
     คำถามนี้ต้องการตัวเลขที่ผิดไม่ได้หรือไม่
@@ -368,6 +429,20 @@ def prepare_answer(
             best_score=0.0,
             citations=[],
             canned=tuition_answer(message),
+            messages=[],
+        )
+
+    # --- 0.7 คำถามขอคำแนะนำว่าควรเรียนสาขาไหน -> ใช้ระบบจับคู่สาขา ไม่ใช่ถาม-ตอบเอกสาร ---
+    # ด่านตรวจว่าเอกสารตอบได้ไหมใช้ไม่ได้กับคำถามประเภทนี้ (ดูเหตุผลใน
+    # _asks_for_a_recommendation) ถ้าจัดอันดับไม่สำเร็จก็ปล่อยให้ไหลไปทางปกติ
+    if _asks_for_a_recommendation(message) and (advice := _recommendation_reply(db, message)):
+        return Prepared(
+            session_id=session.id,
+            status="answered",
+            search_query=message,
+            best_score=0.0,
+            citations=[],
+            canned=advice,
             messages=[],
         )
 
