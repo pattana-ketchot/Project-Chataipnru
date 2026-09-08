@@ -118,6 +118,11 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
                 elif kind == "error":
                     # ส่งเป็นตัวอักษรต่อท้าย เพราะสถานะ HTTP ถูกส่งไปตั้งแต่ตัวอักษรแรกแล้ว
                     yield "\n\n" + parsed.get("detail", BUSY)
+        except LLMConnectionError as e:
+            # ตัวเชื่อมต่อเขียนเหตุผลไว้ให้ผู้ใช้อ่านรู้เรื่องแล้วและไม่มีข้อมูลลับปนอยู่
+            # จึงส่งต่อตามนั้น ก่อนหน้านี้ถูกกลืนไปกับ Exception ก้อนล่าง ผู้ใช้จึงเห็นแค่
+            # "ระบบตอบไม่ได้ในขณะนี้" ทั้งที่ระบบตั้งใจไม่ตอบและอธิบายเหตุผลไว้แล้ว
+            yield "\n\n" + (str(e).strip() or BUSY)
         except Exception:
             logger.exception("chat-web ล้มกลางคัน")
             yield "\n\n" + BUSY
