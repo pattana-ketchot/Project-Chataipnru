@@ -26,6 +26,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.deps import web_rate_limiter
 from app.db.session import get_db
 from app.services.chat import stream_answer
 from app.services.program_compare import compare_programs
@@ -80,7 +81,7 @@ class WebRecommendRequest(BaseModel):
     courses: list[WebCourse] = Field(min_length=1)
 
 
-@router.post("/chat-web")
+@router.post("/chat-web", dependencies=[Depends(web_rate_limiter)])
 def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
     """
     แชทในรูปแบบที่หน้าเว็บรออยู่ — ส่งกลับเป็นข้อความดิบ ไม่ใช่ Server-Sent Events
@@ -161,7 +162,7 @@ def _row_value(rows, dimension: str, index: int) -> str | None:
     return None
 
 
-@router.post("/compare-courses")
+@router.post("/compare-courses", dependencies=[Depends(web_rate_limiter)])
 def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db)) -> dict:
     """
     เปรียบเทียบสาขาในรูปแบบที่หน้าเว็บรออยู่
@@ -212,7 +213,7 @@ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db
     }
 
 
-@router.post("/recommend-major")
+@router.post("/recommend-major", dependencies=[Depends(web_rate_limiter)])
 def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_db)) -> dict:
     """
     แนะนำสาขาในรูปแบบที่หน้าเว็บรออยู่

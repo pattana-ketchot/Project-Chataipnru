@@ -27,6 +27,7 @@ from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.chat_history import user_first
 from app.services.course_scope import _distinctive_name, resolve_scope
+from app.services.answer_cache import corpus_version, lookup as cache_lookup, store as cache_store
 from app.services.llm_client import get_llm_connector, no_fallback_kwargs
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
@@ -315,6 +316,10 @@ class Prepared:
     messages: list[LLMMessage]
     # False = ห้ามตกไปใช้โมเดลสำรอง ดูเหตุผลใน _asks_for_a_number()
     allow_fallback: bool = True
+    # False = ห้ามเก็บคำตอบนี้ลงแคช (หยิบมาจากแคชเอง หรือคำถามพึ่งบทสนทนาก่อนหน้า)
+    cacheable: bool = True
+    # สภาพคลังเอกสารตอนตอบ ใช้ผูกแถวในแคชไว้กับคลังรุ่นที่ใช้ตอบจริง
+    corpus_version: str = ""
 
 
 # คำที่บ่งชี้ว่าผู้ใช้ถามหาตัวเลขเจาะจง ไม่ใช่คำอธิบายกว้างๆ
@@ -443,6 +448,27 @@ def prepare_answer(
     session = _load_session(db, user_id, session_id)
     history = _load_history(db, session.id)
 
+    # --- -1. เคยตอบคำถามนี้ไปแล้วไหม -> ใช้คำตอบเดิม ไม่ต้องเรียกโมเดลใหม่ ---
+    #
+    # ใช้แคชเฉพาะข้อความแรกของบทสนทนา เพราะคำถามที่มีบทสนทนานำหน้าตีความได้ก็ต่อเมื่อ
+    # อ่านบริบทก่อนหน้าด้วย คำว่า "แล้วค่าเทอมล่ะ" หมายถึงคนละสาขากันได้ในสองบทสนทนา
+    # การเทียบจากตัวคำถามอย่างเดียวจึงหยิบคำตอบผิดมาให้
+    #
+    # หน้าเว็บส่งคำถามมาโดยไม่มี session_id ทุกครั้ง ข้อความจากหน้าเว็บจึงเข้าเงื่อนไข
+    # นี้เสมอ ซึ่งเป็นทางที่ผู้ใช้จริงเกือบทั้งหมดเข้ามา
+    version = corpus_version(db)
+    if not history and (hit := cache_lookup(db, message, version)) is not None:
+        return Prepared(
+            session_id=session.id,
+            status=hit["status"],
+            search_query=message,
+            best_score=0.0,
+            citations=[ChatCitation(**c) for c in hit["citations"]],
+            canned=hit["reply"],
+            messages=[],
+            cacheable=False,  # หยิบมาจากแคชอยู่แล้ว ไม่ต้องเขียนกลับ
+        )
+
     # --- 0. คำทักทาย/ขอบคุณ/ถามตัวตน -> ตอบทันทีโดยไม่ค้นเอกสารและไม่เรียก LLM ---
     if (canned := match_small_talk(message)) is not None:
         return Prepared(
@@ -453,6 +479,7 @@ def prepare_answer(
             citations=[],
             canned=canned,
             messages=[],
+            cacheable=False,  # ตอบจากตารางคำทักทาย ไม่ได้เรียกโมเดลอยู่แล้ว
         )
 
     # --- 0.5 คำถามค่าเทอม -> ตอบจากตารางประกาศของคณะ ไม่ค้นเอกสาร มคอ.2 ---
@@ -470,6 +497,7 @@ def prepare_answer(
             citations=[],
             canned=tuition_answer(message),
             messages=[],
+            cacheable=False,  # ตอบจากตารางค่าเทอม ไม่ได้เรียกโมเดลอยู่แล้ว
         )
 
     # --- 0.7 คำถามขอคำแนะนำว่าควรเรียนสาขาไหน -> ใช้ระบบจับคู่สาขา ไม่ใช่ถาม-ตอบเอกสาร ---
@@ -484,6 +512,8 @@ def prepare_answer(
             citations=[],
             canned=advice,
             messages=[],
+            cacheable=not history,
+            corpus_version=version,
         )
 
     # --- 1. ค้นด้วยคำถามดิบก่อนเสมอ ---
@@ -572,6 +602,8 @@ def prepare_answer(
         messages=messages,
         # คำตอบที่อ้างอิงเอกสารห้ามตกไปใช้โมเดลสำรอง ดูเหตุผลใน _asks_for_a_number()
         allow_fallback=status != "answered",
+        cacheable=not history,
+        corpus_version=version,
     )
 
 
@@ -597,6 +629,11 @@ def answer_question(
         ).strip()
 
     _persist(db, p.session_id, message, reply_text)
+    if p.cacheable:
+        cache_store(
+            db, message, p.corpus_version, p.status, reply_text,
+            [c.model_dump(mode="json") for c in p.citations],
+        )
 
     return ChatReply(
         session_id=p.session_id,
@@ -656,6 +693,11 @@ def stream_answer(
 
     with SessionLocal() as fresh:
         _persist(fresh, p.session_id, message, reply_text)
+        if p.cacheable:
+            cache_store(
+                fresh, message, p.corpus_version, p.status, reply_text,
+                [c.model_dump(mode="json") for c in p.citations],
+            )
     yield _sse("done", {})
 
 
