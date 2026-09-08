@@ -1,0 +1,158 @@
+"""
+เก็บคำตอบที่เคยตอบไปแล้ว ไว้ตอบคำถามเดิมซ้ำโดยไม่ต้องเรียกโมเดลอีก
+
+ทำไมต้องมี
+---------
+โควตาฟรีของ Gemini คือ 500 คำขอต่อวัน (วัดจากข้อความที่ Google ส่งกลับมาตอนโควตาหมด
+จริง ไม่ใช่ตัวเลขที่จำมา) และหนึ่งคำถามของผู้ใช้ใช้ไป 3-4 คำขอ — ย่อบทสนทนา ตรวจ
+ขอบเขต ตรวจว่าเอกสารตอบได้ แล้วค่อยเขียนคำตอบ ความจุจริงจึงราว 140 คำถามต่อวัน
+ซึ่งไม่พอถ้าเปิดให้นักเรียนทั้งคณะใช้
+
+คำถามของนักเรียนซ้ำกันมากโดยธรรมชาติ ทุกคนถามว่าสาขาที่สนใจเรียนกี่หน่วยกิต จบแล้ว
+ทำงานอะไร ค่าเทอมเท่าไหร่ คำถามเดิมบนเอกสารชุดเดิมย่อมให้คำตอบเดิม การเก็บไว้ใช้ซ้ำ
+จึงไม่ได้ลดคุณภาพลงเลย และยังตอบเร็วขึ้นมากเพราะไม่ต้องรอโมเดล
+
+ทำไมเก็บใน PostgreSQL ไม่ใช่หน่วยความจำของโปรเซส
+------------------------------------------------
+แคชในหน่วยความจำหายทุกครั้งที่ deploy ซึ่งเกิดบ่อยกว่าที่คิด และถ้าวันหนึ่งรันหลาย
+โปรเซส แต่ละตัวจะสะสมแคชของตัวเองแยกกัน ได้ประโยชน์ไม่ถึงเศษเสี้ยวของที่ควรได้
+
+ความถูกต้องเมื่อคลังเปลี่ยน
+--------------------------
+ทุกแถวผูกกับ corpus_version ซึ่งเปลี่ยนเมื่อคลังเอกสารเปลี่ยน แถวที่ตอบจากคลังรุ่นเก่า
+จึงถูกมองข้ามเองโดยไม่ต้องไปไล่ลบ — จำเป็น เพราะหลังนำเข้าเอกสารใหม่ คำตอบเดิมไม่ได้
+แค่เก่า แต่อาจผิดไปเลย เช่นตอบว่าไม่มีข้อมูลทั้งที่เพิ่งเพิ่มเอกสารของสาขานั้นเข้าไป
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+logger = logging.getLogger("course_advisor")
+
+# ความยาวคำถามที่ยอมเก็บ คำถามที่ยาวผิดปกติมักเป็นข้อความที่วางมาทั้งก้อน
+# ซึ่งไม่มีทางมีคนถามซ้ำ เก็บไปก็มีแต่ทำให้ตารางบวม
+_MAX_QUESTION_CHARS = 300
+
+# อักขระที่ตัดทิ้งก่อนเทียบ เพื่อให้ "เรียนกี่หน่วยกิต?" กับ "เรียนกี่หน่วยกิต"
+# นับเป็นคำถามเดียวกัน
+_TRIVIAL = re.compile(r"[\s​?!.,;:\"'()\[\]{}\-–—]+")
+
+
+def question_key(question: str) -> str | None:
+    """
+    กุญแจสำหรับเทียบว่าเป็นคำถามเดิมหรือไม่ คืน None ถ้าไม่ควรเก็บคำถามนี้
+
+    เทียบแบบตรงตัวหลังตัดช่องว่างและวรรคตอน ไม่ได้เทียบความหมาย เพราะการเทียบความหมาย
+    ต้องคำนวณ embedding ซึ่งมีค่าใช้จ่ายของมันเอง และที่สำคัญกว่าคือมันอาจจับคำถามที่
+    "คล้ายแต่ไม่เหมือน" มาตอบด้วยคำตอบเดิม เช่น ถามคนละสาขาแต่ถ้อยคำเหมือนกันเกือบหมด
+    ซึ่งจะกลายเป็นการตอบผิดอย่างมั่นใจ — สิ่งที่ระบบนี้พยายามเลี่ยงที่สุด
+
+    การเทียบตรงตัวพลาดคำถามที่ถามคนละแบบแต่ความหมายเดียวกันไปบ้าง แลกกับการไม่มีทาง
+    หยิบคำตอบผิดคนมาให้
+    """
+    if not question or len(question) > _MAX_QUESTION_CHARS:
+        return None
+    key = _TRIVIAL.sub("", question).lower()
+    return key or None
+
+
+def corpus_version(db: Session) -> str:
+    """
+    ค่าที่เปลี่ยนเมื่อคลังเอกสารเปลี่ยน ใช้ผูกคำตอบไว้กับคลังรุ่นที่ใช้ตอบ
+
+    ใช้จำนวน chunk คู่กับเวลาที่เพิ่มล่าสุด — การนำเข้าเอกสารทุกแบบขยับอย่างน้อยหนึ่ง
+    ในสองค่านี้เสมอ ทั้งการเพิ่มเล่มใหม่ การนำเข้าเล่มเดิมซ้ำหลังเติมข้อความจาก OCR
+    และการลบเอกสารทิ้ง คิดด้วย query เดียวที่นับจากดัชนี ไม่ได้อ่านเนื้อหา จึงเร็วพอ
+    จะเรียกทุกคำถาม
+    """
+    row = db.execute(
+        text("SELECT count(*), coalesce(max(created_at), 'epoch') FROM course_chunks")
+    ).one()
+    return f"{row[0]}@{row[1].isoformat()}"
+
+
+def lookup(db: Session, question: str, version: str) -> dict | None:
+    """คำตอบที่เก็บไว้สำหรับคำถามนี้ คืน None ถ้าไม่มีหรือเป็นของคลังรุ่นเก่า"""
+    key = question_key(question)
+    if not key:
+        return None
+    row = db.execute(
+        text(
+            """
+            UPDATE chat_answer_cache
+               SET hits = hits + 1, last_used_at = now()
+             WHERE question_key = :key AND corpus_version = :version
+            RETURNING status, reply, citations
+            """
+        ),
+        {"key": key, "version": version},
+    ).one_or_none()
+    if row is None:
+        return None
+    db.commit()
+    logger.info("ใช้คำตอบจากแคช")
+    citations = row.citations
+    return {
+        "status": row.status,
+        "reply": row.reply,
+        # psycopg คืน jsonb เป็นโครงสร้าง Python อยู่แล้ว แต่ไดรเวอร์บางตัวคืนเป็น
+        # ข้อความ รับทั้งสองแบบเพื่อไม่ให้ผูกกับไดรเวอร์
+        "citations": json.loads(citations) if isinstance(citations, str) else citations,
+    }
+
+
+# สถานะที่ยอมเก็บลงแคช
+#
+# ไม่เก็บ "not_found" โดยตั้งใจ เพราะเป็นผลของการให้โมเดลตัดสินว่าเอกสารตอบได้ไหม
+# ซึ่งวัดแล้วว่าไม่คงที่ — คำถาม "หลักสูตรเทคโนโลยีอาหารฯ เรียนเกี่ยวกับอะไร" ถามซ้ำ
+# สามครั้งได้คำตอบจริงสองครั้ง และตอบว่าไม่พบข้อมูลหนึ่งครั้ง ทั้งที่เอกสารมีข้อมูลอยู่
+#
+# ถ้าเก็บผลนั้นไว้ ครั้งที่ตัดสินพลาดจะกลายเป็นคำตอบถาวรของทุกคนที่ถามคำถามเดียวกัน
+# ไปจนกว่าคลังเอกสารจะเปลี่ยน — เปลี่ยนความผิดพลาดที่เกิดหนึ่งในสามครั้ง ให้กลายเป็น
+# ความผิดพลาดที่เกิดทุกครั้ง การถามใหม่แล้วมีโอกาสได้คำตอบจริงดีกว่า
+_CACHEABLE_STATUS = ("answered", "out_of_scope")
+
+
+def store(db: Session, question: str, version: str, status: str, reply: str, citations: list) -> None:
+    """
+    เก็บคำตอบไว้ใช้ซ้ำ ล้มเหลวเงียบๆ ได้
+
+    แคชเป็นของเสริมเพื่อความเร็วและโควตา ไม่ใช่ส่วนที่คำตอบต้องพึ่ง ถ้าเขียนไม่สำเร็จ
+    ผู้ใช้ต้องได้คำตอบของเขาไปตามปกติ ไม่ใช่เห็นข้อผิดพลาดเพราะระบบเก็บของไม่ได้
+    """
+    key = question_key(question)
+    if not key or not reply.strip() or status not in _CACHEABLE_STATUS:
+        return
+    try:
+        db.execute(
+            text(
+                """
+                INSERT INTO chat_answer_cache
+                    (question_key, corpus_version, status, reply, citations)
+                VALUES (:key, :version, :status, :reply, CAST(:citations AS jsonb))
+                ON CONFLICT (question_key) DO UPDATE
+                    SET corpus_version = EXCLUDED.corpus_version,
+                        status         = EXCLUDED.status,
+                        reply          = EXCLUDED.reply,
+                        citations      = EXCLUDED.citations,
+                        hits           = 0,
+                        last_used_at   = now()
+                """
+            ),
+            {
+                "key": key,
+                "version": version,
+                "status": status,
+                "reply": reply,
+                "citations": json.dumps(citations, ensure_ascii=False),
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.warning("เก็บคำตอบลงแคชไม่สำเร็จ", exc_info=True)

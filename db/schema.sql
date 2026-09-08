@@ -164,6 +164,28 @@ CREATE TABLE recommendations (
 );
 CREATE INDEX idx_recommendations_user ON recommendations(user_id);
 
+-- คำตอบที่เคยตอบไปแล้ว เก็บไว้ตอบคำถามเดิมซ้ำโดยไม่ต้องเรียกโมเดลอีก
+--
+-- ทำไมต้องมี: โควตาฟรีของผู้ให้บริการโมเดลคือ 500 คำขอต่อวัน และหนึ่งคำถามของผู้ใช้
+-- ใช้ไป 3-4 คำขอ ความจุจริงจึงราว 140 คำถามต่อวัน ซึ่งไม่พอถ้าเปิดให้นักเรียน
+-- ทั้งคณะใช้ นักเรียนถามคำถามเดียวกันซ้ำกันมาก ("สาขานี้เรียนกี่หน่วยกิต" ถามกัน
+-- ทุกคน) คำถามเดิมบนเอกสารชุดเดิมย่อมได้คำตอบเดิม การเก็บไว้จึงไม่ได้ลดคุณภาพ
+--
+-- corpus_version ผูกคำตอบไว้กับสภาพคลังที่ใช้ตอบ เมื่อนำเข้าเอกสารใหม่ ค่าจะเปลี่ยน
+-- แถวเก่าจึงใช้ไม่ได้เองโดยไม่ต้องไปไล่ลบ — สำคัญเพราะคำตอบที่อ้างอิงเอกสารรุ่นเก่า
+-- คือคำตอบที่ผิดได้ ไม่ใช่แค่เก่า
+CREATE TABLE chat_answer_cache (
+    question_key    TEXT PRIMARY KEY,          -- คำถามที่ตัดช่องว่างและวรรคตอนออกแล้ว
+    corpus_version  TEXT NOT NULL,             -- สภาพคลังเอกสารตอนที่ตอบคำถามนี้
+    status          TEXT NOT NULL,             -- answered / not_found / out_of_scope / small_talk
+    reply           TEXT NOT NULL,
+    citations       JSONB NOT NULL DEFAULT '[]',
+    hits            INTEGER NOT NULL DEFAULT 0, -- ใช้ซ้ำไปกี่ครั้ง ไว้วัดว่าแคชคุ้มแค่ไหน
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_chat_answer_cache_version ON chat_answer_cache(corpus_version);
+
 -- ---------------------------------------------------------------------
 -- Trigger: ให้ updated_at อัปเดตอัตโนมัติทุกครั้งที่มีการแก้ไขแถว
 --

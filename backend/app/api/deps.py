@@ -11,7 +11,7 @@ import time
 import uuid
 from collections import defaultdict
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy.orm import Session
@@ -77,4 +77,54 @@ def rate_limiter(user: User = Depends(get_current_user)) -> None:
     hits[:] = [t for t in hits if now - t < window]
     if len(hits) >= settings.rate_limit_per_minute:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "rate limit exceeded")
+    hits.append(now)
+
+
+# --- ตัวจำกัดสำหรับหน้าเว็บสาธารณะ ซึ่งไม่มีบัญชีผู้ใช้ให้นับ ---
+#
+# หน้าเว็บเปิดให้นักเรียนทั่วไปถามได้โดยไม่ต้องสมัคร เส้นทาง /chat-web จึงใช้
+# rate_limiter ข้างบนไม่ได้เพราะมันต้องการบัญชี ผลคือก่อนหน้านี้เส้นทางที่ผู้ใช้จริง
+# ใช้กันทั้งหมด "ไม่มีตัวจำกัดเลย" คนเดียวยิงสคริปต์รัวๆ เผาโควตารายวันของ Gemini
+# ให้หมดได้ในไม่กี่นาที แล้วทั้งคณะใช้ไม่ได้ไปทั้งวัน
+#
+# นับจาก IP เพราะไม่มีอย่างอื่นให้นับ ข้อเสียที่ยอมรับ: นักศึกษาที่ใช้เน็ตของ
+# มหาวิทยาลัยออกเน็ตด้วย IP เดียวกันจะแชร์โควตาก้อนเดียวกัน เพดานจึงตั้งไว้สูงพอที่
+# ห้องเรียนทั้งห้องใช้พร้อมกันได้ แต่ยังต่ำพอจะหยุดสคริปต์ที่ยิงรัวๆ
+#
+# ตัวคูณความจุที่แท้จริงคือแคชคำตอบ (services/answer_cache.py) ไม่ใช่ตัวนี้ —
+# ตัวนี้มีไว้กันการใช้ผิดวิธี ไม่ใช่กันคนใช้เยอะ
+_ip_bucket: dict[str, list[float]] = defaultdict(list)
+
+_IP_LIMITS = ((60.0, 20), (3600.0, 200))  # (ช่วงเวลาเป็นวินาที, จำนวนที่ยอมให้)
+
+
+def _client_ip(request: Request) -> str:
+    """
+    IP จริงของผู้ใช้ อ่านจากรายการท้ายสุดของ X-Forwarded-For
+
+    Caddy ต่อ IP ของคู่สนทนาที่มันเห็นจริงไว้ "ท้าย" header เสมอ ค่าท้ายสุดจึงเป็นค่าที่
+    ผู้ใช้ปลอมไม่ได้ ต่างจากค่าแรกซึ่งมาจากสิ่งที่ผู้ใช้ส่งมาเอง — ถ้าอ่านค่าแรก ใครก็
+    ตั้ง X-Forwarded-For เป็นค่าสุ่มทุกครั้งเพื่อหนีตัวจำกัดนี้ได้
+
+    เชื่อ header นี้ได้เพราะ backend ไม่ได้เปิดพอร์ตออกนอกเครื่อง (ดู
+    docker-compose.prod.yml) ทางเดียวที่คำขอจะเข้ามาถึงคือผ่าน Caddy
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def web_rate_limiter(request: Request) -> None:
+    """จำกัดจำนวนคำถามต่อ IP สำหรับเส้นทางที่เปิดให้ใช้โดยไม่ต้องสมัคร"""
+    now = time.time()
+    hits = _ip_bucket[_client_ip(request)]
+    longest = max(window for window, _ in _IP_LIMITS)
+    hits[:] = [t for t in hits if now - t < longest]
+    for window, allowed in _IP_LIMITS:
+        if sum(1 for t in hits if now - t < window) >= allowed:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "ตอนนี้มีคำถามเข้ามาถี่เกินไปจากเครือข่ายเดียวกัน รบกวนรอสักครู่แล้วถามใหม่ครับ",
+            )
     hits.append(now)
