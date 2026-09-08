@@ -29,6 +29,7 @@ from app.services.chat_history import user_first
 from app.services.course_scope import _distinctive_name, resolve_scope
 from app.services.answer_cache import corpus_version, lookup as cache_lookup, store as cache_store
 from app.services.llm_client import get_llm_connector, no_fallback_kwargs
+from app.services.program_list import asks_for_program_list, program_list_answer
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
 from app.services.small_talk import match_small_talk
@@ -480,6 +481,23 @@ def prepare_answer(
             canned=canned,
             messages=[],
             cacheable=False,  # ตอบจากตารางคำทักทาย ไม่ได้เรียกโมเดลอยู่แล้ว
+        )
+
+    # --- 0.4 คำถามว่าคณะเปิดสอนอะไรบ้าง -> ตอบจากรายการหลักสูตรในฐานข้อมูล ---
+    #
+    # ไม่มี มคอ.2 เล่มไหนแจกแจงหลักสูตรทั้งคณะ การค้นด้วยความใกล้เคียงจึงได้เนื้อหาของ
+    # สาขาใดสาขาหนึ่งมาแล้วถูกตัดสินว่าตอบไม่ได้ ทั้งที่นี่เป็นข้อมูลที่ระบบรู้แน่นอน
+    # ที่สุด เพราะเป็นรายการของตัวเอง (ดูเหตุผลเต็มใน services/program_list.py)
+    if asks_for_program_list(message) and (listing := program_list_answer(db, written_in_thai(message))):
+        return Prepared(
+            session_id=session.id,
+            status="answered",
+            search_query=message,
+            best_score=0.0,
+            citations=[],
+            canned=listing,
+            messages=[],
+            cacheable=False,  # ประกอบจากฐานข้อมูลตรงๆ เร็วอยู่แล้วและเปลี่ยนตามคลังทันที
         )
 
     # --- 0.5 คำถามค่าเทอม -> ตอบจากตารางประกาศของคณะ ไม่ค้นเอกสาร มคอ.2 ---
