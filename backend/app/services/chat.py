@@ -456,7 +456,7 @@ def prepare_answer(
     #
     # หน้าเว็บส่งคำถามมาโดยไม่มี session_id ทุกครั้ง ข้อความจากหน้าเว็บจึงเข้าเงื่อนไข
     # นี้เสมอ ซึ่งเป็นทางที่ผู้ใช้จริงเกือบทั้งหมดเข้ามา
-    version = corpus_version(db)
+    version = corpus_version(db, TOP_K_CHUNKS)
     if not history and (hit := cache_lookup(db, message, version)) is not None:
         return Prepared(
             session_id=session.id,
