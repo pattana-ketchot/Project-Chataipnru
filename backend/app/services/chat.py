@@ -369,6 +369,49 @@ def _asks_for_a_recommendation(text: str) -> bool:
     return any(w in lowered for w in _RECOMMEND_WORDS)
 
 
+# คำที่บอกว่าคำถามต้องการข้อเท็จจริง "ของสาขาใดสาขาหนึ่ง" ไม่ใช่ภาพรวมของคณะ
+_PROGRAM_SPECIFIC_WORDS = (
+    "ทำอาชีพอะไร", "ทำงานอะไรได้", "ประกอบอาชีพ", "อาชีพอะไร", "จบไปทำอะไร",
+    "เรียนอะไรบ้าง", "เรียนเกี่ยวกับอะไร", "มีวิชาอะไร", "วิชาบังคับ", "รายวิชา",
+    "กี่หน่วยกิต", "จำนวนหน่วยกิต", "คุณสมบัติผู้สมัคร", "รับสมัครคุณสมบัติ",
+)
+
+
+def _needs_a_program_named(db: Session, message: str) -> bool:
+    """
+    คำถามนี้ถามข้อเท็จจริงของสาขาหนึ่ง แต่ไม่ได้บอกว่าสาขาไหน ใช่หรือไม่
+
+    ที่ต้องมีเพราะปุ่มคำถามแนะนำบนหน้าแชทมีข้อความว่า "เรียนจบแล้วทำอาชีพอะไรได้บ้าง"
+    ซึ่งไม่ได้ระบุสาขา ระบบเดิมไม่ได้บอกว่าไม่รู้ว่าถามถึงสาขาไหน แต่ไปค้นเจอเอกสารของ
+    สาขาใดสาขาหนึ่งแล้วตอบด้วยอาชีพของสาขานั้นราวกับเป็นคำตอบของคำถาม วัดจากระบบจริง:
+    ผู้ใช้ได้รายชื่ออาชีพของสาขาเทคโนโลยีผลิตภัณฑ์ชีวภาพฯ ทั้งที่ไม่เคยเอ่ยถึงสาขานั้น
+
+    การถามกลับตรงไปตรงมากว่า เพราะผู้ใช้ที่ได้คำตอบของสาขาที่ตัวเองไม่ได้ถาม ไม่มีทาง
+    รู้เลยว่าระบบเลือกสาขานั้นมาให้เอง เขาจะเข้าใจว่านั่นคืออาชีพของคณะโดยรวม
+
+    ใช้กับข้อความแรกของบทสนทนาเท่านั้น ถ้าคุยกันมาก่อนแล้ว คำว่า "สายนี้" หรือ
+    "หลักสูตรนี้" อ้างถึงสิ่งที่คุยกันไว้ ซึ่งขั้นเขียนคำถามใหม่จัดการอยู่แล้ว
+    """
+    if not any(w in message for w in _PROGRAM_SPECIFIC_WORDS):
+        return False
+    return not _names_a_program(db, message)
+
+
+def _ask_which_program(db: Session, thai: bool) -> str:
+    """ถามกลับว่าหมายถึงสาขาไหน พร้อมรายชื่อให้เลือก"""
+    listing = program_list_answer(db, thai)
+    if not listing:
+        return ""
+    head = (
+        "คำถามนี้ตอบได้ต่างกันไปในแต่ละสาขา ขอทราบก่อนครับว่าสนใจสาขาไหน"
+        if thai
+        else "The answer differs by programme. Which one did you mean?"
+    )
+    # ตัดบรรทัดชวนถามต่อของรายการออก เพราะตรงนี้เป็นการถามกลับอยู่แล้ว
+    body = listing.split("\n\nถามรายละเอียด")[0].split("\n\nAsk about any")[0]
+    return f"{head}\n\n{body}"
+
+
 def _recommendation_reply(db: Session, message: str) -> str | None:
     """
     ตอบคำถามขอคำแนะนำด้วยผลจากระบบจับคู่สาขา คืน None ถ้าจัดอันดับไม่ได้
@@ -532,6 +575,21 @@ def prepare_answer(
             messages=[],
             cacheable=not history,
             corpus_version=version,
+        )
+
+    # --- 0.8 คำถามเจาะจงสาขาแต่ไม่ได้บอกว่าสาขาไหน -> ถามกลับ ไม่เดาเอง ---
+    if not history and _needs_a_program_named(db, message) and (
+        ask := _ask_which_program(db, written_in_thai(message))
+    ):
+        return Prepared(
+            session_id=session.id,
+            status="answered",
+            search_query=message,
+            best_score=0.0,
+            citations=[],
+            canned=ask,
+            messages=[],
+            cacheable=False,
         )
 
     # --- 1. ค้นด้วยคำถามดิบก่อนเสมอ ---
