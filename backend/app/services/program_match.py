@@ -64,6 +64,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.course_scope import _distinctive_name
+from app.services.offered import is_offered
 from app.services.llm_client import get_llm_connector
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402
@@ -317,6 +318,12 @@ def match_programs(db: Session, answers: dict, limit: int = MAX_RESULTS) -> list
         )
     scored.sort(key=lambda s: s["score"], reverse=True)
 
+    # ตัดหลักสูตรที่คณะไม่ได้เปิดรับสมัครแล้วออกก่อนจัดอันดับให้ผู้ใช้เห็น
+    #
+    # คลังเก็บเอกสารของหลักสูตรที่เลิกรับสมัครไปแล้วไว้ด้วย ซึ่งถูกต้องสำหรับการตอบ
+    # คำถามของนักศึกษาที่กำลังเรียนอยู่ แต่ผิดสำหรับการแนะนำที่เรียนให้คนที่ยังไม่ได้
+    # สมัคร — เขาจะวางแผนไปสมัครในสิ่งที่ไม่มีอยู่แล้ว (ดู services/offered.py)
+    scored = [s for s in scored if is_offered(s["title"])]
     scored = _collapse_editions(scored)[:limit]
 
     # ขอเหตุผลทั้งชุดในการเรียกโมเดลครั้งเดียว ไม่ใช่หลักสูตรละครั้ง เพราะการเรียกทีละ
