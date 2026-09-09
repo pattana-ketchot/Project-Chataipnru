@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import secrets
 import time
 
 import httpx
@@ -183,10 +184,76 @@ def build_checks() -> list[Check]:
     return checks
 
 
-def ask(client: httpx.Client, question: str) -> str:
-    r = client.post("/chat", json={"messages": [{"role": "user", "content": question}]})
-    r.raise_for_status()
-    return r.text
+# รูปแบบเนื้อความที่ปลายทางแต่ละแบบรับ
+#
+# ปลายทางสองแบบไม่ได้ต่างกันแค่ที่อยู่ และควรตรวจได้ทั้งคู่:
+#
+#   ผ่านเว็บจริง (https://.../api) — Caddy เปลี่ยน /api/chat เป็น /chat-web ซึ่งเป็น
+#   เส้นทางที่ผู้ใช้จริงเดิน เปิดให้ทุกคนใช้ ไม่ต้องล็อกอิน และรับบทสนทนาทั้งชุด
+#   เป็น messages
+#
+#   ยิงตรงเข้า http://backend:8000 — ไปโดน /chat ตัวจริง ต้องล็อกอิน และรับคำถาม
+#   เดียวเป็น message
+#
+# เดิมสคริปต์นี้สมมติแบบแรกเสมอ พอยิงตรงเข้า backend จึงได้ 401 ทั้งสิบข้อ แก้เรื่อง
+# ล็อกอินแล้วยังได้ 422 ต่ออีก เพราะส่งเนื้อความผิดรูปแบบ ทั้งสองรอบรายงานออกมาว่า
+# "เรียก API ไม่สำเร็จ" ซึ่งอ่านแล้วเหมือนระบบพัง ทั้งที่ระบบปกติดีและตัวตรวจเองเข้า
+# ไม่ถูกประตู — ชุดตรวจที่ฟ้องผิดที่แบบนี้อันตรายกว่าไม่มีเลย เพราะจะถูกเมินในวันที่
+# มันจับของจริงได้
+_WEB_STYLE = lambda q: {"messages": [{"role": "user", "content": q}]}
+_API_STYLE = lambda q: {"message": q}
+
+
+def configure(client: httpx.Client):
+    """
+    หาว่าปลายทางนี้ต้องล็อกอินไหม และรับเนื้อความรูปแบบไหน คืนฟังก์ชันสำหรับถาม
+
+    ตรวจด้วยการยิงจริงแล้วดูว่าเซิร์ฟเวอร์ตอบอะไร ไม่ใช่เดาจากรูปแบบ URL เพราะ URL
+    เปลี่ยนได้ แต่สิ่งที่เซิร์ฟเวอร์ตอบคือความจริง
+    """
+    probe = client.post("/chat", json=_WEB_STYLE("สวัสดี"))
+
+    if probe.status_code == 401:
+        email = f"behaviour-{secrets.token_hex(4)}@example.com"
+        client.post("/auth/register", json={"email": email, "password": "password123"})
+        r = client.post("/auth/login", json={"email": email, "password": "password123"})
+        r.raise_for_status()
+        client.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
+        print("ปลายทางต้องล็อกอิน สร้างบัญชีชั่วคราวให้แล้ว")
+        probe = client.post("/chat", json=_WEB_STYLE("สวัสดี"))
+
+    # 422 = รับเนื้อความคนละรูปแบบ ไม่ใช่ระบบพัง
+    build = _WEB_STYLE
+    if probe.status_code == 422:
+        confirm = client.post("/chat", json=_API_STYLE("สวัสดี"))
+        confirm.raise_for_status()
+        build = _API_STYLE
+        print("ปลายทางรับคำถามแบบ message เดี่ยว")
+
+    elif probe.status_code >= 400:
+        raise SystemExit(f"ปลายทางตอบ HTTP {probe.status_code} ตั้งแต่คำถามทดลอง: {probe.text[:200]}")
+
+    print()
+
+    def ask(client: httpx.Client, question: str) -> str:
+        r = client.post("/chat", json=build(question))
+        r.raise_for_status()
+        # ตรวจเฉพาะข้อความที่ผู้ใช้เห็น ไม่ใช่ทั้งก้อน JSON
+        #
+        # เดิมคืน r.text ทั้งก้อน ซึ่งการตรวจแบบหาคำยังทำงานได้ จึงไม่มีใครสังเกต แต่
+        # ข้อที่ต้องนับบรรทัดพังเงียบๆ เพราะใน JSON ขึ้นบรรทัดใหม่ถูกเขียนเป็น \\n
+        # สองอักขระ ทั้งคำตอบจึงเป็นบรรทัดเดียว นับรายการได้ 0 ข้อเสมอ แล้วรายงานว่า
+        # ตอบมา 0 อาชีพ ทั้งที่ตอบมาครบ — ชุดตรวจกล่าวหาระบบในสิ่งที่ระบบไม่ได้ทำ
+        #
+        # อีกเหตุผลคือชื่อฟิลด์อย่าง session_id หรือข้อความที่ระบบใส่มาในซองอาจไป
+        # ตรงกับคำที่กำลังหา ทำให้ตัดสินจากสิ่งที่ผู้ใช้ไม่เคยเห็น
+        try:
+            body = r.json()
+        except ValueError:
+            return r.text
+        return body.get("reply", r.text) if isinstance(body, dict) else r.text
+
+    return ask
 
 
 def main() -> None:
@@ -196,6 +263,7 @@ def main() -> None:
 
     checks = build_checks()
     client = httpx.Client(base_url=args.api, timeout=180)
+    ask = configure(client)
     failed = []
     skipped: list[Check] = []
 
