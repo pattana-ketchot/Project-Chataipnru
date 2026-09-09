@@ -113,5 +113,42 @@ class RecommendationReplyChecks(unittest.TestCase):
         self.assertIsNone(self.reply_for([]))
 
 
+class UnknownProgramNameChecks(unittest.TestCase):
+    """
+    ชื่อที่ตัดมาต้องต่อท้าย "คณะ...ไม่มีสาขา" แล้วอ่านรู้เรื่อง
+
+    ภาษาไทยไม่เว้นวรรคระหว่างคำ การตัดชื่อจึงพลาดได้หลายแบบ และทุกแบบหลุดไปถึงผู้ใช้
+    เป็นประโยคที่อ่านแล้วสะดุด ชุดตรวจในไฟล์นี้เก็บรูปประโยคที่เคยพลาดจริงไว้
+    """
+
+    def trim(self, message: str) -> str:
+        from app.services.chat import _NAMES_SOMETHING, _trim_program_name
+        m = _NAMES_SOMETHING.search(message)
+        self.assertIsNotNone(m, f"จับชื่อสาขาจาก {message!r} ไม่ได้")
+        return _trim_program_name(m.group(1))
+
+    def test_ตัดคำถามท้ายชื่อออก(self):
+        self.assertEqual(self.trim("สาขาคอมพิวเตอร์ธุรกิจเรียนกี่หน่วยกิต"), "คอมพิวเตอร์ธุรกิจ")
+
+    def test_ตัดคำนำหน้าที่ซ้อนกัน(self):
+        """
+        "โครงสร้างหลักสูตรของสาขาวิชา X" จับคำว่าหลักสูตรได้ก่อน ที่เหลือจึงเป็น
+        "ของสาขาวิชา X" ทั้งดุ้น เคยได้คำตอบว่า "ไม่มีสาขาของสาขาวิชาคอมพิวเตอร์ธุรกิจ"
+        """
+        self.assertEqual(
+            self.trim("โครงสร้างหลักสูตรของสาขาวิชาคอมพิวเตอร์ธุรกิจ ต้องเรียนทั้งหมดกี่หน่วยกิต"),
+            "คอมพิวเตอร์ธุรกิจ",
+        )
+
+    def test_ชื่อที่ไม่มีคำนำหน้าต้องไม่ถูกแตะ(self):
+        self.assertEqual(self.trim("สาขาวิชาการตลาดดิจิทัลจบแล้วทำงานอะไร"), "การตลาดดิจิทัล")
+
+    def test_ไม่ปอกจนเหลือค่าว่าง(self):
+        """ปอกคำนำหน้าได้ต่อเมื่อยังเหลือชื่อจริง ไม่งั้นจะได้ประโยค 'ไม่มีสาขา' ลอยๆ"""
+        from app.services.chat import _trim_program_name
+        for lone in ("สาขาวิชา", "หลักสูตร", "ของ"):
+            self.assertEqual(_trim_program_name(lone), lone)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
