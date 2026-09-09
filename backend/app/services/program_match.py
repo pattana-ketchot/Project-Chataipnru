@@ -177,7 +177,17 @@ def build_match_query(answers: dict) -> str:
     คำตอบที่ตัดออกไม่ได้ถูกทิ้ง ยังส่งให้โมเดลใช้เขียนเหตุผลผ่าน build_profile_text()
     เพราะมันมีความหมายกับคนอ่าน แม้จะไม่ช่วยในการจัดอันดับ
     """
-    parts = _topic_parts(answers)
+    query_answers = dict(answers)
+    if isinstance(query_answers.get("extra"), str):
+        # คำขอให้เลือกสาขาไม่ใช่ความสนใจ และทำให้เวกเตอร์เอนเข้าชื่อสาขา
+        # เก็บข้อความเดิมไว้ให้ขั้นเขียนเหตุผล ใช้ข้อความความสนใจในการจัดอันดับ
+        extra = query_answers["extra"].strip()
+        interest = re.sub(
+            r"^(?:สาขา|หลักสูตร)(?:ไหน|อะไร|ใด)\s*เหมาะกับ(?:คนที่|คน|ผู้ที่)?\s*",
+            "", extra,
+        ).strip()
+        query_answers["extra"] = interest or extra
+    parts = _topic_parts(query_answers)
     if v := answers.get("career_goal"):
         parts.append("เป้าหมายอาชีพคือ " + ", ".join(v) if isinstance(v, list) else f"เป้าหมายอาชีพคือ {v}")
     return " ".join(parts)
@@ -309,6 +319,22 @@ def _fetch_evidence(db: Session, chunk_ids: list[uuid.UUID]) -> str:
     return "\n\n".join(f"[หน้า {r.page_number}]\n{r.content}" for r in rows)
 
 
+def _fetch_program_core(db: Session, course_id: uuid.UUID) -> str:
+    """ใช้หัวข้ออาชีพและวัตถุประสงค์ก่อนข้อความที่คล้ายคำถามในภาคผนวก"""
+    rows = db.execute(
+        text("""
+            SELECT page_number, content FROM course_chunks
+            WHERE course_id = :course_id
+              AND (content LIKE :careers OR content LIKE :objectives)
+            ORDER BY page_number, id
+            LIMIT 2
+        """),
+        {"course_id": course_id, "careers": "%อาชีพที่สามารถประกอบได้หลัง%",
+         "objectives": "%วัตถุประสงค์ของหลักสูตร%"},
+    ).all()
+    return "\n\n".join(f"[หน้า {r.page_number}]\n{r.content}" for r in rows)
+
+
 def _title_vectors(db: Session, connector) -> dict[uuid.UUID, list[float]]:
     """
     เวกเตอร์ของ "ชื่อหลักสูตร" แต่ละเล่ม คำนวณครั้งเดียวแล้วเก็บไว้ใช้ซ้ำ
@@ -391,7 +417,10 @@ def match_programs(
     evidence = [
         {
             "title": s["title"],
-            "excerpt": _fetch_evidence(db, s["chunk_ids"][:_EVIDENCE_CHUNKS])[:_EVIDENCE_CHARS],
+            "excerpt": (
+                _fetch_program_core(db, s["course_id"]) + "\n\n"
+                + _fetch_evidence(db, s["chunk_ids"][:_EVIDENCE_CHUNKS])
+            )[:_EVIDENCE_CHARS],
         }
         for s in scored
     ]
