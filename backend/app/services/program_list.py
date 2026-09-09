@@ -23,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.course_scope import _distinctive_name
+from app.services.offered import is_offered, warn_on_name_mismatch
 from app.services.program_names import english_name
 
 _LIST_WORDS = (
@@ -72,7 +73,11 @@ def _newest_editions(rows) -> list[str]:
 
 
 def program_list_answer(db: Session, thai: bool = True) -> str:
-    titles = [r.title for r in db.execute(text("SELECT title FROM courses WHERE is_active")).all()]
+    # แสดงเฉพาะหลักสูตรที่คณะเปิดสอนอยู่จริง คลังมีเอกสารของหลักสูตรที่เลิกรับสมัคร
+    # ไปแล้วด้วย การนำมาแจกแจงให้คนที่กำลังเลือกที่เรียนจะทำให้เขาไปสมัครในสิ่งที่ไม่มี
+    all_titles = [r.title for r in db.execute(text("SELECT title FROM courses WHERE is_active")).all()]
+    warn_on_name_mismatch(all_titles)
+    titles = [t for t in all_titles if is_offered(t)]
     undergrad = _newest_editions([t for t in titles if not any(g in t for g in _GRADUATE)])
     graduate = _newest_editions([t for t in titles if any(g in t for g in _GRADUATE)])
     if not undergrad:
@@ -85,8 +90,8 @@ def program_list_answer(db: Session, thai: bool = True) -> str:
 
     if thai:
         parts = [
-            f"คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร มีหลักสูตรระดับปริญญาตรี "
-            f"{len(undergrad)} สาขา ที่มีเอกสารอยู่ในระบบดังนี้",
+            f"คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร เปิดสอนหลักสูตรระดับ"
+            f"ปริญญาตรี {len(undergrad)} สาขา ดังนี้",
             "",
             *[line(t) for t in undergrad],
         ]
@@ -105,7 +110,7 @@ def program_list_answer(db: Session, thai: bool = True) -> str:
     else:
         parts = [
             f"The Faculty of Science and Technology, Phranakhon Rajabhat University offers "
-            f"{len(undergrad)} bachelor's programmes held in this system:",
+            f"{len(undergrad)} bachelor's programmes:",
             "",
             *[line(t) for t in undergrad],
         ]
