@@ -62,6 +62,25 @@ def classify(reply: str, status: str) -> str:
     return "answered"
 
 
+def question_and_expectation(item, group_expect: str) -> tuple[str, str]:
+    """
+    ข้อความคำถาม และผลที่คาดหวังของ "ข้อนั้น" ซึ่งอาจไม่ตรงกับของกลุ่ม
+
+    เดิมทุกข้อในกลุ่มถูกตัดสินด้วยค่าเดียวกัน ซึ่งใช้ได้จนกระทั่งพฤติกรรมที่ถูกต้อง
+    ของบางข้อเปลี่ยนไป — คำถามถึง "สาขาคอมพิวเตอร์ธุรกิจ" เคยควรตอบว่าไม่พบข้อมูล
+    เพราะไม่มีเอกสารของสาขานี้ แต่ตอนนี้ระบบรู้รายชื่อสาขาที่คณะเปิดจริง จึงตอบได้ว่า
+    คณะไม่มีสาขานี้แล้วแสดงรายการที่มี ซึ่งเป็นคำตอบที่ถูกต้องกว่าและเป็นสิ่งที่ตั้งใจ
+    ให้เกิด การบังคับให้ทั้งกลุ่มคาดหวังค่าเดียวจึงกลายเป็นการนับพฤติกรรมที่ถูกว่าตก
+
+    ทางเลือกอื่นคือย้ายข้อนั้นออกไปตั้งกลุ่มใหม่ แต่จะทำให้เทียบคะแนนกับผลรอบก่อน
+    ไม่ได้เลย การให้ระบุค่าคาดหวังรายข้อไว้ตรงนั้นอ่านง่ายกว่า และบังคับให้ต้องเขียน
+    เหตุผลกำกับไว้ด้วย
+    """
+    if isinstance(item, str):
+        return item, group_expect
+    return item["q"], item.get("expect", group_expect)
+
+
 def _ask_with_retry(client: httpx.Client, headers: dict, question: str, attempts: int = 3):
     """
     ถาม /chat พร้อมลองใหม่เมื่อฝั่งโมเดลล้มชั่วคราว
@@ -119,10 +138,11 @@ def main() -> None:
 
         records, totals = [], {}
         for group in spec["groups"]:
-            expect = group["expect"]
+            group_expect = group["expect"]
             hits = 0
-            print(f'\n=== กลุ่ม {group["id"]}: {group["name"]} (คาดหวัง: {expect}) ===')
-            for q in group["questions"]:
+            print(f'\n=== กลุ่ม {group["id"]}: {group["name"]} (คาดหวัง: {group_expect}) ===')
+            for item in group["questions"]:
+                q, expect = question_and_expectation(item, group_expect)
                 t0 = time.time()
                 # ทุกคำถามเริ่ม session ใหม่ เพื่อไม่ให้ประวัติของข้อก่อนหน้ารบกวนผล
                 try:
@@ -147,7 +167,10 @@ def main() -> None:
                                 "score": d["top_score"], "seconds": round(time.time() - t0, 1),
                                 "reply": d["reply"]})
                 save_records(args.out, records)
-                print(f'  {"ผ่าน" if ok else "ไม่ผ่าน"}  [{got:<13}] {d["top_score"]:.3f} {time.time()-t0:4.0f}s  {q}')
+                # บอกให้เห็นตอนอ่านผลว่าข้อนี้ใช้เกณฑ์ต่างจากกลุ่ม จะได้ไม่งงว่าทำไม
+                # ข้อที่ตอบได้ถึงนับว่าผ่านในกลุ่มที่คาดหวังว่าไม่พบข้อมูล
+                note = "" if expect == group_expect else f" (เกณฑ์เฉพาะข้อ: {expect})"
+                print(f'  {"ผ่าน" if ok else "ไม่ผ่าน"}  [{got:<13}] {d["top_score"]:.3f} {time.time()-t0:4.0f}s  {q}{note}')
                 if not ok:
                     print(f'          -> {d["reply"][:170]}')
             totals[group["id"]] = (hits, len(group["questions"]))
