@@ -58,18 +58,31 @@ def _is_daily_limit(resp: httpx.Response) -> bool:
     Google บอกชนิดของโควตามาในเนื้อความอยู่แล้ว (quotaId ที่มีคำว่า PerDay หรือ
     PerMinute) และแนบเวลาที่ควรรอมาด้วย จึงอ่านจากคำตอบจริงแทนการเดา ถ้าอ่านไม่ได้
     ให้ถือว่าเป็นรายวัน เพราะการย้ายโมเดลเสียหายน้อยกว่าการวนรอโควตาที่ไม่มีวันคืนมา
+
+    บันทึกไว้ด้วยว่าตัดสินจากอะไร เพราะเมื่อโมเดลถูกพัก log เดิมเขียนแค่ว่า "ชนโควตา
+    รายวัน" ซึ่งเป็นข้อสรุปของโค้ดนี้ ไม่ใช่สิ่งที่ Google บอก ถ้าการตัดสินผิด (เช่น
+    เนื้อความไม่ได้บอกชนิดมาเลยแล้วเราเดาว่ารายวัน) จะไม่มีอะไรให้ย้อนดูเลยว่าพักโมเดล
+    ไปเพราะอะไร เนื้อความของ 429 เป็นข้อความแจ้งข้อผิดพลาด ไม่มีคำถามของผู้ใช้และไม่มี
+    ตัวคีย์ จึงบันทึกบางส่วนได้โดยไม่ทำข้อมูลรั่ว
     """
     try:
         body = resp.text
     except Exception:
+        logger.warning("429 อ่านเนื้อความไม่ได้ ถือว่าเป็นโควตารายวัน")
         return True
     if "PerMinute" in body or "perMinute" in body:
+        logger.info("429 เป็นเพดานต่อนาที (เจอ PerMinute ในเนื้อความ)")
         return False
     if "PerDay" in body or "per day" in body.lower():
+        logger.warning("429 เป็นโควตารายวัน (เจอ PerDay ในเนื้อความ)")
         return True
     m = re.search(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"', body)
     # รอไม่ถึงสองนาทีแปลว่าเป็นเพดานระยะสั้น ไม่ใช่โควตาที่หมดไปทั้งวัน
-    return not (m and float(m.group(1)) < 120)
+    if m and float(m.group(1)) < 120:
+        logger.info("429 ให้รอ %ss ถือว่าเป็นเพดานระยะสั้น", m.group(1))
+        return False
+    logger.warning("429 ไม่ได้บอกชนิดโควตามา เดาว่าเป็นรายวัน — เนื้อความ: %r", body[:300])
+    return True
 
 
 class _QuotaExhausted(RuntimeError):
