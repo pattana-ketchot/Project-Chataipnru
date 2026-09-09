@@ -15,6 +15,7 @@
 """
 import json
 import os
+import re
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -297,6 +298,23 @@ def _can_answer_from(connector, chunks, question: str) -> bool:
 
 
 @dataclass
+class PriorTurn:
+    """
+    ข้อความก่อนหน้าที่ผู้เรียกส่งมาเอง แทนการอ่านจากฐานข้อมูล
+
+    หน้าเว็บส่งบทสนทนาทั้งก้อนมาทุกครั้งและไม่ได้เก็บ session_id ไว้ ถ้าไม่มีทางนี้
+    ประวัติที่ส่งมาจะถูกทิ้งทั้งหมด แล้วคำถามต่อเนื่องอย่าง "แล้วจบไปทำงานอะไรได้บ้าง"
+    จะกลายเป็นคำถามลอยๆ ที่ไม่รู้ว่าถามถึงสาขาไหน
+
+    ใช้ชนิดข้อมูลของตัวเองแทน ChatMessage ของฐานข้อมูล เพราะข้อความเหล่านี้ไม่ได้
+    ผูกกับแถวใดในตาราง และไม่ควรถูกบันทึกซ้ำทุกครั้งที่ผู้ใช้ถามคำถามใหม่
+    """
+
+    role: str
+    content: str
+
+
+@dataclass
 class Prepared:
     """
     ผลของทุกขั้นก่อนลงมือเขียนคำตอบ
@@ -376,6 +394,52 @@ _PROGRAM_SPECIFIC_WORDS = (
     "เรียนอะไรบ้าง", "เรียนเกี่ยวกับอะไร", "มีวิชาอะไร", "วิชาบังคับ", "รายวิชา",
     "กี่หน่วยกิต", "จำนวนหน่วยกิต", "คุณสมบัติผู้สมัคร", "รับสมัครคุณสมบัติ",
 )
+
+
+# รูปแบบการเอ่ยชื่อสาขา ใช้แยก "ระบุชื่อมาแล้ว" ออกจาก "ไม่ได้ระบุ"
+_NAMES_SOMETHING = re.compile(r"(?:สาขาวิชา|สาขา|หลักสูตร)\s*([ก-๙A-Za-z][^\s?]{1,40})")
+
+# คำที่ตามหลัง "สาขา" แล้วแปลว่ายังไม่ได้ระบุชื่อ เป็นการถามลอยๆ
+_QUESTION_WORDS = ("ไหน", "อะไร", "ใด", "นี้", "นั้น", "ที่", "ต่างๆ", "ทั้งหมด")
+
+# คำที่บอกว่าชื่อสาขาจบตรงนี้แล้ว ส่วนที่เหลือเป็นตัวคำถาม
+#
+# ภาษาไทยไม่เว้นวรรคระหว่างคำ การตัดที่ช่องว่างจึงได้ทั้งประโยคติดมา ทำให้ข้อความ
+# ที่ตอบกลับกลายเป็น "ไม่มีสาขาคอมพิวเตอร์ธุรกิจเรียนกี่หน่วยกิต" ซึ่งอ่านไม่รู้เรื่อง
+_NAME_ENDS_AT = ("เรียน", "กี่", "มีกี่", "จบ", "คือ", "ต้อง", "ใช้", "ค่า", "สอน",
+                 "เปิด", "อะไร", "ไหม", "หรือ", "ยัง", "ทำงาน", "รับ")
+
+
+def _trim_program_name(named: str) -> str:
+    """ตัดส่วนที่เป็นคำถามออกจากชื่อที่ผู้ใช้เอ่ย ให้เหลือเฉพาะชื่อสาขา"""
+    cut = len(named)
+    for marker in _NAME_ENDS_AT:
+        at = named.find(marker)
+        if 0 < at < cut:
+            cut = at
+    return named[:cut].strip(" ฯๆ")
+
+
+def _names_an_unknown_program(db: Session, message: str) -> str | None:
+    """
+    ผู้ใช้เอ่ยชื่อสาขาที่คณะไม่มีหรือไม่ คืนชื่อที่เอ่ยถ้าใช่
+
+    ต้องแยกจากกรณี "ไม่ได้ระบุสาขา" เพราะสองอย่างนี้ต้องตอบคนละแบบ ผู้ที่พิมพ์ว่า
+    "สาขาคอมพิวเตอร์ธุรกิจเรียนกี่หน่วยกิต" ระบุมาแล้ว การถามกลับว่า "สนใจสาขาไหน"
+    จึงไม่ตอบคำถามเขาเลย และทำให้เข้าใจว่าระบบอ่านคำถามไม่ออก ทั้งที่ความจริงคือ
+    คณะไม่มีสาขานั้น
+    """
+    m = _NAMES_SOMETHING.search(message)
+    if not m:
+        return None
+    named = m.group(1)
+    if named.startswith(_QUESTION_WORDS):
+        return None
+    if _names_a_program(db, message):
+        return None
+    trimmed = _trim_program_name(named)
+    # ชื่อที่สั้นเกินไปหลังตัดแปลว่าจับได้ไม่ใช่ชื่อจริง ปล่อยให้ด่านถัดไปจัดการ
+    return trimmed if len(trimmed) >= 4 else None
 
 
 def _needs_a_program_named(db: Session, message: str) -> bool:
@@ -536,10 +600,13 @@ def prepare_answer(
     user_id: uuid.UUID,
     session_id: uuid.UUID | None,
     message: str,
+    prior: list[PriorTurn] | None = None,
 ) -> Prepared:
     connector = get_llm_connector()
     session = _load_session(db, user_id, session_id)
-    history = _load_history(db, session.id)
+    # prior มาจากผู้เรียกที่เก็บบทสนทนาไว้เอง (หน้าเว็บ) ส่วนผู้เรียกที่ใช้ session_id
+    # ให้อ่านจากฐานข้อมูลตามเดิม
+    history = list(prior[-HISTORY_LIMIT:]) if prior else _load_history(db, session.id)
 
     # --- -1. เคยตอบคำถามนี้ไปแล้วไหม -> ใช้คำตอบเดิม ไม่ต้องเรียกโมเดลใหม่ ---
     #
@@ -626,6 +693,29 @@ def prepare_answer(
             # สภาพชั่วคราวของระบบ ไม่ใช่ข้อเท็จจริงจากเอกสาร ถ้าเก็บไว้ตอนที่โมเดล
             # เขียนไม่ได้ ทุกคนที่ถามคำถามเดียวกันจะได้คำตอบที่ด้อยกว่าความจริงต่อไป
             # จนกว่าคลังเอกสารจะเปลี่ยน — เจอมาแล้วตอนโควตาหมดกลางการทดสอบ
+            cacheable=False,
+        )
+
+    # --- 0.75 เอ่ยชื่อสาขาที่คณะไม่มี -> บอกตรงๆ ไม่ใช่ถามกลับว่าสาขาไหน ---
+    if (unknown := _names_an_unknown_program(db, message)) and (
+        listing := program_list_answer(db, written_in_thai(message))
+    ):
+        head = (
+            f"คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขา{unknown} ครับ "
+            "สาขาที่เปิดสอนอยู่มีดังนี้"
+            if written_in_thai(message)
+            else f"The faculty does not offer a programme called {unknown}. "
+            "These are the programmes it does offer:"
+        )
+        body = listing.split("\n\n", 1)[1] if "\n\n" in listing else listing
+        return Prepared(
+            session_id=session.id,
+            status="answered",
+            search_query=message,
+            best_score=0.0,
+            citations=[],
+            canned=f"{head}\n\n{body}",
+            messages=[],
             cacheable=False,
         )
 
@@ -740,9 +830,10 @@ def answer_question(
     user_id: uuid.UUID,
     session_id: uuid.UUID | None,
     message: str,
+    prior: list[PriorTurn] | None = None,
 ) -> ChatReply:
     """ตอบแบบรอจนเขียนเสร็จแล้วส่งทีเดียว — ใช้โดยชุดประเมินและผู้เรียกที่ไม่ต้องการสตรีม"""
-    p = prepare_answer(db, user_id, session_id, message)
+    p = prepare_answer(db, user_id, session_id, message, prior)
     if p.canned is not None:
         reply_text = p.canned
     else:
@@ -779,6 +870,7 @@ def stream_answer(
     user_id: uuid.UUID,
     session_id: uuid.UUID | None,
     message: str,
+    prior: list[PriorTurn] | None = None,
 ) -> Iterator[str]:
     """
     ตอบแบบทยอยส่ง คืนเป็นบรรทัดตามรูปแบบ Server-Sent Events
@@ -790,7 +882,7 @@ def stream_answer(
     FastAPI ปิด session ของ dependency ทิ้งตั้งแต่ตอนที่ route คืนค่า ซึ่งเกิดก่อน
     generator นี้ทำงานจบ ถ้าใช้ตัวเดิมจะได้ error เรื่อง session ถูกปิดไปแล้ว
     """
-    p = prepare_answer(db, user_id, session_id, message)
+    p = prepare_answer(db, user_id, session_id, message, prior)
     yield _sse(
         "meta",
         {
