@@ -85,8 +85,40 @@ def _is_daily_limit(resp: httpx.Response) -> bool:
     return True
 
 
+# ระยะพักเมื่อชนเพดานต่อนาที ใช้เมื่อ Google ไม่ได้บอกเวลามาหรือบอกมาสั้นเกินจริง
+_MINUTE_COOLDOWN_S = 45.0
+
+
+def _cooldown_for(resp: httpx.Response) -> float:
+    """
+    พักโมเดลนี้ไว้กี่วินาทีหลังเจอ 429
+
+    อ่านเวลาที่ Google แนะนำมาก่อน (retryDelay) เพราะเป็นค่าที่ผู้ให้บริการรู้ดีที่สุด
+    แล้วยกพื้นขึ้นเล็กน้อย เพราะกลับไปยิงตรงวินาทีที่เขาบอกพอดีมักโดนซ้ำ
+    """
+    if _is_daily_limit(resp):
+        return 4 * 3600.0
+    try:
+        m = re.search(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"', resp.text)
+    except Exception:
+        m = None
+    return max(float(m.group(1)) + 2 if m else 0.0, _MINUTE_COOLDOWN_S)
+
+
 class _QuotaExhausted(RuntimeError):
-    """โควตารายวันของโมเดลหนึ่งหมด — ต่างจากความล้มเหลวอื่นตรงที่ลองซ้ำกับตัวเดิมไม่ช่วย"""
+    """
+    โมเดลหนึ่งชนเพดานคำขอ — ลองซ้ำกับตัวเดิมทันทีไม่ช่วย ต้องพักไว้ก่อน
+
+    พก cooldown_s มาด้วยเพราะ "พักนานแค่ไหน" ต่างกันมากตามชนิดของเพดาน เพดานต่อนาที
+    หายไปในไม่กี่สิบวินาที ส่วนโควตารายวันต้องรอถึงวันรุ่งขึ้น การใช้ระยะเดียวกันทั้งคู่
+    คือสาเหตุที่โมเดลที่ยังใช้ได้ถูกพักทิ้งไปสี่ชั่วโมงเพราะยิงเร็วไปไม่กี่วินาที
+    """
+
+    def __init__(self, model: str, cooldown_s: float):
+        super().__init__(model)
+        self.model = model
+        self.cooldown_s = cooldown_s
+
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -137,6 +169,12 @@ class GeminiConnector:
     # เครื่องนี้ จึงใช้ระยะเวลาโดยประมาณแทนการคำนวณเวลารีเซ็ต ถ้าเดาสั้นไปก็แค่ลอง
     # โมเดลที่ยังไม่ว่างอีกครั้งแล้วตกไปตัวถัดไปทันที ไม่มีอะไรเสียหาย
     exhausted_for_s: float = 4 * 3600.0
+
+    # รอนานที่สุดเท่าไหร่เมื่อทุกโมเดลติดเพดานต่อนาทีพร้อมกัน
+    #
+    # ตั้งให้ยาวกว่าเวลาที่ Google มักขอให้รอ (ราว 30 วินาที) เล็กน้อย แต่สั้นพอที่ผู้ใช้
+    # จะยังรอไหว ถ้านานกว่านี้แปลว่าไม่ใช่เพดานต่อนาทีแล้ว ปล่อยให้ตกไปโมเดลในเครื่อง
+    max_cooldown_wait_s: float = 75.0
 
     # โมเดลที่ชนโควตาไปแล้ว -> เวลาที่จะกลับมาลองใหม่ได้
     _exhausted: dict[str, float] = field(default_factory=dict, repr=False)
@@ -216,12 +254,29 @@ class GeminiConnector:
         usable = [m for m in order if self._exhausted.get(m, 0.0) <= now]
         if usable:
             return usable
+
+        # ทุกตัวติดคูลดาวน์อยู่ ถ้าตัวที่ใกล้ครบที่สุดเหลืออีกไม่นาน ให้รอแล้วไปต่อ
+        #
+        # เพดานต่อนาทีของ Google เป็นแบบต่อโมเดล การยิงชุดคำถามรัวๆ จึงไล่ชนทีละตัว
+        # จนครบทุกตัวได้ภายในไม่กี่วินาที การล้มทั้งคำขอตรงนั้นแล้วตกไปใช้โมเดลในเครื่อง
+        # (ซึ่งใช้เวลาเป็นนาทีบนเครื่องที่ไม่มีการ์ดจอ) แพงกว่าการรออีกครึ่งนาทีมาก
+        soonest = min(self._exhausted.values())
+        wait = soonest - now
+        if wait <= self.max_cooldown_wait_s:
+            logger.warning("ทุกโมเดลติดเพดานชั่วคราว รออีก %.0f วินาที", max(wait, 0))
+            time.sleep(max(wait, 0) + 1)
+            # ตัวที่ครบกำหนดแล้วจะกลับเข้า usable รอบนี้ จึงไม่วนซ้ำอีกชั้น
+            return self._models_to_try()
+
+        # เหลือแต่คูลดาวน์ยาว (โควตารายวัน) การรอไม่ใช่คำตอบ ลองใหม่ทั้งหมดดีกว่า
+        # ปฏิเสธทันที เพราะบันทึกนี้เป็นการเดาเวลารีเซ็ต ไม่ใช่ข้อมูลจริงจากผู้ให้บริการ
         self._exhausted.clear()
         return order
 
-    def _mark_exhausted(self, model: str) -> None:
-        self._exhausted[model] = time.time() + self.exhausted_for_s
-        logger.warning("โมเดล %s ชนโควตารายวัน จะข้ามไปก่อน", model)
+    def _mark_exhausted(self, model: str, cooldown_s: float | None = None) -> None:
+        cooldown = self.exhausted_for_s if cooldown_s is None else cooldown_s
+        self._exhausted[model] = time.time() + cooldown
+        logger.warning("พักโมเดล %s ไว้ %.0f วินาที จะไปใช้ตัวถัดไปก่อน", model, cooldown)
 
     def chat(
         self,
@@ -239,7 +294,7 @@ class GeminiConnector:
                     logger.info("ตอบด้วยโมเดลสำรอง %s", model)
                 return text
             except _QuotaExhausted as e:
-                self._mark_exhausted(model)
+                self._mark_exhausted(model, e.cooldown_s)
                 last_exc = e.__cause__ or e
         raise LLMConnectionError(f"ทุกโมเดลชนโควตา ล่าสุด: {last_exc}") from last_exc
 
@@ -264,13 +319,13 @@ class GeminiConnector:
                 logger.warning("gemini attempt %d/%d failed: %s", attempt, self.max_retries + 1, type(e).__name__)
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
-                    # โควตารายวันหมด -> ย้ายโมเดล  |  ยิงถี่เกิน -> รอแล้วลองตัวเดิม
-                    if _is_daily_limit(e.response):
-                        raise _QuotaExhausted(model) from e
-                    last_exc = e
-                    logger.warning("gemini ยิงถี่เกินชั่วคราว รอแล้วลองใหม่ครั้งที่ %d", attempt)
-                    time.sleep(min(2 ** attempt, 30))
-                    continue
+                    # ชนเพดานแล้วย้ายโมเดลเสมอ ต่างกันแค่ "พักตัวนี้ไว้นานแค่ไหน"
+                    #
+                    # เพดานต่อนาทีเป็นแบบต่อโมเดล ตัวถัดไปจึงยังยิงได้ทันที การนั่งรอ
+                    # กับตัวเดิมสองสี่แปดวินาทีแล้วยอมแพ้ (ของเดิม) ช้ากว่าและมักไม่พอ
+                    # เพราะ Google บอกให้รอราวสามสิบวินาที ผลคือตกไปใช้โมเดลในเครื่อง
+                    # ทั้งที่ยังมีโมเดลบนคลาวด์ว่างอยู่อีกสามตัว
+                    raise _QuotaExhausted(model, _cooldown_for(e.response)) from e
                 # 4xx อื่นคือเราส่งผิดเอง ลองใหม่ก็ได้ผลเท่าเดิม
                 if e.response.status_code < 500:
                     raise LLMConnectionError(self._explain(e)) from e
@@ -307,7 +362,7 @@ class GeminiConnector:
                     # จะเห็นคำตอบต่อกันจากคนละโมเดล ซึ่งอ่านไม่รู้เรื่องยิ่งกว่าข้อผิดพลาด
                     if started:
                         raise LLMConnectionError(f"โควตาหมดกลางคำตอบ: {e}") from e
-                    self._mark_exhausted(model)
+                    self._mark_exhausted(model, e.cooldown_s)
                     last_exc = e.__cause__ or e
                     break  # ไปโมเดลถัดไป ไม่ลองซ้ำตัวเดิม
                 except LLMConnectionError as e:
@@ -337,8 +392,8 @@ class GeminiConnector:
                     if text := self._text_of(json.loads(line[6:])):
                         yield text
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429 and _is_daily_limit(e.response):
-                raise _QuotaExhausted(model) from e
+            if e.response.status_code == 429:
+                raise _QuotaExhausted(model, _cooldown_for(e.response)) from e
             raise LLMConnectionError(self._explain(e)) from e
         except (httpx.HTTPError, json.JSONDecodeError) as e:
             raise LLMConnectionError(f"gemini stream ล้มเหลว: {type(e).__name__}: {e}"[:200]) from e

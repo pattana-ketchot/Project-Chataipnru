@@ -93,8 +93,25 @@ def _ask_with_retry(client: httpx.Client, headers: dict, question: str, attempts
     for attempt in range(1, attempts + 1):
         try:
             r = client.post("/chat", headers=headers, json={"message": question})
-            if r.status_code in (429, 503):
-                raise EvaluationUnavailable(f"HTTP {r.status_code}")
+            # 429 มาจากตัวจำกัดของเราเอง ไม่ใช่จากผู้ให้บริการโมเดล
+            #
+            # /chat จำกัด 30 คำขอต่อนาทีต่อหนึ่งบัญชี และชุดประเมินยิงทั้ง 118 ข้อจาก
+            # บัญชีเดียว พอคำตอบมาจากแคชซึ่งเร็วมาก จึงทะลุเพดานของตัวเองภายในไม่กี่
+            # สิบวินาที นี่คือสัญญาณว่า "ช้าลงหน่อย" ไม่ใช่ "บริการใช้ไม่ได้"
+            #
+            # เดิมหยุดทั้งชุดตรงนี้ ทำให้การประเมินจบที่ 30 จาก 118 ข้อแล้วรายงานว่า
+            # ประเมินไม่ครบ ซึ่งอ่านแล้วเหมือนระบบมีปัญหา ทั้งที่ระบบตอบได้ปกติทุกข้อ
+            # และเสียคำตอบที่คำนวณมาแล้วไปเปล่าๆ
+            if r.status_code == 429:
+                if attempt < attempts:
+                    print("      (ชนเพดานคำขอของชุดประเมินเอง รอ 60 วินาทีแล้วถามต่อ)")
+                    time.sleep(60)
+                    continue
+                raise EvaluationUnavailable("HTTP 429 ซ้ำหลายครั้ง")
+            # 503 คือฝั่งโมเดลตอบไม่ได้จริง รอแล้วยิงต่อก็ได้ผลเหมือนเดิม และคะแนน
+            # ที่วัดต่อจากนั้นจะไม่ใช่คะแนนของระบบที่ทำงานปกติ
+            if r.status_code == 503:
+                raise EvaluationUnavailable("HTTP 503")
             if r.status_code == 200:
                 data = r.json()
                 if any(marker in data.get("reply", "") for marker in (
