@@ -30,6 +30,18 @@ _GUESS_MARKERS = ("โดยทั่วไป", "โดยปกติ", "ม�
 _LONG_REPLY = 250  # ตัวอักษร
 
 
+class EvaluationUnavailable(RuntimeError):
+    pass
+
+
+def save_records(path: str | None, records: list[dict]) -> None:
+    if path:
+        target = Path(path)
+        temporary = target.with_suffix(target.suffix + ".tmp")
+        temporary.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(target)
+
+
 def classify(reply: str, status: str) -> str:
     """จัดประเภทคำตอบเป็น answered / not_found / refuse / small_talk / hallucinated"""
     if status == "small_talk":
@@ -62,8 +74,16 @@ def _ask_with_retry(client: httpx.Client, headers: dict, question: str, attempts
     for attempt in range(1, attempts + 1):
         try:
             r = client.post("/chat", headers=headers, json={"message": question})
+            if r.status_code in (429, 503):
+                raise EvaluationUnavailable(f"HTTP {r.status_code}")
             if r.status_code == 200:
-                return r.json()
+                data = r.json()
+                if any(marker in data.get("reply", "") for marker in (
+                    "ระบบหลักตอบไม่ได้ชั่วคราว", "ยังเขียนคำอธิบายประกอบให้ไม่ได้",
+                    "ระบบตอบไม่ได้ในขณะนี้",
+                )):
+                    raise EvaluationUnavailable("degraded reply")
+                return data
         except httpx.HTTPError:
             pass
         if attempt < attempts:
@@ -105,10 +125,16 @@ def main() -> None:
             for q in group["questions"]:
                 t0 = time.time()
                 # ทุกคำถามเริ่ม session ใหม่ เพื่อไม่ให้ประวัติของข้อก่อนหน้ารบกวนผล
-                d = _ask_with_retry(c, headers, q)
+                try:
+                    d = _ask_with_retry(c, headers, q)
+                except EvaluationUnavailable as exc:
+                    save_records(args.out, records)
+                    print(f"หยุด: {exc}; ประเมินไม่ครบ ({len(records)}/{total_questions}) — ไม่ใช่คะแนนชุดเต็ม")
+                    raise SystemExit(2) from exc
                 if d is None:
                     records.append({"group": group["id"], "question": q, "expect": expect,
                                     "got": "error", "score": 0.0, "seconds": 0, "reply": ""})
+                    save_records(args.out, records)
                     # ไม่ต้องนับอะไรเพิ่ม จำนวนข้อทั้งหมดนับจาก len(group["questions"]) อยู่แล้ว
                     # เดิมมีบรรทัด total += 1 ซึ่งอ้างถึงตัวแปรที่ไม่เคยประกาศ ทำให้ทั้งการรัน
                     # ล้มตอนที่เรียกโมเดลไม่สำเร็จ — คือพังตอนที่ต้องการผลลัพธ์มากที่สุดพอดี
@@ -120,6 +146,7 @@ def main() -> None:
                 records.append({"group": group["id"], "question": q, "expect": expect, "got": got,
                                 "score": d["top_score"], "seconds": round(time.time() - t0, 1),
                                 "reply": d["reply"]})
+                save_records(args.out, records)
                 print(f'  {"ผ่าน" if ok else "ไม่ผ่าน"}  [{got:<13}] {d["top_score"]:.3f} {time.time()-t0:4.0f}s  {q}')
                 if not ok:
                     print(f'          -> {d["reply"][:170]}')
@@ -135,7 +162,7 @@ def main() -> None:
         print(f"  คำตอบที่เข้าข่ายแต่งข้อมูล: {halluc}")
 
     if args.out:
-        Path(args.out).write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+        save_records(args.out, records)
         print(f"  บันทึกผลดิบไว้ที่ {args.out}")
 
 
