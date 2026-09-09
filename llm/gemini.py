@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -43,6 +44,32 @@ import httpx
 from llm.connector import ChatMessage, LLMConnectionError
 
 logger = logging.getLogger("llm.gemini")
+
+
+def _is_daily_limit(resp: httpx.Response) -> bool:
+    """
+    429 นี้เป็นโควตารายวันหรือแค่ยิงถี่เกินในนาทีนั้น
+
+    ต้องแยกให้ออก เพราะสองอย่างนี้ต้องรับมือคนละแบบ — โควตารายวันหมดแล้วรอไม่ช่วย
+    ต้องย้ายโมเดล ส่วนการยิงถี่เกินรอไม่กี่วินาทีก็ผ่าน การเหมาว่าเป็นรายวันทั้งคู่
+    ทำให้โมเดลที่ยังใช้ได้ถูกพักไปสี่ชั่วโมงเพราะผู้ใช้บังเอิญถามติดกันเร็วไปหน่อย
+    ซึ่งเผาโมเดลสำรองทิ้งทีละตัวโดยไม่จำเป็น
+
+    Google บอกชนิดของโควตามาในเนื้อความอยู่แล้ว (quotaId ที่มีคำว่า PerDay หรือ
+    PerMinute) และแนบเวลาที่ควรรอมาด้วย จึงอ่านจากคำตอบจริงแทนการเดา ถ้าอ่านไม่ได้
+    ให้ถือว่าเป็นรายวัน เพราะการย้ายโมเดลเสียหายน้อยกว่าการวนรอโควตาที่ไม่มีวันคืนมา
+    """
+    try:
+        body = resp.text
+    except Exception:
+        return True
+    if "PerMinute" in body or "perMinute" in body:
+        return False
+    if "PerDay" in body or "per day" in body.lower():
+        return True
+    m = re.search(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"', body)
+    # รอไม่ถึงสองนาทีแปลว่าเป็นเพดานระยะสั้น ไม่ใช่โควตาที่หมดไปทั้งวัน
+    return not (m and float(m.group(1)) < 120)
 
 
 class _QuotaExhausted(RuntimeError):
@@ -223,9 +250,14 @@ class GeminiConnector:
                 last_exc = e
                 logger.warning("gemini attempt %d/%d failed: %s", attempt, self.max_retries + 1, type(e).__name__)
             except httpx.HTTPStatusError as e:
-                # 429 = โควตาของโมเดลนี้หมด ลองซ้ำกับตัวเดิมไม่ช่วย ให้ไปโมเดลถัดไปเลย
                 if e.response.status_code == 429:
-                    raise _QuotaExhausted(model) from e
+                    # โควตารายวันหมด -> ย้ายโมเดล  |  ยิงถี่เกิน -> รอแล้วลองตัวเดิม
+                    if _is_daily_limit(e.response):
+                        raise _QuotaExhausted(model) from e
+                    last_exc = e
+                    logger.warning("gemini ยิงถี่เกินชั่วคราว รอแล้วลองใหม่ครั้งที่ %d", attempt)
+                    time.sleep(min(2 ** attempt, 30))
+                    continue
                 # 4xx อื่นคือเราส่งผิดเอง ลองใหม่ก็ได้ผลเท่าเดิม
                 if e.response.status_code < 500:
                     raise LLMConnectionError(self._explain(e)) from e
@@ -292,7 +324,7 @@ class GeminiConnector:
                     if text := self._text_of(json.loads(line[6:])):
                         yield text
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
+            if e.response.status_code == 429 and _is_daily_limit(e.response):
                 raise _QuotaExhausted(model) from e
             raise LLMConnectionError(self._explain(e)) from e
         except (httpx.HTTPError, json.JSONDecodeError) as e:
