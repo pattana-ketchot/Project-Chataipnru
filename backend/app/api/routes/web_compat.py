@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import web_rate_limiter
 from app.db.session import get_db
-from app.services.chat import stream_answer
+from app.services.chat import PriorTurn, stream_answer
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
 from app.services.program_names import program_about, program_facts
@@ -95,18 +95,34 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
     หน้าเว็บอ่านสตรีมแล้วต่อข้อความเข้าไปในกล่องแชทตรงๆ ไม่ได้แยกเหตุการณ์ จึงต้อง
     แกะเฉพาะเนื้อความออกมาจาก SSE ของ stream_answer() ก่อนส่งออกไป
 
-    รับประวัติมาทั้งก้อนแต่ใช้เฉพาะข้อความล่าสุดของผู้ใช้ เพราะหลังบ้านจำบทสนทนา
-    เองด้วย session_id อยู่แล้ว
+    รับประวัติมาทั้งก้อนแล้วส่งต่อให้หลังบ้านทั้งหมด เพราะหน้าเว็บไม่ได้เก็บ session_id
+    ไว้ หลังบ้านจึงจำบทสนทนาแทนให้ไม่ได้ — ประวัติที่ใช้ตอบต้องมาจากที่หน้าเว็บส่งมา
     """
     message = next((m.content for m in reversed(payload.messages) if m.role == "user"), "")
     if not message.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "ไม่พบคำถามของผู้ใช้")
 
+    # ส่งบทสนทนาก่อนหน้าที่หน้าเว็บแนบมาด้วยเข้าไปให้หลังบ้านใช้
+    #
+    # เดิมหยิบเฉพาะข้อความล่าสุดแล้วเรียกด้วย session_id=None โดยมีคอมเมนต์กำกับว่า
+    # "หลังบ้านจำบทสนทนาเองด้วย session_id อยู่แล้ว" ซึ่งไม่จริง — session_id เป็น None
+    # ทุกครั้ง หลังบ้านจึงสร้างบทสนทนาใหม่ทุกคำถาม ประวัติที่หน้าเว็บอุตส่าห์ส่งมาถูกทิ้ง
+    # ทั้งหมด ผลคือถามต่อว่า "แล้วจบไปทำงานอะไรได้บ้าง" หลังถามถึงวิทยาการคอมพิวเตอร์
+    # จะได้คำถามกลับว่าสนใจสาขาไหน ทั้งที่เพิ่งคุยกันไป
+    #
+    # หน้าเว็บไม่ได้เก็บ session_id ไว้ จึงรับประวัติจากที่มันส่งมาแทนการอ่านฐานข้อมูล
+    # ตัดข้อความสุดท้ายออกเพราะนั่นคือคำถามปัจจุบัน ไม่ใช่ประวัติ
+    prior = [
+        PriorTurn(role="assistant" if m.role == "assistant" else "user", content=m.content)
+        for m in payload.messages[:-1]
+        if m.content.strip()
+    ]
+
     user_id = shared_user(db).id
 
     def text_only():
         try:
-            for event in stream_answer(db, user_id=user_id, session_id=None, message=message):
+            for event in stream_answer(db, user_id=user_id, session_id=None, message=message, prior=prior):
                 # รูปแบบหนึ่งเหตุการณ์: "event: <ชื่อ>\ndata: <json>\n\n"
                 kind = data = None
                 for line in event.split("\n"):
