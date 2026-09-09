@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -42,6 +43,10 @@ import httpx
 from llm.connector import ChatMessage, LLMConnectionError
 
 logger = logging.getLogger("llm.gemini")
+
+
+class _QuotaExhausted(RuntimeError):
+    """โควตารายวันของโมเดลหนึ่งหมด — ต่างจากความล้มเหลวอื่นตรงที่ลองซ้ำกับตัวเดิมไม่ช่วย"""
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -63,6 +68,38 @@ class GeminiConnector:
     #
     # รุ่น lite ไม่ใช้โทเคนคิดเลย ค่านี้จึงไม่มีผลกับมัน เป็นเพียงตาข่ายรองรับ
     answer_token_cap: int = 2048
+
+    # โมเดลที่จะใช้ต่อเมื่อตัวหลักชนโควตารายวัน
+    #
+    # โควตาชั้นใช้งานฟรีเป็นแบบ "ต่อโมเดล ต่อโปรเจกต์" ตามที่ Google กำหนดเอง
+    # (quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier) การย้ายไปโมเดลอื่น
+    # จึงได้โควตาก้อนใหม่ ไม่ใช่การหลบเลี่ยงเพดานของโปรเจกต์
+    #
+    # ที่ต้องมีเพราะเดิมพอชน 429 ระบบยอมแพ้ทั้งวัน คำถามเรื่องหลักสูตรทุกข้อถูกปฏิเสธ
+    # จนกว่าโควตาจะรีเซ็ต — เกิดขึ้นสองวันติดระหว่างพัฒนา และจะเกิดกับผู้ใช้จริงด้วย
+    #
+    # เรียงจากใกล้เคียงตัวหลักที่สุดไปหาไกลสุด เพื่อให้คำตอบเปลี่ยนสำนวนน้อยที่สุด
+    # เมื่อสลับ ตั้งทับได้ด้วย GEMINI_FALLBACK_MODELS (คั่นด้วยจุลภาค)
+    fallback_models: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            m.strip()
+            for m in os.getenv(
+                "GEMINI_FALLBACK_MODELS",
+                "gemini-3.1-flash-lite,gemini-3.5-flash,gemini-3.6-flash",
+            ).split(",")
+            if m.strip()
+        )
+    )
+
+    # ระยะเวลาที่ถือว่าโมเดลหนึ่ง "โควตาหมด" หลังเจอ 429
+    #
+    # โควตาจริงรีเซ็ตวันละครั้งตามเวลาของ Google ซึ่งเราไม่รู้แน่ชัดว่าตรงกับกี่โมงของ
+    # เครื่องนี้ จึงใช้ระยะเวลาโดยประมาณแทนการคำนวณเวลารีเซ็ต ถ้าเดาสั้นไปก็แค่ลอง
+    # โมเดลที่ยังไม่ว่างอีกครั้งแล้วตกไปตัวถัดไปทันที ไม่มีอะไรเสียหาย
+    exhausted_for_s: float = 4 * 3600.0
+
+    # โมเดลที่ชนโควตาไปแล้ว -> เวลาที่จะกลับมาลองใหม่ได้
+    _exhausted: dict[str, float] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         # ตัดช่องว่างและอักขระขึ้นบรรทัดใหม่ที่อาจติดมาตอนวางคีย์ลงไฟล์ตั้งค่า
@@ -125,8 +162,27 @@ class GeminiConnector:
         return ""
 
     # ------------------------------------------------------------------
-    # Chat / generation
+    # Chat / generation — พร้อมการสลับโมเดลเมื่อชนโควตา
     # ------------------------------------------------------------------
+    def _models_to_try(self) -> list[str]:
+        """
+        โมเดลที่ยังไม่ชนโควตา เรียงจากตัวหลักไปตัวสำรอง
+
+        ถ้าชนหมดทุกตัว ให้ล้างบันทึกแล้วเริ่มจากตัวหลักใหม่ ดีกว่าปฏิเสธทันทีโดยไม่ลอง
+        เพราะบันทึกนี้เป็นการเดาเวลารีเซ็ต ไม่ใช่ข้อมูลจริงจากผู้ให้บริการ
+        """
+        now = time.time()
+        order = [self.chat_model, *(m for m in self.fallback_models if m != self.chat_model)]
+        usable = [m for m in order if self._exhausted.get(m, 0.0) <= now]
+        if usable:
+            return usable
+        self._exhausted.clear()
+        return order
+
+    def _mark_exhausted(self, model: str) -> None:
+        self._exhausted[model] = time.time() + self.exhausted_for_s
+        logger.warning("โมเดล %s ชนโควตารายวัน จะข้ามไปก่อน", model)
+
     def chat(
         self,
         messages: list[ChatMessage],
@@ -135,7 +191,20 @@ class GeminiConnector:
         num_predict: int | None = None,
     ) -> str:
         payload = self._to_payload(messages, temperature, json_mode, num_predict)
-        path = f"/models/{self.chat_model}:generateContent"
+        last_exc: Exception | None = None
+        for model in self._models_to_try():
+            try:
+                text = self._chat_one_model(model, payload)
+                if model != self.chat_model:
+                    logger.info("ตอบด้วยโมเดลสำรอง %s", model)
+                return text
+            except _QuotaExhausted as e:
+                self._mark_exhausted(model)
+                last_exc = e.__cause__ or e
+        raise LLMConnectionError(f"ทุกโมเดลชนโควตา ล่าสุด: {last_exc}") from last_exc
+
+    def _chat_one_model(self, model: str, payload: dict[str, Any]) -> str:
+        path = f"/models/{model}:generateContent"
 
         last_exc: Exception | None = None
         for attempt in range(1, self.max_retries + 2):
@@ -154,8 +223,11 @@ class GeminiConnector:
                 last_exc = e
                 logger.warning("gemini attempt %d/%d failed: %s", attempt, self.max_retries + 1, type(e).__name__)
             except httpx.HTTPStatusError as e:
-                # 429 = ใช้เกินโควตา ลองใหม่มีโอกาสผ่าน / 4xx อื่นคือเราส่งผิดเอง ลองใหม่ก็เท่าเดิม
-                if e.response.status_code != 429 and e.response.status_code < 500:
+                # 429 = โควตาของโมเดลนี้หมด ลองซ้ำกับตัวเดิมไม่ช่วย ให้ไปโมเดลถัดไปเลย
+                if e.response.status_code == 429:
+                    raise _QuotaExhausted(model) from e
+                # 4xx อื่นคือเราส่งผิดเอง ลองใหม่ก็ได้ผลเท่าเดิม
+                if e.response.status_code < 500:
                     raise LLMConnectionError(self._explain(e)) from e
                 last_exc = e
                 logger.warning("gemini HTTP %d attempt %d", e.response.status_code, attempt)
@@ -174,27 +246,42 @@ class GeminiConnector:
         (429) ที่เจอบ่อยในชั้นใช้งานฟรี ถ้าล้มหลังส่งข้อความไปแล้วจะไม่ลองใหม่
         เพราะผู้ใช้จะเห็นคำตอบซ้ำสองรอบ (เหตุผลเดียวกับ OllamaConnector.chat_stream)
         """
-        for attempt in range(1, self.max_retries + 2):
-            started = False
-            try:
-                for chunk in self._stream_once(messages, temperature, num_predict):
-                    started = True
-                    yield chunk
-                return
-            except LLMConnectionError:
-                if started or attempt > self.max_retries:
-                    raise
-                logger.warning("gemini stream ลองใหม่ครั้งที่ %d", attempt + 1)
-                time.sleep(2 * attempt)
+        last_exc: Exception | None = None
+        for model in self._models_to_try():
+            for attempt in range(1, self.max_retries + 2):
+                started = False
+                try:
+                    for chunk in self._stream_once(model, messages, temperature, num_predict):
+                        started = True
+                        yield chunk
+                    if model != self.chat_model:
+                        logger.info("สตรีมด้วยโมเดลสำรอง %s", model)
+                    return
+                except _QuotaExhausted as e:
+                    # ชนโควตากลางสตรีมหลังส่งข้อความไปแล้ว สลับโมเดลไม่ได้ เพราะผู้ใช้
+                    # จะเห็นคำตอบต่อกันจากคนละโมเดล ซึ่งอ่านไม่รู้เรื่องยิ่งกว่าข้อผิดพลาด
+                    if started:
+                        raise LLMConnectionError(f"โควตาหมดกลางคำตอบ: {e}") from e
+                    self._mark_exhausted(model)
+                    last_exc = e.__cause__ or e
+                    break  # ไปโมเดลถัดไป ไม่ลองซ้ำตัวเดิม
+                except LLMConnectionError as e:
+                    if started or attempt > self.max_retries:
+                        raise
+                    last_exc = e
+                    logger.warning("gemini stream ลองใหม่ครั้งที่ %d", attempt + 1)
+                    time.sleep(2 * attempt)
+        raise LLMConnectionError(f"ทุกโมเดลชนโควตา ล่าสุด: {last_exc}") from last_exc
 
     def _stream_once(
         self,
+        model: str,
         messages: list[ChatMessage],
         temperature: float,
         num_predict: int | None,
     ) -> Iterator[str]:
         payload = self._to_payload(messages, temperature, json_mode=False, num_predict=num_predict)
-        path = f"/models/{self.chat_model}:streamGenerateContent"
+        path = f"/models/{model}:streamGenerateContent"
         try:
             with self._client.stream("POST", path, json=payload, params={"alt": "sse"}) as resp:
                 resp.raise_for_status()
@@ -205,6 +292,8 @@ class GeminiConnector:
                     if text := self._text_of(json.loads(line[6:])):
                         yield text
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                raise _QuotaExhausted(model) from e
             raise LLMConnectionError(self._explain(e)) from e
         except (httpx.HTTPError, json.JSONDecodeError) as e:
             raise LLMConnectionError(f"gemini stream ล้มเหลว: {type(e).__name__}: {e}"[:200]) from e
