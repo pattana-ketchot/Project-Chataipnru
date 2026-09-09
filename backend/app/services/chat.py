@@ -41,6 +41,7 @@ from llm.prompts import (  # noqa: E402
     CHAT_SYSTEM_PROMPT,
     CONDENSE_SYSTEM_PROMPT,
     GROUNDING_CHECK_SYSTEM_PROMPT,
+    NO_EVIDENCE_MARKER,
     NOT_FOUND_REPLY,
     NOT_FOUND_REPLY_EN,
     OUT_OF_SCOPE_REPLY,
@@ -422,11 +423,31 @@ def _recommendation_reply(db: Session, message: str) -> str | None:
     from app.services.program_match import confidence_of, match_programs
 
     try:
-        matches = match_programs(db, {"extra": message}, limit=3)
+        # ขอมาเกินสามเพราะบางรายการจะถูกตัดออกตอนกรอง ถ้าขอมาสามพอดีแล้วตัดทิ้งสอง
+        # จะเหลือรายการเดียวทั้งที่มีสาขาที่มีหลักฐานรองรับรออยู่ในลำดับถัดไป
+        matches = match_programs(db, {"extra": message}, limit=6)
     except (ValueError, LLMConnectionError):
         return None
     if not matches:
         return None
+
+    # เก็บเฉพาะสาขาที่เอกสารบอกได้จริงว่าเข้ากับผู้ใช้ตรงไหน
+    #
+    # เดิมแสดงครบสามอันดับเสมอ ผลคือรายการที่ไม่มีหลักฐานรองรับก็ยังถูกนับเป็นสาขา
+    # แนะนำ โดยมีบรรทัดใต้ชื่อเขียนว่าข้อมูลไม่เพียงพอ ซึ่งขัดกันเอง — ผู้อ่านเห็นสาขา
+    # อยู่ในอันดับที่ระบบแนะนำ แต่คำอธิบายบอกว่าอธิบายไม่ได้ว่าทำไม
+    #
+    # จำนวนที่แสดงจึงเป็นไปตามหลักฐานที่มี ไม่ใช่ตัวเลขคงที่ ถ้ามีสาขาเดียวที่รองรับ
+    # ก็แสดงสาขาเดียว การเติมให้ครบสามคือการเสนอสาขาที่ระบบเองก็บอกไม่ได้ว่าทำไม
+    supported = [m for m in matches if m.rationale.strip() and NO_EVIDENCE_MARKER not in m.rationale][:3]
+    if not supported:
+        return (
+            "จากสิ่งที่คุณบอกมา ผมยังไม่พบสาขาที่เอกสารหลักสูตรระบุไว้ชัดพอจะบอกได้ว่า"
+            "ตรงกับความสนใจของคุณตรงไหนครับ ลองเล่ารายละเอียดเพิ่ม เช่น วิชาที่ชอบ "
+            "งานที่อยากทำ หรือสิ่งที่ถนัด แล้วผมลองใหม่ให้ หรือจะถามว่าคณะมีสาขาอะไรบ้าง"
+            "เพื่อดูรายชื่อทั้งหมดก่อนก็ได้ครับ"
+        )
+    matches = supported
 
     # แสดงเป็นลำดับอย่างเดียว ไม่แสดงเปอร์เซ็นต์
     #
@@ -448,8 +469,8 @@ def _recommendation_reply(db: Session, message: str) -> str | None:
         lines.append("คะแนนของหลายสาขาใกล้เคียงกันมาก แนะนำให้ดูทุกสาขาประกอบกัน ไม่ควรยึดอันดับ 1 อย่างเดียว")
 
     lines.append("")
-    lines.append("อันดับนี้คำนวณจากความใกล้เคียงกับเนื้อหาในเอกสารหลักสูตรของทุกสาขา "
-                 "ถามรายละเอียดของสาขาไหนต่อได้เลยครับ")
+    lines.append("คำแนะนำนี้พิจารณาจากความใกล้เคียงระหว่างความสนใจที่คุณระบุกับข้อมูลใน"
+                 "เอกสารหลักสูตรของแต่ละสาขา ถามรายละเอียดของสาขาไหนต่อได้เลยครับ")
     return "\n".join(lines)
 
 

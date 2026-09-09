@@ -35,6 +35,7 @@ from app.services.program_names import program_about, program_facts
 from app.services.web_compat import label_of, labels_of, match_by_title, normalise_title, shared_user
 
 from llm.connector import LLMConnectionError  # noqa: E402
+from llm.prompts import NO_EVIDENCE_MARKER  # noqa: E402
 
 router = APIRouter(tags=["web-compat"])
 logger = logging.getLogger("course_advisor")
@@ -56,6 +57,11 @@ _MATCH_LIMIT = 10
 _MAX_ALTERNATIVES = 2
 
 NO_REASON = "ระบบจัดอันดับจากความใกล้เคียงกับเนื้อหาในเอกสารหลักสูตรแล้ว แต่ยังเขียนคำอธิบายประกอบให้ไม่ได้ในขณะนี้"
+
+# ต่างจาก NO_REASON ตรงที่อันนั้นคือ "เขียนคำอธิบายไม่ได้ตอนนี้" (โมเดลล่ม)
+# ส่วนอันนี้คือ "เอกสารไม่มีข้อมูลให้เขียน" ซึ่งเป็นข้อเท็จจริงเกี่ยวกับเอกสาร ไม่ใช่
+# ความขัดข้องชั่วคราว ผู้อ่านควรแยกสองอย่างนี้ออกจากกันได้
+NO_EVIDENCE_REASON = "เอกสารหลักสูตรของสาขานี้ไม่ได้ระบุข้อมูลที่เชื่อมโยงกับสิ่งที่คุณเลือกไว้โดยตรง"
 
 
 class WebMessage(BaseModel):
@@ -263,10 +269,15 @@ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_
 
     def card(entry):
         web_id, m = entry
+        reason = (m.rationale or "").strip()
+        # เครื่องหมายที่โมเดลใช้บอกว่าเอกสารไม่มีข้อมูลรองรับ เป็นภาษาของระบบภายใน
+        # ต้องไม่หลุดไปถึงหน้าจอ แปลงเป็นข้อความที่ผู้ใช้อ่านรู้เรื่องแทน
+        if not reason or NO_EVIDENCE_MARKER in reason:
+            reason = NO_EVIDENCE_REASON if NO_EVIDENCE_MARKER in reason else NO_REASON
         return {
             "courseId": web_id,
             "matchScore": m.match_percent,
-            "reason": (m.rationale or "").strip() or NO_REASON,
+            "reason": reason,
         }
 
     low = confidence_of(matches) == "low"
