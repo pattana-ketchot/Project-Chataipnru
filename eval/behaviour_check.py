@@ -154,6 +154,24 @@ def build_checks() -> list[Check]:
         + (has_none("ไม่เพียงพอ", *LEAKS)(r) or []) or None,
     ))
 
+    def asks_follow_up(r):
+        problems = []
+        if "ใกล้เคียงที่สุด" in r:
+            problems.append("ยังสรุปว่าเป็นสาขาที่ใกล้เคียงที่สุด")
+        last = r.strip().splitlines()[-1] if r.strip() else ""
+        if "เพื่อให้แนะนำได้ตรงขึ้น" not in last:
+            problems.append("ไม่ได้ถามต่อท้ายคำตอบ")
+        problems += [f"คำถามต่อยอดเอ่ยชื่อสาขา {p}" for p in OFFERED if p in last]
+        return problems or None
+
+    checks.append(Check(
+        "แนะนำหลายสาขาแล้วถามต่อ โดยไม่สรุปแรงเกินข้อมูล",
+        "สาขาไหนเหมาะกับคนชอบทำงานกับคอมพิวเตอร์",
+        "ผู้ใช้บอกมาประโยคเดียว เดิมตอบว่าเป็นสาขา 'ที่ใกล้เคียงที่สุด' ซึ่งสรุปแรงเกินข้อมูล "
+        "และจบคำตอบโดยไม่ช่วยให้ผู้ใช้เลือกระหว่างสาขาที่ใกล้กันได้",
+        asks_follow_up,
+    ))
+
     # --- ถามกลับเมื่อคำถามไม่ระบุสาขา ---
     checks.append(Check(
         "ถามกลับเมื่อคำถามไม่ได้บอกว่าสาขาไหน",
