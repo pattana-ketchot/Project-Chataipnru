@@ -139,11 +139,15 @@ class RecommendationReplyChecks(_WithProgramNames):
         reply = self.reply_for([FakeMatch(CS, "เน้นซอฟต์แวร์"), FakeMatch(IT, "เน้นระบบสารสนเทศ")])
         self.assertEqual(reply.splitlines()[-1], f"{chat._FOLLOW_UP_LEAD} {chat._FOLLOW_UP_QUESTION}")
 
-    def test_สาขาเดียวไม่ถามต่อและไม่บอกว่าหลายสาขาใกล้เคียง(self):
-        """เดิมขึ้นประโยค 'หลายสาขาใกล้เคียงกันมาก' ใต้รายการที่มีสาขาเดียว"""
+    def test_สาขาเดียวก็ถามต่อและไม่บอกว่าหลายสาขาใกล้เคียง(self):
+        """
+        เดิมขึ้นประโยค 'หลายสาขาใกล้เคียงกันมาก' ใต้รายการที่มีสาขาเดียว และไม่ถามต่อเลย ผู้ตรวจ
+        ทักว่า "ชอบทำงานด้านบริการ" ได้สาขาอาหารสาขาเดียวแล้วจบ ผู้ใช้อาจเข้าใจว่างานบริการคือ
+        งานอาหาร ทั้งที่ไม่ได้บอกเลยว่าชอบอาหาร
+        """
         import app.services.chat as chat
         reply = self.reply_for([FakeMatch(MATH, "เน้นการคำนวณ")], confidence="low")
-        self.assertNotIn(chat._FOLLOW_UP_LEAD, reply)
+        self.assertEqual(reply.splitlines()[-1], f"{chat._FOLLOW_UP_LEAD} {chat._FOLLOW_UP_QUESTION_SINGLE}")
         self.assertNotIn("ใกล้เคียงกันมาก", reply)
 
     def test_รอบที่ตอบกลับมาแล้วไม่ถามซ้ำ(self):
@@ -166,7 +170,7 @@ class RecommendationReplyChecks(_WithProgramNames):
             [FakeMatch(CS, NO_EVIDENCE_MARKER), FakeMatch(IT, NO_EVIDENCE_MARKER)], refinement=True,
         )
         self.assertNotIn("ยังไม่พบสาขา", reply)
-        self.assertIn("ยังแยกไม่ได้", reply)
+        self.assertIn("ยังหาสาขาที่ตรงกว่าเดิมไม่ได้", reply)
         self.assertIn("แนะนำไปก่อนหน้านี้", reply)
 
     def test_รอบต่อยอดส่งข้อความเต็มให้ขั้นเขียนเหตุผล(self):
