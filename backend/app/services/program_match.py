@@ -573,8 +573,15 @@ def _rationale_for(rationales: dict[str, str], title: str) -> str:
     """
     if (exact := rationales.get(title)) is not None:
         return exact
+    # พรอมต์คั่นแต่ละหลักสูตรด้วยหัวข้อ "### ชื่อหลักสูตร" บางครั้งโมเดลคัดลอก "### " ติดมาในคีย์
+    # (เจอบนระบบจริง 1 ใน 12 ครั้ง) คีย์นั้นไม่ตรงทั้งสองแบบ เหตุผลจึงหาย ผู้ใช้ได้ข้อความว่าระบบยังเขียน
+    # คำอธิบายไม่ได้ ตัดเครื่องหมายหัวข้อออกแล้วเทียบตรงตัวอีกรอบก่อนเทียบแบบหลวม เพื่อให้ฉบับต่างปี
+    # ของสาขาเดียวกันยังได้เหตุผลของตัวเอง
+    cleaned = {key.lstrip("#").strip(): text for key, text in rationales.items()}
+    if (exact := cleaned.get(title)) is not None:
+        return exact
     wanted = _rationale_key(title)
-    for key, text in rationales.items():
+    for key, text in cleaned.items():
         if _rationale_key(key) == wanted:
             return text
     return ""
