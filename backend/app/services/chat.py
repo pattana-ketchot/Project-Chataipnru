@@ -27,7 +27,7 @@ from app.db.session import SessionLocal
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.chat_history import user_first
-from app.services.course_scope import _distinctive_name, resolve_scope
+from app.services.course_scope import _distinctive_name, programmes_named, resolve_scope
 from app.services.answer_cache import corpus_version, lookup as cache_lookup, store as cache_store
 from app.services.llm_client import get_llm_connector, no_fallback_kwargs
 from app.services.program_list import asks_for_program_list, program_list_answer
@@ -157,18 +157,27 @@ def _load_history(db: Session, session_id: uuid.UUID) -> list[ChatMessage]:
     return list(reversed(rows))  # เรียงเก่า -> ใหม่ ก่อนส่งเข้า prompt
 
 
-def _format_history_for_condense(history: list[ChatMessage]) -> str:
+def _format_history_for_condense(history: list[ChatMessage], programme: str | None = None) -> str:
     """
     ส่งเฉพาะคำถามของผู้ใช้เข้า prompt เขียนคำถามใหม่ ไม่ส่งคำตอบของผู้ช่วย
 
     จากการทดสอบ: ถ้าใส่คำตอบของผู้ช่วยลงไปด้วย โมเดลจะลอกเนื้อความยาวๆ จาก
     คำตอบเก่ามาต่อกับคำถามใหม่ ทำให้ query ที่ได้ยาวผิดปกติและความหมายเพี้ยน
+
+    แต่ถ้าส่งเฉพาะคำถามของผู้ใช้อย่างเดียว ชื่อสาขาหลุดหน้าต่างได้ง่าย: ผู้ใช้เอ่ยชื่อครั้ง
+    เดียวตอนต้น ("อยากเรียน วิทคอม") แล้วถามต่ออีกหลายข้อโดยไม่เอ่ยซ้ำ พอเลยหกข้อความ
+    ล่าสุด คำถามที่เหลือในหน้าต่างไม่มีชื่อสาขาเลย โมเดลจึงคืนคำถามเดิมทุกรอบ (วัดแล้ว 3/3)
+    จึงแนบชื่อสาขาที่กำลังคุยกันไว้ด้วย ซึ่งหาจากบทสนทนาแบบไม่ใช้โมเดล (_context_programme)
+    ไม่ใช่ส่งคำตอบของผู้ช่วยทั้งก้อน
     """
     users = [m.content for m in history if m.role == "user"]
-    return "\n".join(f"- {q}" for q in users) if users else "(ไม่มี)"
+    lines = "\n".join(f"- {q}" for q in users) if users else "(ไม่มี)"
+    if programme:
+        lines = f"(หลักสูตรที่กำลังคุยกันล่าสุด: {programme})\n{lines}"
+    return lines
 
 
-def _condense(connector, history: list[ChatMessage], message: str) -> str:
+def _condense(connector, history: list[ChatMessage], message: str, programme: str | None = None) -> str:
     """เขียนคำถามใหม่ให้สมบูรณ์ คืนคำถามเดิมถ้าทำไม่สำเร็จ"""
     try:
         raw = connector.chat(
@@ -176,7 +185,7 @@ def _condense(connector, history: list[ChatMessage], message: str) -> str:
                 LLMMessage(role="system", content=CONDENSE_SYSTEM_PROMPT),
                 LLMMessage(
                     role="user",
-                    content=build_condense_prompt(_format_history_for_condense(history), message),
+                    content=build_condense_prompt(_format_history_for_condense(history, programme), message),
                 ),
             ],
             temperature=0.0,
@@ -507,6 +516,52 @@ def _ask_which_program(db: Session, thai: bool) -> str:
     # ตัดบรรทัดชวนถามต่อของรายการออก เพราะตรงนี้เป็นการถามกลับอยู่แล้ว
     body = listing.split("\n\nถามรายละเอียด")[0].split("\n\nAsk about any")[0]
     return f"{head}\n\n{body}"
+
+
+# คำที่อ้างถึงสาขาที่เพิ่งคุยกัน เช่น "สาขานี้" "หลักสูตรนี้" "สาขาดังกล่าว"
+#
+# เป็นกลุ่มคำชี้เฉพาะในภาษา ไม่ใช่รายชื่อสาขาหรือคำถาม จึงครอบคลุมได้ด้วยรูปแบบเดียว
+# กลุ่มแรกเก็บคำนำหน้าไว้ใช้แทนที่ ("สาขานี้" -> "สาขา<ชื่อ>") รูปภาษาอังกฤษไม่มีกลุ่มนี้
+_REFERENCE = re.compile(
+    r"(สาขา|หลักสูตร)(?:วิชา)?\s*(?:นี้|นั้น|ดังกล่าว|ที่ว่า|เดียวกัน)"
+    r"|\b(?:this|that|the same)\s+(?:programme|program|major|course)\b",
+    re.IGNORECASE,
+)
+
+
+def _context_programme(db: Session, history: list) -> str | None:
+    """
+    สาขาที่บทสนทนากำลังคุยอยู่ หาจากข้อความล่าสุดย้อนขึ้นไป คืน None ถ้าไม่มีหรือกำกวม
+
+    ทำไมต้องมี
+    ---------
+    บทสนทนาจริงบนหน้าเว็บ: "อยากเรียน วิทคอม" แล้วถามต่อเรื่องวิชา AI, Cybersecurity และ
+    อาชีพ โดยไม่เอ่ยชื่อซ้ำ แล้วถาม "ถ้าอยากเป็น Web Developer สาขานี้เหมาะไหม" ได้คำตอบเรื่อง
+    เทคโนโลยีสารสนเทศ ตามรอยแล้ว ชื่อสาขาหลุดจากหกข้อความล่าสุดที่ขั้นเขียนคำถามใหม่เห็น
+    ขั้นนั้นจึงคืนคำถามเดิม 3/3 รอบ แล้วการค้นทั้งคลังเจอหน้าอาชีพของเทคโนโลยีสารสนเทศที่มีคำว่า
+    Web Developer ก่อน ระบบไม่เคยจำว่ากำลังคุยถึงสาขาไหน รู้ได้เฉพาะเมื่อชื่อยังอยู่ในหน้าต่าง
+
+    ดูทั้งข้อความผู้ใช้และคำตอบของผู้ช่วย เพราะคำตอบของผู้ช่วยเอ่ยชื่อหลักสูตรทุกครั้ง แม้ผู้ใช้
+    จะไม่เอ่ยซ้ำ ข้อความแรกที่เอ่ยถึงสาขาเดียวคือคำตอบ ถ้าข้อความนั้นเอ่ยหลายสาขา เช่น
+    คำแนะนำสาขาหรือรายชื่อสาขา ถือว่ากำกวมและหยุดตรงนั้น ไม่ย้อนไปหยิบสาขาที่เก่ากว่า เพราะ
+    "สาขานี้" หลังรายการหลายสาขาไม่ได้หมายถึงสาขาที่คุยกันก่อนหน้านั้น
+    """
+    names = _program_names(db)
+    for turn in reversed(history):
+        found = programmes_named(turn.content, names, from_assistant=turn.role == "assistant")
+        if len(found) == 1:
+            return found[0]
+        if len(found) > 1:
+            return None
+    return None
+
+
+def _resolve_reference(message: str, programme: str) -> str:
+    """แทนคำอ้างอิงด้วยชื่อสาขา ถ้าไม่มีคำอ้างอิงแบบที่แทนได้ ให้ต่อชื่อสาขาไว้ท้ายคำถาม"""
+    m = _REFERENCE.search(message)
+    if m and m.group(1):
+        return f"{message[:m.start()]}{m.group(1)}{programme}{message[m.end():]}"
+    return f"{message} (หลักสูตร{programme})"
 
 
 # คำนำหน้าคำถามต่อยอดหลังแนะนำสาขา
@@ -943,22 +998,50 @@ def prepare_answer(
             cacheable=False,
         )
 
-    # --- 1. ค้นด้วยคำถามดิบก่อนเสมอ ---
+    # --- 0.9 คำอ้างถึงสาขาที่กำลังคุย ("สาขานี้" "หลักสูตรนี้") -> แทนด้วยชื่อสาขาจากบทสนทนา ---
+    #
+    # แก้แบบไม่ใช้โมเดล เพราะขั้นเขียนคำถามใหม่พึ่งได้เฉพาะตอนชื่อสาขายังอยู่ในหน้าต่างประวัติ
+    # (ดู _context_programme) ถ้าอ้างถึงแต่หาสาขาไม่ได้หรือกำกวม ให้ถามกลับ ไม่เดา
+    own_scope = resolve_scope(db, message) is not None
+    context_programme = _context_programme(db, history) if history and not own_scope else None
+    query = message
+    if not own_scope and _REFERENCE.search(message):
+        if context_programme:
+            query = _resolve_reference(message, context_programme)
+        elif ask := _ask_which_program(db, written_in_thai(message)):
+            return Prepared(
+                session_id=session.id,
+                status="answered",
+                search_query=message,
+                best_score=0.0,
+                citations=[],
+                canned=ask,
+                messages=[],
+                cacheable=False,
+            )
+
+    # --- 1. ค้นด้วยคำถามดิบก่อน (หรือคำถามที่แทนคำอ้างอิงแล้ว) ---
     # ใช้ข้อความดิบก่อน เพราะเป็นสิ่งที่ผู้ใช้พิมพ์จริงและเป็นฐานที่ใช้สอบเทียบ
     # OFF_TOPIC_THRESHOLD ไว้
-    chunks = _retrieve(db, connector, message)
+    chunks = _retrieve(db, connector, query)
     best_score = chunks[0].score if chunks else 0.0
-    search_query = message
+    search_query = query
 
     # --- 2. ถ้ามีประวัติ ลองเขียนคำถามใหม่แล้วค้นซ้ำ ---
     # คำถามต่อเนื่องอย่าง "แล้วกี่หน่วยกิต" คะแนนดิบจะต่ำเพราะขาดบริบท จึงให้
     # คะแนนที่ดีกว่าระหว่างสองแบบเป็นตัวตัดสิน คำถามนอกเรื่องจะได้คะแนนต่ำทั้งคู่
-    if history:
-        rewritten = _condense(connector, history, message)
+    #
+    # ยกเว้นเมื่อคำถามที่เขียนใหม่ได้ขอบเขตสาขามาแต่คำถามดิบไม่มี ให้ใช้คำถามที่เขียนใหม่เลย
+    # ไม่เทียบคะแนน เพราะคะแนนจากการค้นเฉพาะสาขาเดียวกับค้นทั้งคลังเทียบกันไม่ได้ ค้นทั้งคลัง
+    # มีตัวเลือกมากกว่าจึงได้คะแนนสูงกว่าเกือบเสมอ แม้จะเป็นเนื้อหาของสาขาอื่น — อาการเดียวกับ
+    # ที่ทำให้ "สาขานี้" ได้คำตอบของเทคโนโลยีสารสนเทศ
+    if history and query == message:
+        rewritten = _condense(connector, history, message, context_programme)
         if rewritten != message:
             alt = _retrieve(db, connector, rewritten)
             alt_score = alt[0].score if alt else 0.0
-            if alt_score > best_score:
+            gained_scope = not own_scope and resolve_scope(db, rewritten) is not None
+            if gained_scope or alt_score > best_score:
                 chunks, best_score, search_query = alt, alt_score, rewritten
 
     # --- 2.5 คำถามภาษาอังกฤษ: ลองค้นด้วยคำไทยที่แปลได้ แล้วเลือกอันที่ดีกว่า ---
@@ -981,7 +1064,7 @@ def prepare_answer(
     # จะต่ำแค่ไหน คะแนนต่ำในกรณีนี้แปลว่า "เอกสารไม่มีเรื่องที่ถาม" ไม่ใช่ "ถามนอกเรื่อง"
     # ซึ่งต้องตอบคนละแบบ — เจอจริงกับหลักสูตรสาธารณสุขศาสตร์ที่คลังมีแต่ข้อมูลจากหน้าเว็บ
     # ไม่มีรายวิชา ผู้ใช้ถามถึงวิชาบังคับแล้วถูกตอบว่าถามนอกเรื่อง
-    names_program = _names_a_program(db, message)
+    names_program = _names_a_program(db, search_query)
     if best_score < OFF_TOPIC_THRESHOLD and not names_program:
         # ต่ำขนาดนี้คือไม่มีอะไรในคลังใกล้เคียงเลย ตัดจบโดยไม่ต้องเสียเวลาเรียก LLM
         reply_text, status = out_of_scope, "out_of_scope"
@@ -1006,7 +1089,8 @@ def prepare_answer(
         for m in history:
             messages.append(LLMMessage(role=m.role, content=m.content))
         messages.append(
-            LLMMessage(role="user", content=build_chat_prompt(_format_chunks(chunks), message))
+            # ใช้คำถามที่แทนคำอ้างอิงแล้ว เพื่อให้โมเดลรู้แน่ว่า "สาขานี้" คือสาขาไหน
+            LLMMessage(role="user", content=build_chat_prompt(_format_chunks(chunks), query))
         )
         citations = [
             ChatCitation(

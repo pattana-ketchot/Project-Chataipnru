@@ -207,6 +207,29 @@ def build_checks() -> list[Check]:
             has_all("ตอบได้เฉพาะเรื่องหลักสูตร"),
         ))
 
+    # --- บทสนทนาหลายเทิร์น: ask เป็นรายการคำถามที่ถามต่อกันในบทสนทนาเดียว ตรวจคำตอบสุดท้าย ---
+    checks.append(Check(
+        "สาขานี้ชี้ไปสาขาที่คุยกันอยู่ แม้ชื่อสาขาหลุดหน้าต่างประวัติแล้ว",
+        [
+            "อยากเรียน วิทคอม",
+            "มีวิชาเกี่ยวกับ AI ไหม",
+            "แล้วมีวิชาเกี่ยวกับ Cybersecurity ไหม",
+            "แล้วจบไปทำงานอะไรได้บ้าง",
+            "ถ้าอยากเป็น Web Developer สาขานี้เหมาะไหม เพราะอะไร",
+        ],
+        "เคยตอบเรื่องเทคโนโลยีสารสนเทศ เพราะขั้นเขียนคำถามใหม่เห็นแต่คำถามในหกข้อความล่าสุด "
+        "ซึ่งไม่มีชื่อสาขาเลย และคำย่อ it ไปตรงกับกลางคำ Cybersecurity",
+        lambda r: (([] if "วิทยาการคอมพิวเตอร์" in r else ["ไม่ได้ตอบถึงวิทยาการคอมพิวเตอร์"])
+                   + (["ตอบเป็นเรื่องเทคโนโลยีสารสนเทศ"] if "สาขาวิชาเทคโนโลยีสารสนเทศ" in r else [])) or None,
+    ))
+
+    checks.append(Check(
+        "สาขานี้หลังคำแนะนำหลายสาขาต้องถามกลับ ไม่เดาเอง",
+        ["สาขาไหนเหมาะกับคนชอบทำงานกับคอมพิวเตอร์", "แล้วสาขานี้เรียนกี่ปี"],
+        "หลังรายการหลายสาขา คำว่าสาขานี้ชี้ไปสาขาไหนก็ได้ การหยิบสาขาใดสาขาหนึ่งมาตอบคือการเดา",
+        lambda r: None if "สนใจสาขาไหน" in r else ["ไม่ได้ถามกลับว่าหมายถึงสาขาไหน"],
+    ))
+
     return checks
 
 
@@ -279,7 +302,36 @@ def configure(client: httpx.Client):
             return r.text
         return body.get("reply", r.text) if isinstance(body, dict) else r.text
 
+    ask.build = build
     return ask
+
+
+def ask_conversation(client: httpx.Client, build, questions: list[str]) -> str:
+    """
+    ถามหลายคำถามต่อกันในบทสนทนาเดียว คืนคำตอบของคำถามสุดท้าย
+
+    ปลายทางสองแบบจำบทสนทนาต่างกัน /chat ตัวจริงจำผ่าน session_id ส่วนหน้าเว็บส่งบทสนทนา
+    ทั้งก้อนมาทุกครั้ง จึงต้องส่งให้ตรงแบบของปลายทาง ไม่งั้นเทิร์นหลังจะไม่มีประวัติเลย
+    แล้วชุดตรวจจะผ่านหรือตกด้วยเหตุผลที่ไม่เกี่ยวกับสิ่งที่ตั้งใจตรวจ
+    """
+    reply = ""
+    if build is _API_STYLE:
+        session = None
+        for q in questions:
+            payload = {"message": q, **({"session_id": session} if session else {})}
+            r = client.post("/chat", json=payload)
+            r.raise_for_status()
+            body = r.json()
+            session, reply = body.get("session_id"), body.get("reply", "")
+        return reply
+    messages: list[dict] = []
+    for q in questions:
+        messages.append({"role": "user", "content": q})
+        r = client.post("/chat", json={"messages": messages})
+        r.raise_for_status()
+        reply = r.text
+        messages.append({"role": "assistant", "content": reply})
+    return reply
 
 
 def main() -> None:
@@ -297,7 +349,10 @@ def main() -> None:
     for i, c in enumerate(checks, 1):
         t0 = time.time()
         try:
-            reply = ask(client, c.ask)
+            if isinstance(c.ask, list):
+                reply = ask_conversation(client, ask.build, c.ask)
+            else:
+                reply = ask(client, c.ask)
         except httpx.TimeoutException:
             # รอเกิน 180 วินาทีแล้วยังไม่ได้คำตอบ ถือว่าตรวจข้อนี้ไม่ได้ ไม่ใช่ตก
             # เพราะยังไม่เห็นคำตอบจึงยังไม่รู้ว่าพฤติกรรมถูกหรือผิด สาเหตุที่พบบ่อย
