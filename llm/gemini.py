@@ -384,6 +384,11 @@ class GeminiConnector:
         path = f"/models/{model}:streamGenerateContent"
         try:
             with self._client.stream("POST", path, json=payload, params={"alt": "sse"}) as resp:
+                if resp.is_error:
+                    # คำตอบแบบ stream ยังไม่ได้อ่านเนื้อความ ถ้าไม่อ่านก่อน _is_daily_limit จะอ่านไม่ได้
+                    # แล้วเดาว่าเป็นโควตารายวัน เจอจริงบนเซิร์ฟเวอร์: 429 ต่อนาทีระหว่างเขียนคำตอบ
+                    # ทำให้โมเดลหลักถูกพักไปสี่ชั่วโมง ทั้งที่ 429 แบบไม่ stream ทุกครั้งเป็นเพดานต่อนาที
+                    resp.read()
                 resp.raise_for_status()
                 for line in resp.iter_lines():
                     # รูปแบบ SSE: สนใจเฉพาะบรรทัด data: ส่วนบรรทัดว่างคือตัวคั่นเหตุการณ์
