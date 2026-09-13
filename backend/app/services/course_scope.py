@@ -31,7 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.course import Course
-from app.services.query_expansion import ALIASES
+from app.services.query_expansion import ALIASES, _alias_present
 
 
 @dataclass
@@ -124,8 +124,12 @@ def resolve_scope(db: Session, question: str) -> CourseScope | None:
             return _build(_narrow_by_year(by_name[name], titles, question), name, question)
 
     # ไม่เจอชื่อตรงๆ ลองผ่านคำย่อ เช่น 'วิทคอม' -> 'วิทยาการคอมพิวเตอร์'
+    #
+    # คำย่ออักษรโรมันต้องเทียบแบบมีขอบเขตคำ เดิมเทียบแค่ว่ามีอยู่ในข้อความ คำว่า "it" จึงไป
+    # ตรงกับกลางคำ "Cybersecurity" และ "digital" แล้วจำกัดการค้นไว้ที่เทคโนโลยีสารสนเทศ
+    # ทั้งที่ผู้ใช้กำลังคุยเรื่องวิทยาการคอมพิวเตอร์อยู่ (เจอจริงในบทสนทนาหลายเทิร์นบนหน้าเว็บ)
     for alias, full in ALIASES.items():
-        if alias not in lowered:
+        if not _alias_present(alias, lowered):
             continue
         for name in by_name:
             if name and name in full:
@@ -149,3 +153,45 @@ def _build(ids: list[uuid.UUID], name: str, question: str, strip: str | None = N
     # เหลือน้อยเกินไปแปลว่าคำถามคือชื่อหลักสูตรล้วน ใช้ข้อความเดิมค้นต่อไป
     search_text = remainder if len(remainder) >= _MIN_REMAINDER else question
     return CourseScope(course_ids=ids, matched_name=name, search_text=search_text)
+
+
+# ตำแหน่งที่คำตอบของผู้ช่วยเอ่ยชื่อหลักสูตร: ตามหลังคำนำหน้า หรือเป็นหัวรายการ
+_TITLE_PREFIX = r"(?:สาขาวิชา|สาขา|หลักสูตร)\s*"
+_LIST_ITEM = r"^[ \t]*(?:\d+\.|[-•*])[ \t]*"
+
+
+def programmes_named(text: str, names: list[str], *, from_assistant: bool) -> list[str]:
+    """
+    ชื่อหลักสูตรทุกตัวที่ข้อความนี้เอ่ยถึง ไม่ซ้ำ — ใช้หาว่าบทสนทนากำลังคุยถึงสาขาไหน
+
+    ข้อความของผู้ใช้เทียบแบบหลวม ทั้งชื่อเต็มและคำย่อ เพราะผู้ใช้พิมพ์ชื่อลอยๆ เช่น
+    "อยากเรียน วิทคอม"
+
+    ข้อความของผู้ช่วยนับเฉพาะชื่อที่อยู่ในตำแหน่งชื่อหลักสูตร คือตามหลัง "สาขาวิชา" "สาขา"
+    "หลักสูตร" หรือเป็นหัวรายการที่ชื่อจบบรรทัดหรือตามด้วยวงเล็บ เพราะคำตอบของผู้ช่วยมีชื่อ
+    รายวิชาปนอยู่มาก เช่น "คณิตศาสตร์ไม่ต่อเนื่อง" ในคำตอบเรื่องวิทยาการคอมพิวเตอร์ ถ้านับแบบ
+    หลวมจะเข้าใจผิดว่าคุยถึงสองสาขา แล้วเลิกหาสาขาที่กำลังคุยทั้งที่ชัดเจนอยู่
+    """
+    found: list[str] = []
+    ordered = sorted(names, key=len, reverse=True)
+    if from_assistant:
+        remaining = text
+        for name in ordered:
+            pattern = re.compile(
+                rf"{_TITLE_PREFIX}{re.escape(name)}|{_LIST_ITEM}{re.escape(name)}(?=[ \t]*(?:\(|$))",
+                re.MULTILINE,
+            )
+            if pattern.search(remaining):
+                found.append(name)
+                remaining = pattern.sub(" ", remaining)
+        return found
+
+    lowered = text.lower()
+    for name in ordered:
+        if name.lower() in lowered:
+            found.append(name)
+            lowered = lowered.replace(name.lower(), " ")
+    for alias, full in ALIASES.items():
+        if _alias_present(alias, lowered):
+            found.extend(n for n in ordered if n in full and n not in found)
+    return found
