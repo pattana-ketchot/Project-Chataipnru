@@ -87,6 +87,24 @@ class QuotaKindChecks(unittest.TestCase):
         remaining = c._exhausted["main"] - __import__("time").time()
         self.assertLess(remaining, 120.0, "เพดานต่อนาทีไม่ควรพักโมเดลเป็นชั่วโมง")
 
+    def test_เพดานต่อนาทีระหว่าง_stream_พักสั้นเหมือนกัน(self):
+        """
+        คำตอบแบบ stream ยังไม่ได้อ่านเนื้อความตอนเจอ 429 เดิมจึงอ่านชนิดโควตาไม่ได้แล้วเดาว่ารายวัน
+        บนเซิร์ฟเวอร์จริงโมเดลหลักถูกพักสี่ชั่วโมงเพราะเหตุนี้ ทั้งที่เป็นเพดานต่อนาที
+        """
+        def handler(request: httpx.Request) -> httpx.Response:
+            model = request.url.path.split("/models/")[1].split(":")[0]
+            if model == "main":
+                # เนื้อความต้องเป็น stream จริง ถ้าส่งเป็น text โค้ดเดิมก็อ่านได้ ทดสอบจะผ่านโดยไม่จับบั๊ก
+                return httpx.Response(429, content=iter([PER_MINUTE.encode()]))
+            sse = "data: " + __import__("json").dumps(OK_BODY, ensure_ascii=False) + "\n\n"
+            return httpx.Response(200, text=sse)
+
+        c = connector(handler)
+        self.assertEqual("".join(c.chat_stream([ChatMessage(role="user", content="ถาม")])), "คำตอบ")
+        remaining = c._exhausted["main"] - __import__("time").time()
+        self.assertLess(remaining, 120.0, "เพดานต่อนาทีระหว่าง stream ไม่ควรพักโมเดลเป็นชั่วโมง")
+
     def test_โควตารายวันพักยาว(self):
         def handler(request: httpx.Request) -> httpx.Response:
             model = request.url.path.split("/models/")[1].split(":")[0]
