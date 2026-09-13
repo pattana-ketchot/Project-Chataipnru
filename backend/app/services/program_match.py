@@ -337,19 +337,49 @@ def _fetch_evidence(db: Session, chunk_ids: list[uuid.UUID]) -> str:
     return "\n\n".join(f"[หน้า {r.page_number}]\n{r.content}" for r in rows)
 
 
+_DOT_LEADER = re.compile(r"[.…]{5,}")
+
+
+def _looks_like_table_of_contents(content: str) -> bool:
+    """
+    ชิ้นนี้เป็นสารบัญหรือไม่ — สารบัญคือรายการหัวข้อที่ตามด้วยเลขหน้า จึงมีตัวเลขเป็นสัดส่วนสูง
+    หรือมีจุดนำสายตาต่อกันหลายชุด
+
+    วัดจากชิ้นที่มีหัวข้ออาชีพหรือวัตถุประสงค์ของทุกฉบับที่คณะเปิดสอน 20 ฉบับ (ชิ้นแรกสุดไม่เกิน
+    หกชิ้นต่อฉบับ ซึ่งเป็นชิ้นที่ _fetch_program_core เลือกได้จริง)
+        สารบัญ   สัดส่วนตัวเลข 0.30-0.58  (ชิ้นเดียวที่ต่ำกว่า 0.33 มีจุดนำ 6 ชุด)
+        เนื้อหา   สัดส่วนตัวเลข 0.00-0.30  จุดนำไม่เกิน 2 ชุด
+    ตัวเลขทศนิยมของหัวข้อย่อยอย่าง "8.1" ไม่นับเป็นตัวเลข รายการอาชีพที่มีเลขข้อจึงไม่ถูกตัด
+    """
+    tokens = content.split()
+    if not tokens:
+        return False
+    numbers = sum(t.strip(".…").isdigit() for t in tokens)
+    return len(_DOT_LEADER.findall(content)) >= 3 or numbers / len(tokens) >= 0.33
+
+
 def _fetch_program_core(db: Session, course_id: uuid.UUID) -> str:
-    """ใช้หัวข้ออาชีพและวัตถุประสงค์ก่อนข้อความที่คล้ายคำถามในภาคผนวก"""
+    """
+    เนื้อหาแก่นของหลักสูตร (อาชีพหลังจบและวัตถุประสงค์) ใช้เป็นหลักฐานคู่กับชิ้นที่ค้นเจอ
+
+    ต้องข้ามสารบัญ เดิมเลือกสองชิ้นแรกที่มีหัวข้อเหล่านี้ตามลำดับหน้า ซึ่งคือสารบัญหน้าต้นเล่มที่
+    เอ่ยชื่อหัวข้อพร้อมเลขหน้า ฉบับที่คณะเปิดสอนราวหนึ่งในสามจึงส่งสารบัญไปเป็น "แก่นของหลักสูตร"
+    และกินงบ 3,000 ตัวอักษรของหลักฐานไปเกือบสองในสาม ขั้นเขียนเหตุผลไม่เห็นวัตถุประสงค์จริงเลย
+    จึงตัดสินว่าไม่มีข้อมูลรองรับ เจอบนหน้าเว็บจริง: "ผมยังไม่รู้ว่าจะเรียนสาขาอะไร แต่ชอบคอมพิวเตอร์
+    ชอบแก้ปัญหา แล้วก็ชอบเขียนโปรแกรมนิดหน่อย" ได้วิทยาการคอมพิวเตอร์ 2561 เป็นสาขาเดียวที่ผ่านเกณฑ์
+    แล้วถูกปฏิเสธทุกรอบ ผู้ใช้ได้คำตอบว่าไม่พบสาขาที่ตรง
+    """
     rows = db.execute(
         text("""
             SELECT page_number, content FROM course_chunks
             WHERE course_id = :course_id
               AND (content LIKE :careers OR content LIKE :objectives)
             ORDER BY page_number, id
-            LIMIT 2
         """),
         {"course_id": course_id, "careers": "%อาชีพที่สามารถประกอบได้หลัง%",
          "objectives": "%วัตถุประสงค์ของหลักสูตร%"},
     ).all()
+    rows = [r for r in rows if not _looks_like_table_of_contents(r.content)][:2]
     return "\n\n".join(f"[หน้า {r.page_number}]\n{r.content}" for r in rows)
 
 
