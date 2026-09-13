@@ -207,7 +207,56 @@ def build_checks() -> list[Check]:
             has_all("ตอบได้เฉพาะเรื่องหลักสูตร"),
         ))
 
+    # --- เล่าความสนใจด้วยภาษาธรรมชาติต้องเข้าเส้นทางแนะนำสาขา ทุกหมวดความสนใจ ---
+    # ตรวจ "เส้นทาง" ไม่ใช่สาขาที่ได้ เพราะขั้นเขียนเหตุผลให้ผลต่างกันได้ในแต่ละรอบ
+    def routed_to_recommendation(r):
+        routed = "สาขาในคณะที่เกี่ยวข้อง" in r or "ผมยังไม่พบสาขาที่เอกสารหลักสูตรระบุไว้ชัดพอ" in r
+        return None if routed else ["ไม่ได้เข้าเส้นทางแนะนำสาขา"]
+
+    for q in (
+        "ผมยังไม่รู้ว่าจะเรียนอะไร แต่ชอบคำนวณและตัวเลข",
+        "ชอบทำอาหารและงานบริการ ควรเรียนอะไร",
+        "สนใจสุขภาพและอยากทำงานช่วยคน",
+        "ชอบออกแบบ/ทำสื่อ/แอนิเมชัน",
+        "ชอบเทคโนโลยีและระบบในองค์กร",
+        "ชอบธรรมชาติ อยากทำงานเกี่ยวกับการอนุรักษ์",
+        "ชอบแต่งหน้าและอยากผลิตเครื่องสำอางเอง",
+    ):
+        checks.append(Check(
+            f"เล่าความสนใจต้องได้คำแนะนำสาขา: {q}",
+            q,
+            "เดิมตัดสินด้วยรายการคำ ข้อความแบบนี้ไปทางค้นเอกสารแล้วได้ข้อมูลของสาขาเดียว "
+            "(บางครั้งเป็นสาขาที่เลิกเปิดแล้ว) หรือถูกปฏิเสธว่าถามนอกเรื่อง",
+            routed_to_recommendation,
+        ))
+
+    def not_recommendation(r):
+        return ["ถูกพาไปเส้นทางแนะนำสาขา"] if "สาขาในคณะที่เกี่ยวข้อง" in r else None
+
+    for q in (
+        "คณิตศาสตร์เรียนกี่หน่วยกิต",
+        "วิทยาการคอมพิวเตอร์มีวิชาอะไร",
+        "เทคโนโลยีสารสนเทศต่างจากวิทยาการคอมพิวเตอร์ยังไง",
+        "อยากเรียน วิทคอม",
+        "วิทยาการคอมพิวเตอร์เหมาะกับคนแบบไหน",
+    ):
+        checks.append(Check(
+            f"คำถามข้อมูลของสาขาต้องไม่ถูกตีเป็นขอคำแนะนำ: {q}",
+            q,
+            "การตัดสินจากความหมายต้องไม่กว้างจนคำถามข้อมูลของสาขาที่ระบุถูกพาไปแนะนำสาขา",
+            not_recommendation,
+        ))
+
     # --- บทสนทนาหลายเทิร์น: ask เป็นรายการคำถามที่ถามต่อกันในบทสนทนาเดียว ตรวจคำตอบสุดท้าย ---
+    checks.append(Check(
+        "คำตอบต่อยอดต้องจับคู่รวมกับความสนใจเดิม ไม่ใช่แนะนำใหม่จากประโยคเดียว",
+        ["สาขาไหนเหมาะกับคนชอบทำงานกับคอมพิวเตอร์", "ชอบเขียนโปรแกรมมากกว่า"],
+        "คำตอบต่อยอดก็เป็นการเล่าความสนใจ ถ้าด่านตรวจการขอคำแนะนำมาก่อน ประโยคนี้จะถูกแนะนำใหม่"
+        "ตามลำพัง เสียบริบทของคำถามแรก",
+        lambda r: None if ("เมื่อรวมกับที่บอกเพิ่มมา" in r or "ยังหาสาขาที่ตรงกว่าเดิมไม่ได้" in r)
+        else ["ไม่ได้เข้าเส้นทางคำตอบต่อยอด"],
+    ))
+
     checks.append(Check(
         "สาขานี้ชี้ไปสาขาที่คุยกันอยู่ แม้ชื่อสาขาหลุดหน้าต่างประวัติแล้ว",
         [
@@ -249,6 +298,26 @@ def build_checks() -> list[Check]:
 # "เรียก API ไม่สำเร็จ" ซึ่งอ่านแล้วเหมือนระบบพัง ทั้งที่ระบบปกติดีและตัวตรวจเองเข้า
 # ไม่ถูกประตู — ชุดตรวจที่ฟ้องผิดที่แบบนี้อันตรายกว่าไม่มีเลย เพราะจะถูกเมินในวันที่
 # มันจับของจริงได้
+def _post_chat(client: httpx.Client, payload: dict, attempts: int = 4) -> httpx.Response:
+    """
+    ส่งคำถามหนึ่งครั้ง ถ้าชนเพดานคำขอของระบบเอง (429) ให้รอแล้วถามใหม่
+
+    เดิมเรียก raise_for_status ตรงๆ รอบที่คำตอบส่วนใหญ่มาจากแคช คำถามวิ่งเร็วจนเกินเพดาน
+    30 ครั้งต่อนาทีต่อบัญชี ข้อหลังๆ จึงพังทั้งแปดข้อ ("เรียก API ไม่สำเร็จ") ทั้งที่ระบบตอบถูก
+    ซึ่งอ่านผลแล้วเหมือนการแก้ทำให้ระบบเสีย ชุดประเมินหลักเจอแบบเดียวกันและแก้ด้วยวิธีนี้
+    """
+    for attempt in range(attempts):
+        r = client.post("/chat", json=payload)
+        if r.status_code != 429 or attempt == attempts - 1:
+            break
+        print(f"      (ชนเพดานคำขอของระบบเอง 429 รอ 60 วินาทีแล้วถามใหม่)", flush=True)
+        time.sleep(60)
+    if r.is_error:
+        print(f"      (HTTP {r.status_code}: {r.text[:120]!r})", flush=True)
+    r.raise_for_status()
+    return r
+
+
 _WEB_STYLE = lambda q: {"messages": [{"role": "user", "content": q}]}
 _API_STYLE = lambda q: {"message": q}
 
@@ -285,8 +354,7 @@ def configure(client: httpx.Client):
     print()
 
     def ask(client: httpx.Client, question: str) -> str:
-        r = client.post("/chat", json=build(question))
-        r.raise_for_status()
+        r = _post_chat(client, build(question))
         # ตรวจเฉพาะข้อความที่ผู้ใช้เห็น ไม่ใช่ทั้งก้อน JSON
         #
         # เดิมคืน r.text ทั้งก้อน ซึ่งการตรวจแบบหาคำยังทำงานได้ จึงไม่มีใครสังเกต แต่
@@ -319,16 +387,14 @@ def ask_conversation(client: httpx.Client, build, questions: list[str]) -> str:
         session = None
         for q in questions:
             payload = {"message": q, **({"session_id": session} if session else {})}
-            r = client.post("/chat", json=payload)
-            r.raise_for_status()
+            r = _post_chat(client, payload)
             body = r.json()
             session, reply = body.get("session_id"), body.get("reply", "")
         return reply
     messages: list[dict] = []
     for q in questions:
         messages.append({"role": "user", "content": q})
-        r = client.post("/chat", json={"messages": messages})
-        r.raise_for_status()
+        r = _post_chat(client, {"messages": messages})
         reply = r.text
         messages.append({"role": "assistant", "content": reply})
     return reply

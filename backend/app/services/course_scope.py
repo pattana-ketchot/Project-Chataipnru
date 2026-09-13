@@ -195,3 +195,19 @@ def programmes_named(text: str, names: list[str], *, from_assistant: bool) -> li
         if _alias_present(alias, lowered):
             found.extend(n for n in ordered if n in full and n not in found)
     return found
+
+
+def without_programme_names(text: str, names: list[str]) -> str:
+    """
+    ข้อความที่เหลือหลังตัดชื่อหลักสูตรและคำย่อทุกตัวที่ผู้ใช้เอ่ยถึงออก (ตัวพิมพ์เล็ก)
+
+    ใช้ดูว่าข้อความมีเนื้อหาอื่นนอกจากชื่อสาขาหรือไม่ เทียบชื่อแบบเดียวกับ programmes_named
+    เพื่อให้สองฟังก์ชันเห็นชื่อชุดเดียวกันเสมอ
+    """
+    lowered = text.lower()
+    for name in sorted(names, key=len, reverse=True):
+        lowered = lowered.replace(name.lower(), " ")
+    for alias in sorted(ALIASES, key=len, reverse=True):
+        if _alias_present(alias, lowered):
+            lowered = re.sub(rf"(?<![a-z0-9]){re.escape(alias.lower())}(?![a-z0-9])", " ", lowered)
+    return lowered

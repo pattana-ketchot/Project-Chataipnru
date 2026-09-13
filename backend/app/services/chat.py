@@ -27,7 +27,12 @@ from app.db.session import SessionLocal
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.chat_history import user_first
-from app.services.course_scope import _distinctive_name, programmes_named, resolve_scope
+from app.services.course_scope import (
+    _distinctive_name,
+    programmes_named,
+    resolve_scope,
+    without_programme_names,
+)
 from app.services.answer_cache import corpus_version, lookup as cache_lookup, store as cache_store
 from app.services.llm_client import get_llm_connector, no_fallback_kwargs
 from app.services.program_list import asks_for_program_list, program_list_answer
@@ -47,8 +52,10 @@ from llm.prompts import (  # noqa: E402
     NOT_FOUND_REPLY_EN,
     OUT_OF_SCOPE_REPLY,
     OUT_OF_SCOPE_REPLY_EN,
+    RECOMMEND_INTENT_SYSTEM_PROMPT,
     SCOPE_CHECK_SYSTEM_PROMPT,
     build_chat_prompt,
+    build_recommend_intent_prompt,
     build_condense_prompt,
     build_grounding_check_prompt,
     build_scope_check_prompt,
@@ -374,32 +381,70 @@ def written_in_thai(text: str) -> bool:
     return any("฀" <= ch <= "๿" for ch in text)
 
 
-# คำที่บ่งชี้ว่าผู้ใช้กำลังขอ "คำแนะนำว่าควรเรียนสาขาไหน" ไม่ใช่ถามข้อเท็จจริงในเอกสาร
-_RECOMMEND_WORDS = (
-    "เหมาะกับ", "เหมาะสำหรับ", "แนะนำสาขา", "แนะนำหลักสูตร", "ควรเรียนสาขา",
-    "ควรเลือกสาขา", "เลือกสาขาไหน", "สาขาไหนดี", "เรียนอะไรดี", "เรียนสาขาไหนดี",
-    "which major", "which program", "what should i study", "recommend a major",
-)
-
-
-def _asks_for_a_recommendation(text: str) -> bool:
+def _recommendation_intent(db: Session, connector, message: str) -> str | None:
     """
-    คำถามนี้ขอให้ช่วยเลือกสาขาหรือไม่
+    ข้อความนี้ขอให้ช่วยเลือกสาขาจากความสนใจหรือไม่ คืน "ส่วนที่บอกความสนใจ" ถ้าใช่ มิฉะนั้น None
 
-    ทำไมต้องแยกออกมา
-    ---------------
+    ทำไมต้องแยกเส้นทางแนะนำออกมา
+    ---------------------------
     ด่านตรวจ _can_answer_from() ถามโมเดลว่า "เนื้อหาที่ค้นเจอมีข้อเท็จจริงตอบคำถามนี้
     ได้จริงไหม" ซึ่งเป็นคำถามที่ถูกต้องสำหรับคำถามเชิงข้อเท็จจริง แต่ผิดสำหรับคำถามขอ
     คำแนะนำ เพราะไม่มีเอกสารเล่มไหนเขียนว่า "หลักสูตรนี้เหมาะกับคนชอบคอมพิวเตอร์"
+    คำถามแบบนี้จึงต้องไปที่ระบบจับคู่สาขา ซึ่งคิดคะแนนกับทุกหลักสูตรที่เปิดสอน
 
-    ผลคือคำถามที่เป็นหัวใจของเว็บนี้ถูกปฏิเสธแบบสุ่ม วัดจากระบบจริงด้วยคำถามเดียวกัน
-    หกครั้ง: ปฏิเสธ 3 ตอบได้ 3
+    ทำไมตัดสินจากความหมาย ไม่ใช่รายการคำ
+    ------------------------------------
+    เดิมใช้รายการคำ ("เหมาะกับ" "แนะนำสาขา" "เรียนอะไรดี") วัดกับหน้าเว็บจริง ข้อความเล่า
+    ความสนใจห้าแบบที่นักเรียนพิมพ์กันจริงไม่เข้าเส้นทางแนะนำเลยสักข้อ สี่ข้อไปทางค้นเอกสาร
+    แล้วได้ข้อมูลของสาขาเดียวที่ค้นเจอก่อน ("สนใจสุขภาพและอยากทำงานช่วยคน" ได้เทคโนโลยีการ
+    จัดการสุขภาพ ซึ่งคณะไม่ได้เปิดรับแล้ว) อีกข้อ ("ชอบเทคโนโลยีและระบบในองค์กร") ถูกปฏิเสธว่า
+    ถามนอกเรื่อง รายการคำไม่มีวันครบ เพราะคนเล่าความสนใจได้ไม่จำกัดรูปแบบ
 
-    คำถามแบบนี้จึงส่งไปให้ระบบจับคู่สาขาแทน ซึ่งคิดคะแนนจากความใกล้เคียงระหว่างสิ่งที่
-    ผู้ใช้บอกกับเนื้อหาจริงในเอกสารทุกเล่ม เป็นการคำนวณที่ทำซ้ำได้ ไม่ใช่ให้โมเดลเดา
+    ด่านที่ไม่ใช้โมเดล
+    ----------------
+    ข้อความที่เอ่ยชื่อสาขาและถามข้อเท็จจริงของสาขานั้น ("คณิตศาสตร์เรียนกี่หน่วยกิต") และข้อความ
+    ที่อ้างถึงสาขาที่คุยกันอยู่ ("สาขานี้") ไม่ใช่การขอคำแนะนำแน่นอน จึงตัดสินได้เลยโดยไม่เรียกโมเดล ประหยัดโควตากับคำถามข้อมูลซึ่งเป็น
+    คำถามส่วนใหญ่ของระบบ และทำให้คำถามกลุ่มนี้ไม่มีทางถูกพาไปเส้นทางแนะนำเพราะโมเดลพลาด
+
+    เมื่อตัดสินไม่ได้
+    ---------------
+    โมเดลล่มหรืออ่าน JSON ไม่ได้ ให้ถือว่าไม่ใช่ แล้วปล่อยไปทางค้นเอกสารตามเดิม ต่างจากด่าน
+    ขอบเขตที่ปล่อยผ่าน เพราะที่นี่การตอบว่าใช่คือการเปลี่ยนเส้นทางของคำตอบทั้งหมด
+
+    ส่วนที่บอกความสนใจต้องอยู่ในข้อความเดิมจริง ถ้าโมเดลเขียนเรียบเรียงใหม่หรือเติมอะไรมา
+    ให้ใช้ข้อความเดิมทั้งหมดแทน ไม่เอาถ้อยคำที่ผู้ใช้ไม่ได้พูดไปจับคู่สาขา
     """
-    lowered = text.lower()
-    return any(w in lowered for w in _RECOMMEND_WORDS)
+    if _REFERENCE.search(message):
+        # "สาขานี้เหมาะไหม" ถามเรื่องสาขาที่คุยกันอยู่ ถ้าให้โมเดลตัดสิน อาชีพที่อยากเป็นในประโยค
+        # อาจทำให้ถูกพาไปแนะนำสาขาใหม่ แล้วเสียบริบทที่ _resolve_reference แก้ไว้
+        return None
+    if programmes_named(message, _program_names(db), from_assistant=False) and any(
+        w in message for w in (*_PROGRAM_SPECIFIC_WORDS, *_NUMERIC_WORDS)
+    ):
+        return None
+    try:
+        raw = connector.chat(
+            [
+                LLMMessage(role="system", content=RECOMMEND_INTENT_SYSTEM_PROMPT),
+                LLMMessage(role="user", content=build_recommend_intent_prompt(message)),
+            ],
+            temperature=0.0,
+            json_mode=True,
+        )
+        data = json.loads(raw)
+    except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError):
+        return None
+    if not isinstance(data, dict) or data.get("recommendation") is not True:
+        return None
+    interest = str(data.get("interest") or "").strip()
+    if not interest or re.sub(r"\s+", "", interest) not in re.sub(r"\s+", "", message):
+        return message
+    # ความสนใจที่มีแค่ชื่อสาขา แปลว่าผู้ใช้เลือกสาขาไว้แล้ว ต้องการข้อมูลของสาขานั้น ไม่ใช่ให้ช่วยเลือก
+    # วัดบนระบบจริง "อยากเรียน วิทคอม" ถูกตีเป็นขอคำแนะนำ 1 ใน 2 รอบ โดยคัดความสนใจมาได้แค่
+    # "วิทคอม" ถ้าปล่อยไป ผู้ใช้ที่ระบุสาขามาชัดจะได้รายชื่อสาขาอื่นแทนข้อมูลที่ถาม
+    if not re.search(r"\w", without_programme_names(interest, _program_names(db))):
+        return None
+    return interest
 
 
 # คำที่บอกว่าคำถามต้องการข้อเท็จจริง "ของสาขาใดสาขาหนึ่ง" ไม่ใช่ภาพรวมของคณะ
@@ -652,7 +697,9 @@ def _refinement_of_recommendation(db: Session, history: list, message: str) -> s
     return f"{asked.strip()} {message.strip()}"
 
 
-def _recommendation_reply(db: Session, message: str, refinement: bool = False) -> str | None:
+def _recommendation_reply(
+    db: Session, message: str, refinement: bool = False, interest: str | None = None,
+) -> str | None:
     """
     ตอบคำถามขอคำแนะนำด้วยผลจากระบบจับคู่สาขา คืน None ถ้าจัดอันดับไม่ได้
 
@@ -689,7 +736,8 @@ def _recommendation_reply(db: Session, message: str, refinement: bool = False) -
         # 4/12 ยังสูง รอบต่อยอดจึงยังพลาดได้บ่อย เมื่อพลาดผู้ใช้จะได้ข้อความว่ายังหาสาขาที่ตรงกว่าเดิมไม่ได้และสาขา
         # ที่แนะนำไปยังเป็นตัวเลือกอยู่ ไม่ใช่ข้อความว่าไม่พบสาขา
         matches = match_programs(
-            db, {"extra": message}, limit=3, relevant_only=True,
+            # interest คือส่วนที่บอกความสนใจซึ่ง _recommendation_intent คัดมาจากข้อความ
+            db, {"extra": interest or message}, limit=3, relevant_only=True,
             profile_text=message if refinement else None,
         )
     except (ValueError, LLMConnectionError):
@@ -926,26 +974,11 @@ def prepare_answer(
             cacheable=False,  # ตอบจากตารางค่าเทอม ไม่ได้เรียกโมเดลอยู่แล้ว
         )
 
-    # --- 0.7 คำถามขอคำแนะนำว่าควรเรียนสาขาไหน -> ใช้ระบบจับคู่สาขา ไม่ใช่ถาม-ตอบเอกสาร ---
-    # ด่านตรวจว่าเอกสารตอบได้ไหมใช้ไม่ได้กับคำถามประเภทนี้ (ดูเหตุผลใน
-    # _asks_for_a_recommendation) ถ้าจัดอันดับไม่สำเร็จก็ปล่อยให้ไหลไปทางปกติ
-    if _asks_for_a_recommendation(message) and (advice := _recommendation_reply(db, message)):
-        return Prepared(
-            session_id=session.id,
-            status="answered",
-            search_query=message,
-            best_score=0.0,
-            citations=[],
-            canned=advice,
-            messages=[],
-            # ไม่เก็บลงแคช เพราะคำตอบนี้ขึ้นกับว่าขั้นเขียนเหตุผลสำเร็จหรือไม่ ซึ่งเป็น
-            # สภาพชั่วคราวของระบบ ไม่ใช่ข้อเท็จจริงจากเอกสาร ถ้าเก็บไว้ตอนที่โมเดล
-            # เขียนไม่ได้ ทุกคนที่ถามคำถามเดียวกันจะได้คำตอบที่ด้อยกว่าความจริงต่อไป
-            # จนกว่าคลังเอกสารจะเปลี่ยน — เจอมาแล้วตอนโควตาหมดกลางการทดสอบ
-            cacheable=False,
-        )
-
-    # --- 0.72 ผู้ใช้ตอบคำถามต่อยอดหลังแนะนำสาขา -> จับคู่ใหม่ด้วยความสนใจที่รวมกันแล้ว ---
+    # --- 0.7 ผู้ใช้ตอบคำถามต่อยอดหลังแนะนำสาขา -> จับคู่ใหม่ด้วยความสนใจที่รวมกันแล้ว ---
+    #
+    # ต้องมาก่อนด่านตรวจว่าเป็นการขอคำแนะนำ เพราะคำตอบต่อยอดอย่าง "ชอบเขียนโปรแกรมมากกว่า"
+    # ก็เป็นการเล่าความสนใจเหมือนกัน ถ้าตรวจอันนั้นก่อน ประโยคนี้จะถูกนำไปแนะนำใหม่ตามลำพัง
+    # เสียบริบทของคำถามแรก ซึ่งวัดแล้วว่าทำให้ปฏิเสธทุกสาขา 12/12 รอบ
     if (refined := _refinement_of_recommendation(db, history, message)) and (
         advice := _recommendation_reply(db, refined, refinement=True)
     ):
@@ -958,6 +991,26 @@ def prepare_answer(
             canned=advice,
             messages=[],
             cacheable=False,  # ขึ้นกับบทสนทนาก่อนหน้า
+        )
+
+    # --- 0.72 ขอคำแนะนำว่าควรเรียนสาขาไหนจากความสนใจ -> ใช้ระบบจับคู่สาขา ไม่ใช่ถาม-ตอบเอกสาร ---
+    # ตัดสินจากความหมาย (ดู _recommendation_intent) ถ้าจัดอันดับไม่สำเร็จก็ปล่อยให้ไหลไปทางปกติ
+    if (interest := _recommendation_intent(db, connector, message)) and (
+        advice := _recommendation_reply(db, message, interest=interest)
+    ):
+        return Prepared(
+            session_id=session.id,
+            status="answered",
+            search_query=interest,
+            best_score=0.0,
+            citations=[],
+            canned=advice,
+            messages=[],
+            # ไม่เก็บลงแคช เพราะคำตอบนี้ขึ้นกับว่าขั้นเขียนเหตุผลสำเร็จหรือไม่ ซึ่งเป็น
+            # สภาพชั่วคราวของระบบ ไม่ใช่ข้อเท็จจริงจากเอกสาร ถ้าเก็บไว้ตอนที่โมเดล
+            # เขียนไม่ได้ ทุกคนที่ถามคำถามเดียวกันจะได้คำตอบที่ด้อยกว่าความจริงต่อไป
+            # จนกว่าคลังเอกสารจะเปลี่ยน — เจอมาแล้วตอนโควตาหมดกลางการทดสอบ
+            cacheable=False,
         )
 
     # --- 0.75 เอ่ยชื่อสาขาที่คณะไม่มี -> บอกตรงๆ ไม่ใช่ถามกลับว่าสาขาไหน ---
