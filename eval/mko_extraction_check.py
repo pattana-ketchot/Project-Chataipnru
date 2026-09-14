@@ -185,6 +185,22 @@ class StatusRuleChecks(unittest.TestCase):
         credits = by_field(extract_document(make_doc(pages), TITLE))["total_credits"][0]
         self.assertEqual((credits.value_int, credits.status), (130, "candidate"))
 
+    def test_หัวข้อถัดไปหลังเลขหน้าของหน้าใหม่ยังหยุดรายการได้(self):
+        """คลังจริง 6 เล่ม: เลขหน้าของหน้าถัดไปต่อกับ "2." ในรูปที่ใช้ค้น วัตถุประสงค์ข้อสุดท้ายเลยไปถึงแผนพัฒนาหรือ PLO"""
+        pages = list(TQF_PAGES)
+        pages[4] = pages[4].split("2. แผนพัฒนา")[0]
+        pages.insert(5, "9\n2. แผนพัฒนาและปรับปรุง\nแผนการพัฒนา/เปลี่ยนแปลง กลยุทธ์\n1. ปรับปรุงหลักสูตร")
+        objectives = by_field(extract_document(make_doc(pages), TITLE))["objectives"][0]
+        self.assertEqual([i.text for i in objectives.items], ["มีความรู้ตัวอย่าง", "มีทักษะตัวอย่าง"])
+        self.assertEqual(objectives.status, "candidate")
+
+    def test_รายการยาวผิดปกติเป็น_needs_review(self):
+        pages = list(TQF_PAGES)
+        pages[4] = pages[4].replace("1.3.2 มีทักษะตัวอย่าง", "1.3.2 มีทักษะตัวอย่าง " + "ข้อความต่อเนื่อง " * 40)
+        objectives = by_field(extract_document(make_doc(pages), TITLE))["objectives"][0]
+        self.assertEqual(objectives.status, "needs_review")
+        self.assertIn("ยาวผิดปกติ", objectives.reason)
+
     def test_ไม่มีหัวข้อไม่เดาและไม่ไปเอาจากภาคผนวก(self):
         pages = list(TQF_PAGES)
         pages[3] = pages[3].split("8. อาชีพ")[0]
@@ -267,6 +283,9 @@ class OtherTemplateChecks(unittest.TestCase):
             "หมวดที่ 6 คุณสมบัติของผู้เข้าศึกษา\n1. คุณสมบัติของผู้เข้าศึกษา\nให้เป็นไปตามข้อบังคับของมหาวิทยาลัยและมีคุณสมบัติดังนี้\n"
             "1.1 แผน 1\n1.1.1 สำเร็จปริญญาตรี\n1.2 แผน 2\n1.2.1 มีประสบการณ์\n2. การคัดเลือกผู้เข้าศึกษา",
         ]
+        # เหมือน agri68_master: หัวข้อ PLO อยู่ต้นหน้าถัดไปหลังเลขหน้า "15"
+        before, after = pages[2].split("2. ผลลัพธ์")
+        pages[2:3] = [before, "15\n2. ผลลัพธ์" + after]
         extraction = extract_document(make_doc(pages), "หลักสูตรวิทยาศาสตรมหาบัณฑิต สาขาวิชาตัวอย่างศึกษา (พ.ศ. 2566)")
         fields = by_field(extraction)
         self.assertEqual(extraction.template, "std2565")
@@ -418,25 +437,51 @@ class LocalDatabaseChecks(unittest.TestCase):
                if v.field_key in ("objectives", "careers", "admission") and v.verdict not in ("correct", "needs_review")]
         self.assertEqual(bad, [])
 
-    def test_ข้อสุดท้ายไม่มีหัวกระดาษของหน้าถัดไป(self):
+    def test_รูปแบบเอกสารตรงกับที่ตรวจด้วยมือ(self):
+        from pipeline.mko.gold import load_gold
+        detected = {r["file"]: r["template_type"] for r in self.rows}
+        expected = {file: e["_template"] for file, e in load_gold().items()}
+        self.assertEqual(len(expected), 31)
+        self.assertEqual({f: (detected.get(f), t) for f, t in expected.items() if detected.get(f) != t}, {})
+
+    def test_ข้อสุดท้ายไม่มีหัวกระดาษและไม่เลยขอบเขตหัวข้อ(self):
         from pipeline.mko.gold import load_gold, normalise
         for file, expectations in load_gold().items():
-            expected = expectations.get("careers_last_item")
-            if expected is None:
-                continue
-            row = self.conn.execute(
-                """
-                SELECT li.text FROM mko.list_items li
-                  JOIN public.course_documents d ON d.id = li.document_id
-                  JOIN LATERAL (SELECT id FROM mko.extraction_runs r WHERE r.document_id = d.id
-                                 ORDER BY started_at DESC LIMIT 1) latest ON latest.id = li.run_id
-                 WHERE d.original_filename = %s AND li.item_type = 'career'
-                 ORDER BY li.seq DESC LIMIT 1
-                """,
-                (file,),
-            ).fetchone()
-            self.assertIsNotNone(row, file)
-            self.assertEqual(normalise(row["text"]), normalise(expected), file)
+            for key, item_type in (("careers_last_item", "career"), ("objectives_last_item", "objective")):
+                expected = expectations.get(key)
+                if expected is None:
+                    continue
+                row = self.conn.execute(
+                    """
+                    SELECT li.text FROM mko.list_items li
+                      JOIN public.course_documents d ON d.id = li.document_id
+                      JOIN LATERAL (SELECT id FROM mko.extraction_runs r WHERE r.document_id = d.id
+                                     ORDER BY started_at DESC LIMIT 1) latest ON latest.id = li.run_id
+                     WHERE d.original_filename = %s AND li.item_type = %s
+                     ORDER BY li.seq DESC LIMIT 1
+                    """,
+                    (file, item_type),
+                ).fetchone()
+                self.assertIsNotNone(row, f"{file} {item_type}")
+                self.assertEqual(normalise(row["text"]), normalise(expected), f"{file} {item_type}")
+
+    def test_ไม่มีรายการที่เลยขอบเขตหัวข้อถูกยอมรับ(self):
+        from pipeline.mko.decide import ITEM_LENGTH_LIMIT
+        rows = self.conn.execute(
+            """
+            SELECT d.original_filename AS file, li.item_type, li.seq, length(li.text) AS n, li.text
+              FROM mko.list_items li
+              JOIN public.course_documents d ON d.id = li.document_id
+              JOIN LATERAL (SELECT id FROM mko.extraction_runs r WHERE r.document_id = d.id
+                             ORDER BY started_at DESC LIMIT 1) latest ON latest.id = li.run_id
+             WHERE li.status IN ('candidate', 'verified')
+            """
+        ).fetchall()
+        too_long = [(r["file"], r["item_type"], r["seq"], r["n"]) for r in rows if r["n"] > ITEM_LENGTH_LIMIT[r["item_type"]]]
+        self.assertEqual(too_long, [])
+        spilled = [(r["file"], r["seq"]) for r in rows
+                   if r["item_type"] == "objective" and re.search(r"แผนพัฒนา|PLO|ผลลัพธ์การเรียนรู้ระดับหลักสูตร", r["text"])]
+        self.assertEqual(spilled, [])
         leaked = self.conn.execute(
             "SELECT count(*) AS n FROM mko.list_items WHERE text ~ 'มคอ\\.?\\s*2'"
         ).fetchone()["n"]

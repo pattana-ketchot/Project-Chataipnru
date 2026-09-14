@@ -158,6 +158,12 @@ def derive(field_key: str, source: list[FieldDecision], mapping: Callable[[str],
     return results
 
 
+# ความยาวต่อข้อที่ถือว่าผิดปกติ — ด่านสำรองกรณีหาจุดจบของหัวข้อไม่เจอแล้วรายการยาวเลยไปถึงหัวข้อถัดไป
+# ค่าสูงสุดของข้อที่ถูกต้องในคลังจริง 31 เล่ม: วัตถุประสงค์ 208, อาชีพ 340, คุณสมบัติผู้เข้าศึกษา 784 ตัวอักษร
+# ส่วนข้อที่เลยขอบเขตที่เคยเจอยาว 525–1,238 ตัวอักษร
+ITEM_LENGTH_LIMIT = {"objective": 400, "career": 450, "admission": 1000}
+
+
 def decide_list(doc: DocText, field_key: str, item_type: str, located: ListLocated | None,
                 max_items: int = 30) -> ListDecision:
     if located is None:
@@ -182,6 +188,10 @@ def decide_list(doc: DocText, field_key: str, item_type: str, located: ListLocat
         problems.append(f"จำนวนรายการมากผิดปกติ ({len(items)})")
     if located.irregular_numbering:
         problems.append("เลขข้อในเอกสารข้ามหรือซ้ำ ต้องตรวจการแบ่งรายการ")
+    limit = ITEM_LENGTH_LIMIT.get(item_type)
+    too_long = [str(item.seq) for item in items if limit and len(item.text) > limit]
+    if too_long:
+        problems.append(f"ข้อ {', '.join(too_long)} ยาวผิดปกติ อาจเลยขอบเขตหัวข้อ")
     if located.items_method == "paragraph" and items:
         notes.append("ไม่มีเลขข้อ เก็บทั้งย่อหน้าเป็นรายการเดียว")
 

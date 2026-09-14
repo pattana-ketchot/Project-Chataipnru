@@ -300,6 +300,28 @@ def _at_line_start(doc: DocText, start: int, pos: int) -> bool:
     return pos == start or not doc.text[doc.text.rfind("\n", 0, pos) + 1:pos].strip()
 
 
+def _boundary_ok(doc: DocText, pos: int) -> bool:
+    """
+    เลขหัวข้อที่ตำแหน่งนี้เป็นหัวข้อจริง: ขึ้นต้นบรรทัด หรืออักขระก่อนหน้า (ข้ามช่องว่าง) ไม่ใช่ตัวเลขหรือจุด
+
+    ตัดสินจากข้อความต้นฉบับ ไม่ใช้ lookbehind บนรูปที่ใช้ค้น เพราะรูปที่ใช้ค้นตัดขึ้นบรรทัดใหม่ทิ้ง เลขหน้าของหน้าถัดไป
+    จึงต่อกับเลขหัวข้อ เจอในคลังจริง 6 เล่ม เช่น agri68_master หน้า 20 ขึ้นต้นด้วย "15" แล้วตามด้วย
+    "2. ผลลัพธ์การเรียนรู้" กลายเป็น "152.ผลลัพธ์" หัวข้อถัดไปจึงไม่ถูกนับเป็นจุดจบ วัตถุประสงค์ข้อสุดท้ายยาวไปถึง PLO
+    """
+    i = pos - 1
+    while i >= 0 and doc.text[i] in " \t":
+        i -= 1
+    return i < 0 or doc.text[i] == "\n" or not (doc.text[i].isdigit() or doc.text[i] == ".")
+
+
+def _find_stop(doc: DocText, pattern: re.Pattern, start: int, end: int):
+    """หัวข้อถัดไปที่เป็นจุดจบของรายการ (ตัวแรกที่ผ่าน _boundary_ok)"""
+    for hit in doc.find_all(pattern, start, end):
+        if _boundary_ok(doc, hit[0]):
+            return hit
+    return None
+
+
 def _numbered_markers(doc: DocText, start: int, end: int, prefix: str,
                       suffix: str = r"(?!\d)") -> list[tuple[int, int, int]]:
     """
@@ -374,6 +396,8 @@ def _items_between(doc: DocText, markers: list[tuple[int, int, int]], end: int) 
 def _list(doc: DocText, location: str, head: tuple, end: int, markers: list[tuple[int, int, int]],
           allow_paragraph: bool = True, keep_intro: bool = False) -> ListLocated:
     heading_end = head[1]
+    # จบก้อนหลักฐานก่อนหัวกระดาษ/เลขหน้าของหน้าถัดไป ไม่งั้นเลขหน้าที่อ้างอิงจะรวมหน้าที่ไม่มีเนื้อหาของหัวข้อนี้
+    end = _trim_page_furniture(doc, head[0], end)[1]
     if markers:
         items = _items_between(doc, markers, end)
         if keep_intro:
@@ -403,7 +427,7 @@ def extract_careers(doc: DocText, template: str, sections: list[Section], body_e
         head = doc.find(rx(r"8\.", lit("อาชีพที่"), r".{0,25}?", lit("สำเร็จการศึกษา")), *area)
         if not head:
             return None
-        stop = doc.find(rx(r"9\.[ก-๙]"), head[1], area[1])
+        stop = _find_stop(doc, rx(r"9\.[ก-๙]"), head[1], area[1])
         end = stop[0] if stop else area[1]
         return _list(doc, "chapter1.item8", head, end, _numbered_markers(doc, head[1], end, r"8\."))
     if template in ("brief", "web_page"):
@@ -417,7 +441,7 @@ def extract_careers(doc: DocText, template: str, sections: list[Section], body_e
     return None
 
 
-_OBJECTIVE_STOP = re.compile(r"(?<![\d.])(?:1\.4|2\.)(?=[ก-๙A-Za-z(])")
+_OBJECTIVE_STOP = re.compile(r"(?:1\.4|2\.)(?=[ก-๙A-Za-z(])")
 
 
 def extract_objectives(doc: DocText, template: str, sections: list[Section], body_end: int) -> ListLocated | None:
@@ -427,7 +451,7 @@ def extract_objectives(doc: DocText, template: str, sections: list[Section], bod
         head = doc.find(rx(r"1\.3", lit("วัตถุประสงค์")), *area)
         if not head:
             return None
-        stop = doc.find(_OBJECTIVE_STOP, head[1], area[1])
+        stop = _find_stop(doc, _OBJECTIVE_STOP, head[1], area[1])
         end = stop[0] if stop else area[1]
         return _list(doc, "chapter2.item1.3", head, end, _numbered_markers(doc, head[1], end, r"1\.3\."))
     if template == "brief":
@@ -438,7 +462,7 @@ def extract_objectives(doc: DocText, template: str, sections: list[Section], bod
         stops = (
             doc.find(rx(lit("จำนวนหน่วยกิต")), head[1], body_end),
             doc.find(rx(lit("โครงสร้างหลักสูตร")), head[1], body_end),
-            doc.find(re.compile(r"(?<![\d.])(?:1\.4|3\.1)(?![\d])"), head[1], body_end),
+            _find_stop(doc, re.compile(r"(?:1\.4|3\.1)(?!\d)"), head[1], body_end),
             doc.find(rx(lit("ผลลัพธ์การเรียนรู้")), head[1], body_end),
         )
         end = _earliest(stops) or doc.page_end(doc.page_index(head[0]))
@@ -456,8 +480,8 @@ def extract_admission(doc: DocText, template: str, sections: list[Section], body
         if not head:
             return None
         end = _earliest((
-            doc.find(re.compile(r"(?<![\d.])2\.3(?!\d)"), head[1], area[1]),
-            doc.find(rx(r"3\.", lit("หลักสูตรและอาจารย์")), head[1], area[1]),
+            _find_stop(doc, re.compile(r"2\.3(?!\d)"), head[1], area[1]),
+            _find_stop(doc, rx(r"3\.", lit("หลักสูตรและอาจารย์")), head[1], area[1]),
         )) or area[1]
         markers = _numbered_markers(doc, head[1], end, r"2\.2\.")
         return _list(doc, "chapter3.item2.2", head, end, markers, keep_intro=True)
@@ -468,7 +492,7 @@ def extract_admission(doc: DocText, template: str, sections: list[Section], body
         head = doc.find(rx(r"1\.", lit("คุณสมบัติของผู้เข้าศึกษา")), chapter6.start, chapter6.end)
         if not head:
             return None
-        stop = doc.find(re.compile(r"(?<![\d.])2\.(?=[ก-๙])"), head[1], chapter6.end)
+        stop = _find_stop(doc, re.compile(r"2\.(?=[ก-๙])"), head[1], chapter6.end)
         end = stop[0] if stop else chapter6.end
         markers = _numbered_markers(doc, head[1], end, r"1\.", suffix=r"(?!\d|\.\d)")
         return _list(doc, "chapter6.item1", head, end, markers, keep_intro=True)
