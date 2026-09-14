@@ -160,6 +160,28 @@ class GateChecks(unittest.TestCase):
         chat._can_answer_from(conn, [], "q")
         self.assertEqual(conn.systems, [prompts.GROUNDING_COMPARISON_SYSTEM_PROMPT, prompts.GROUNDING_CHECK_SYSTEM_PROMPT])
 
+    def test_ด่านตรวจคืนเหตุผลพร้อมผลตัดสิน(self):
+        class Reply:
+            def __init__(self, raw):
+                self.raw = raw
+
+            def chat(self, messages, **kwargs):
+                if isinstance(self.raw, Exception):
+                    raise self.raw
+                return self.raw
+
+        verdict = chat._grounding_verdict(Reply('{"reason": "ไม่มีอาชีพของหลักสูตรที่สอง", "can_answer": false}'), [], "q", True)
+        self.assertEqual(verdict, (False, "ไม่มีอาชีพของหลักสูตรที่สอง"))
+        self.assertFalse(chat._can_answer_from(Reply('{"reason": "x", "can_answer": false}'), [], "q"))
+        # ล้มหรืออ่านไม่ได้ ปล่อยผ่านเหมือนเดิม
+        self.assertEqual(chat._grounding_verdict(Reply("ไม่ใช่ JSON"), [], "q"), (True, ""))
+        from llm.connector import LLMConnectionError
+        self.assertEqual(chat._grounding_verdict(Reply(LLMConnectionError("ล่ม")), [], "q"), (True, ""))
+
+    def test_พรอมต์ด่านตรวจทั้งสองแบบขอเหตุผลก่อนผลตัดสิน(self):
+        for prompt in (prompts.GROUNDING_CHECK_SYSTEM_PROMPT, prompts.GROUNDING_COMPARISON_SYSTEM_PROMPT):
+            self.assertLess(prompt.index('"reason"'), prompt.index('"can_answer"'))
+
     def test_เกณฑ์ของคำถามหลักสูตรเดียวไม่ถูกผ่อนลง(self):
         """การแก้คำถามเปรียบเทียบต้องไม่ทำให้คำถามหลักสูตรเดียวผ่านด่านตรวจเอกสารง่ายขึ้น"""
         single = prompts.GROUNDING_CHECK_SYSTEM_PROMPT
