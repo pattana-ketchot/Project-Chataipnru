@@ -31,6 +31,7 @@ from app.services.course_scope import (
     _distinctive_name,
     programmes_named,
     resolve_scope,
+    resolve_scopes,
     without_programme_names,
 )
 from app.services.answer_cache import corpus_version, lookup as cache_lookup, store as cache_store
@@ -47,6 +48,7 @@ from llm.prompts import (  # noqa: E402
     CHAT_SYSTEM_PROMPT,
     CONDENSE_SYSTEM_PROMPT,
     GROUNDING_CHECK_SYSTEM_PROMPT,
+    GROUNDING_COMPARISON_SYSTEM_PROMPT,
     NO_EVIDENCE_MARKER,
     NOT_FOUND_REPLY,
     NOT_FOUND_REPLY_EN,
@@ -237,7 +239,26 @@ def _retrieve(db: Session, connector, question: str):
     วัดกับคำถาม "สาขาวิชาเทคโนโลยีการจัดการสุขภาพ เรียนจบทำอาชีพไหนได้บ้าง":
     chunk ที่มีรายชื่ออาชีพจริงเคยอยู่อันดับแย่กว่า 200 ของทั้งคลัง เมื่อจำกัดขอบเขต
     และตัดชื่อออกแล้วขึ้นมาอยู่อันดับ 3
+
+    คำถามที่เอ่ยถึงหลายหลักสูตร (เช่น เปรียบเทียบสองสาขา) ค้นแยกทีละหลักสูตรโดยแบ่งจำนวนชิ้นเท่าๆ กัน
+    ถ้าค้นรวมกันในครั้งเดียว หลักสูตรแรกที่เจอกินที่ทั้งหมด (เคยได้ 25 ต่อ 0 ชิ้น) อีกหลักสูตรไม่มีหลักฐาน
+    เหลือให้เทียบ (ดู course_scope.resolve_scopes) และวางแก่นของแต่ละหลักสูตร (อาชีพ วัตถุประสงค์) ไว้ก่อน
+    ชิ้นที่ค้นเจอของหลักสูตรนั้น เพราะคำค้นหลังตัดชื่อแทบไม่มีเรื่องให้ค้น ชิ้นที่ได้จึงไม่มีข้อเท็จจริงที่ใช้เทียบ
+    (ดู program_match.newest_core_chunks) จัดเป็นกลุ่มตามหลักสูตรเพื่อให้โมเดลแยกได้ว่าข้อเท็จจริงเป็นของใคร
     """
+    scopes = resolve_scopes(db, question)
+    if len(scopes) >= 2:
+        from app.services.program_match import newest_core_chunks
+
+        vector = connector.embed(scopes[0].search_text)
+        per_programme = -(-TOP_K_CHUNKS // len(scopes))
+        chunks = []
+        for scope in scopes:
+            found = search_similar_chunks(db, vector, top_k=per_programme, course_ids=scope.course_ids)
+            core = newest_core_chunks(db, scope.course_ids, score=found[0].score if found else 0.0)
+            core_ids = {c.chunk_id for c in core}
+            chunks += core + [c for c in found if c.chunk_id not in core_ids]
+        return chunks
     scope = resolve_scope(db, question)
     if scope is None:
         return search_similar_chunks(db, connector.embed(expand_query(question)), top_k=TOP_K_CHUNKS)
@@ -308,14 +329,25 @@ def _program_names(db: Session) -> list[str]:
     return _PROGRAM_NAMES
 
 
-def _can_answer_from(connector, chunks, question: str) -> bool:
-    """เนื้อหาที่ค้นเจอมีข้อเท็จจริงตอบคำถามนี้ได้จริงไหม"""
+def _can_answer_from(connector, chunks, question: str, comparison: bool = False) -> bool:
+    """
+    เนื้อหาที่ค้นเจอมีข้อเท็จจริงตอบคำถามนี้ได้จริงไหม
+
+    comparison=True ใช้เกณฑ์ของคำถามที่เอ่ยถึงหลายหลักสูตร ด่านปกติตีการเปรียบเทียบทุกแบบว่าเป็นการอนุมาน
+    เพราะไม่มีเอกสารเล่มไหนเขียนเปรียบเทียบกับหลักสูตรอื่นไว้ (ตัวเลขที่วัดอยู่ใน prompts.GROUNDING_COMPARISON_
+    SYSTEM_PROMPT) คำถามหลักสูตรเดียวยังใช้เกณฑ์เดิมทุกประการ
+    """
     return _ask_json_flag(
         connector,
-        GROUNDING_CHECK_SYSTEM_PROMPT,
+        GROUNDING_COMPARISON_SYSTEM_PROMPT if comparison else GROUNDING_CHECK_SYSTEM_PROMPT,
         build_grounding_check_prompt(_format_chunks(chunks), question),
         "can_answer",
     )
+
+
+def _compares_programmes(db: Session, question: str) -> bool:
+    """คำถามนี้เอ่ยถึงหลักสูตรตั้งแต่สองหลักสูตรขึ้นไปหรือไม่ ใช้เลือกเกณฑ์ของด่านตรวจเอกสาร"""
+    return len(resolve_scopes(db, question)) >= 2
 
 
 @dataclass
@@ -1130,7 +1162,7 @@ def prepare_answer(
         and not _is_about_scope(connector, search_query)
     ):
         reply_text, status = out_of_scope, "out_of_scope"
-    elif not _can_answer_from(connector, chunks, search_query):
+    elif not _can_answer_from(connector, chunks, search_query, comparison=_compares_programmes(db, search_query)):
         reply_text, status = not_found, "not_found"
     else:
         status = "answered"

@@ -369,9 +369,14 @@ def _fetch_program_core(db: Session, course_id: uuid.UUID) -> str:
     ชอบแก้ปัญหา แล้วก็ชอบเขียนโปรแกรมนิดหน่อย" ได้วิทยาการคอมพิวเตอร์ 2561 เป็นสาขาเดียวที่ผ่านเกณฑ์
     แล้วถูกปฏิเสธทุกรอบ ผู้ใช้ได้คำตอบว่าไม่พบสาขาที่ตรง
     """
+    return "\n\n".join(f"[หน้า {r.page_number}]\n{r.content}" for r in _core_rows(db, course_id))
+
+
+def _core_rows(db: Session, course_id: uuid.UUID) -> list:
+    """สองชิ้นแรกที่มีหัวข้ออาชีพหลังจบหรือวัตถุประสงค์ของหลักสูตร โดยข้ามสารบัญ"""
     rows = db.execute(
         text("""
-            SELECT page_number, content FROM course_chunks
+            SELECT id, course_id, page_number, content FROM course_chunks
             WHERE course_id = :course_id
               AND (content LIKE :careers OR content LIKE :objectives)
             ORDER BY page_number, id
@@ -379,8 +384,36 @@ def _fetch_program_core(db: Session, course_id: uuid.UUID) -> str:
         {"course_id": course_id, "careers": "%อาชีพที่สามารถประกอบได้หลัง%",
          "objectives": "%วัตถุประสงค์ของหลักสูตร%"},
     ).all()
-    rows = [r for r in rows if not _looks_like_table_of_contents(r.content)][:2]
-    return "\n\n".join(f"[หน้า {r.page_number}]\n{r.content}" for r in rows)
+    return [r for r in rows if not _looks_like_table_of_contents(r.content)][:2]
+
+
+def newest_core_chunks(db: Session, course_ids: list[uuid.UUID], score: float) -> list:
+    """
+    แก่นของหลักสูตร (อาชีพหลังจบและวัตถุประสงค์) ของฉบับล่าสุดในรายการ ในรูปชิ้นเอกสารที่อ้างอิงได้
+
+    ใช้เป็นหลักฐานของคำถามที่เปรียบเทียบหลายหลักสูตร (ดู chat._retrieve) เพราะคำค้นที่เหลือหลังตัดชื่อ
+    หลักสูตรออกแทบไม่มีเรื่องให้ค้น ("กับ ต่างกันอย่างไร") ชิ้นที่ค้นเจอจึงเป็นเศษ OCR วิชาศึกษาทั่วไป หรือ
+    ระเบียบฝึกงาน ไม่มีรายชื่ออาชีพหรือวัตถุประสงค์ที่ใช้เทียบกันได้เลย
+
+    score คือคะแนนที่ให้กับชิ้นเหล่านี้ ผู้เรียกส่งคะแนนสูงสุดของการค้นมา เพื่อไม่ให้คะแนนเกณฑ์ขอบเขตสูงเกินจริง
+    """
+    from app.schemas.course import SearchResultChunk
+
+    if not course_ids:
+        return []
+    editions = db.execute(
+        text("SELECT id, title FROM courses WHERE id = ANY(:ids)"), {"ids": list(course_ids)}
+    ).all()
+    if not editions:
+        return []
+    newest = max(editions, key=lambda r: int(m.group(0)) if (m := re.search(r"25\d{2}", r.title)) else 0)
+    return [
+        SearchResultChunk(
+            chunk_id=r.id, course_id=r.course_id, course_title=newest.title,
+            page_number=r.page_number, content=r.content, score=score,
+        )
+        for r in _core_rows(db, newest.id)
+    ]
 
 
 def _title_vectors(db: Session, connector) -> dict[uuid.UUID, list[float]]:

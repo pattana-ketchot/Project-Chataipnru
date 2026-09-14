@@ -139,10 +139,55 @@ def resolve_scope(db: Session, question: str) -> CourseScope | None:
     return None
 
 
+def resolve_scopes(db: Session, question: str) -> list[CourseScope]:
+    """
+    ขอบเขตของ "ทุก" หลักสูตรที่คำถามเอ่ยถึง คืนรายการว่างถ้าไม่เอ่ยถึงเลย
+
+    resolve_scope คืนหลักสูตรแรกที่เจอหลักสูตรเดียว ซึ่งถูกสำหรับคำถามส่วนใหญ่ แต่คำถามที่เทียบ
+    สองหลักสูตรจะถูกค้นเฉพาะเล่มแรก เจอบนหน้าเว็บจริง: "วิทยาการคอมพิวเตอร์กับเทคโนโลยีสารสนเทศ
+    ต่างกันอย่างไร ..." ได้เนื้อหาของวิทยาการคอมพิวเตอร์ 25 ชิ้น เทคโนโลยีสารสนเทศ 0 ชิ้น และคำค้นยังมี
+    ชื่อหลักสูตรที่สองค้างอยู่ ด่านตรวจเอกสารจึงตัดสินว่าตอบไม่ได้
+
+    ทุกขอบเขตใช้คำค้นเดียวกันที่ตัดชื่อของทุกหลักสูตรออกแล้ว เทียบชื่อเต็มก่อน (ยาวก่อนสั้น) แล้วค่อย
+    ดูคำย่อในข้อความที่เหลือ ด้วยกติกาเดียวกับ resolve_scope
+    """
+    courses = db.scalars(select(Course).where(Course.is_active.is_(True))).all()
+    titles = {c.id: c.title for c in courses}
+    by_name: dict[str, list[uuid.UUID]] = {}
+    for c in courses:
+        by_name.setdefault(_distinctive_name(c.title), []).append(c.id)
+
+    remaining = question.lower()
+    found: list[tuple[str, str]] = []  # (ชื่อเฉพาะ, ข้อความในคำถามที่ต้องตัดออกจากคำค้น)
+    for name in sorted(by_name, key=len, reverse=True):
+        if name and name.lower() in remaining:
+            found.append((name, name))
+            remaining = remaining.replace(name.lower(), " ")
+    for alias, full in ALIASES.items():
+        if not _alias_present(alias, remaining):
+            continue
+        for name in by_name:
+            if name and name in full and all(name != f for f, _ in found):
+                found.append((name, alias))
+        remaining = re.sub(rf"(?<![a-z0-9]){re.escape(alias.lower())}(?![a-z0-9])", " ", remaining)
+
+    search_text = _search_text(question, [target for _, target in found])
+    return [
+        CourseScope(course_ids=_narrow_by_year(by_name[name], titles, question), matched_name=name, search_text=search_text)
+        for name, _ in found
+    ]
+
+
 def _build(ids: list[uuid.UUID], name: str, question: str, strip: str | None = None) -> CourseScope:
-    target = strip or name
-    # ตัดแบบไม่สนตัวพิมพ์เล็กใหญ่ เพราะคำย่ออาจเป็นอักษรโรมัน
-    remainder = re.sub(re.escape(target), " ", question, flags=re.IGNORECASE)
+    return CourseScope(course_ids=ids, matched_name=name, search_text=_search_text(question, [strip or name]))
+
+
+def _search_text(question: str, targets: list[str]) -> str:
+    """คำค้นหลังตัดชื่อหลักสูตรหรือคำย่อที่ระบุ ปีการศึกษา และคำห่อออก"""
+    remainder = question
+    for target in targets:
+        # ตัดแบบไม่สนตัวพิมพ์เล็กใหญ่ เพราะคำย่ออาจเป็นอักษรโรมัน
+        remainder = re.sub(re.escape(target), " ", remainder, flags=re.IGNORECASE)
     # ปีการศึกษาทำหน้าที่เลือกเล่มไปแล้ว เหลือไว้ในคำค้นมีแต่โทษ เพราะจะไปจับคู่กับ
     # หน้าปกและมติอนุมัติหลักสูตรที่เอ่ยปีซ้ำๆ แทนที่จะจับคู่เนื้อหาที่ถามถึง
     remainder = _YEAR_PHRASE.sub(" ", remainder)
@@ -151,8 +196,7 @@ def _build(ids: list[uuid.UUID], name: str, question: str, strip: str | None = N
     remainder = _LEADING_COURSE_WORD.sub("", remainder).strip()
 
     # เหลือน้อยเกินไปแปลว่าคำถามคือชื่อหลักสูตรล้วน ใช้ข้อความเดิมค้นต่อไป
-    search_text = remainder if len(remainder) >= _MIN_REMAINDER else question
-    return CourseScope(course_ids=ids, matched_name=name, search_text=search_text)
+    return remainder if len(remainder) >= _MIN_REMAINDER else question
 
 
 # ตำแหน่งที่คำตอบของผู้ช่วยเอ่ยชื่อหลักสูตร: ตามหลังคำนำหน้า หรือเป็นหัวรายการ

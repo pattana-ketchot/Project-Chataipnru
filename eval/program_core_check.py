@@ -83,5 +83,38 @@ class ProgramCoreChecks(unittest.TestCase):
         self.assertEqual(_fetch_program_core(FakeDb([row(3, TOC_WITH_LEADERS)]), None), "")
 
 
+class NewestCoreChunksChecks(unittest.TestCase):
+    """แก่นของหลักสูตรในรูปชิ้นเอกสารที่อ้างอิงได้ ใช้เป็นหลักฐานของคำถามเปรียบเทียบหลายหลักสูตร"""
+
+    class Db:
+        def __init__(self, editions, rows_by_course):
+            self.editions, self.rows_by_course, self.asked_for = editions, rows_by_course, []
+
+        def execute(self, statement, params):
+            if "FROM courses" in str(statement):
+                return SimpleNamespace(all=lambda: self.editions)
+            self.asked_for.append(params["course_id"])
+            return SimpleNamespace(all=lambda: self.rows_by_course[params["course_id"]])
+
+    def test_ใช้ฉบับล่าสุด_ข้ามสารบัญ_และอ้างอิงได้(self):
+        import uuid
+        from app.services.program_match import newest_core_chunks
+
+        old, new = uuid.uuid4(), uuid.uuid4()
+        editions = [SimpleNamespace(id=old, title="หลักสูตร ก (พ.ศ. 2561)"), SimpleNamespace(id=new, title="หลักสูตร ก (พ.ศ. 2566)")]
+        rows = [SimpleNamespace(id=uuid.uuid4(), course_id=new, page_number=p, content=c)
+                for p, c in ((3, TOC_WITH_LEADERS), (8, CAREERS), (13, OBJECTIVES))]
+        db = self.Db(editions, {new: rows, old: []})
+        chunks = newest_core_chunks(db, [old, new], score=0.61)
+        self.assertEqual(db.asked_for, [new])
+        self.assertEqual([c.page_number for c in chunks], [8, 13])
+        self.assertTrue(all(c.course_id == new and c.course_title.endswith("2566)") and c.score == 0.61 for c in chunks))
+        self.assertEqual({c.chunk_id for c in chunks}, {rows[1].id, rows[2].id})
+
+    def test_ไม่มีหลักสูตรคืนรายการว่าง(self):
+        from app.services.program_match import newest_core_chunks
+        self.assertEqual(newest_core_chunks(self.Db([], {}), [], score=0.5), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
