@@ -40,7 +40,7 @@ from app.services.program_list import asks_for_program_list, program_list_answer
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
 from app.services.small_talk import match_small_talk
-from app.services.tuition import answer as tuition_answer, is_tuition_question
+from app.services.tuition import answer as tuition_answer, find_program as find_tuition_program, is_tuition_question
 from app.services.vector_search import search_similar_chunks
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
@@ -604,7 +604,9 @@ def _needs_a_program_named(db: Session, message: str) -> bool:
     """
     if not any(w in message for w in _PROGRAM_SPECIFIC_WORDS):
         return False
-    return not _names_a_program(db, message)
+    # นับชื่อย่อด้วย เดิมใช้ _names_a_program ซึ่งรู้จักแค่ชื่อเต็ม "วิทคอมเรียนกี่หน่วยกิต" "comsci มีวิชาอะไรบ้าง"
+    # จึงถูกถามกลับว่าสาขาไหน ทั้งที่ขั้นค้นเอกสารรู้อยู่แล้วว่าเป็นวิทยาการคอมพิวเตอร์ (พบตอนทดสอบก่อน deploy)
+    return not programmes_named(message, _program_names(db), from_assistant=False)
 
 
 def _ask_which_program(db: Session, thai: bool) -> str:
@@ -951,6 +953,39 @@ def _persist(db: Session, session_id: uuid.UUID, question: str, reply: str) -> N
     db.commit()
 
 
+def _tuition_question(db: Session, connector, history: list, message: str) -> str:
+    """
+    คำถามค่าเทอมที่ตีความจากบทสนทนาแล้ว ใช้ค้นในตารางประกาศค่าเทอม
+
+    คำถามที่มีคำว่าค่าเทอมแต่ไม่บอกสาขา เช่น ถาม "วิทคอมเรียนกี่หน่วยกิต" แล้วต่อด้วย "แล้วค่าเทอมล่ะ"
+    เดิมถูกตอบด้วยช่วงค่าเทอมรวมทุกสาขาแล้วขอให้ระบุสาขา ทั้งที่บทสนทนาบอกอยู่แล้ว หาสาขาจากบทสนทนา
+    ด้วยกติกาเดียวกับคำว่า "สาขานี้" (ไม่เรียกโมเดล)
+
+    ถ้าบทสนทนาไม่ได้คุยถึงสาขาเดียว (ไม่มี หรือหลังคำแนะนำหลายสาขา) ใช้ข้อความเดิม ตารางจะขอให้ระบุสาขา
+    ไม่ให้ขั้นเขียนคำถามใหม่ตีความ เพราะทดสอบก่อน deploy แล้วมันเลือกสาขาแรกในรายการเอง: แนะนำ
+    วิทยาการคอมพิวเตอร์ แอนิเมชัน และเทคโนโลยีสารสนเทศ แล้วถาม "ค่าเทอมเท่าไหร่" ได้ค่าเทอมของ
+    วิทยาการคอมพิวเตอร์ ซึ่งเป็นการเดา
+    """
+    if not history or find_tuition_program(message) is not None:
+        return message
+    if programme := _context_programme(db, history):
+        return f"{message} {programme}"
+    return message
+
+
+def _tuition_reply(session_id: uuid.UUID, question: str) -> Prepared:
+    return Prepared(
+        session_id=session_id,
+        status="answered",
+        search_query=question,
+        best_score=0.0,
+        citations=[],
+        canned=tuition_answer(question),
+        messages=[],
+        cacheable=False,  # ตอบจากตารางค่าเทอม ไม่ได้เรียกโมเดลเขียนคำตอบ
+    )
+
+
 def prepare_answer(
     db: Session,
     user_id: uuid.UUID,
@@ -1021,17 +1056,11 @@ def prepare_answer(
     # (ราว 22,000 บาท) ซึ่งเคยถูกหยิบมาตอบแทนค่าเทอมจริง (12,000 บาท) มาแล้ว
     # การลัดมาตอบจากตารางจึงกันความเข้าใจผิดนั้นตั้งแต่ต้นทาง ดูเหตุผลเต็มใน
     # services/tuition.py
+    #
+    # คำถามค่าเทอมที่ไม่บอกสาขาในบทสนทนา ต้องหาสาขาจากบทสนทนาก่อน และห้ามไหลไปค้นเอกสาร
+    # (ดู _tuition_question)
     if is_tuition_question(message):
-        return Prepared(
-            session_id=session.id,
-            status="answered",
-            search_query=message,
-            best_score=0.0,
-            citations=[],
-            canned=tuition_answer(message),
-            messages=[],
-            cacheable=False,  # ตอบจากตารางค่าเทอม ไม่ได้เรียกโมเดลอยู่แล้ว
-        )
+        return _tuition_reply(session.id, _tuition_question(db, connector, history, message))
 
     # --- 0.7 ผู้ใช้ตอบคำถามต่อยอดหลังแนะนำสาขา -> จับคู่ใหม่ด้วยความสนใจที่รวมกันแล้ว ---
     #
@@ -1138,6 +1167,15 @@ def prepare_answer(
     chunks = _retrieve(db, connector, query)
     best_score = chunks[0].score if chunks else 0.0
     search_query = query
+    # คำถามที่ตีความแล้ว — ทุกขั้นหลังจากนี้ (ด่านขอบเขต ด่านตรวจเอกสาร ขั้นเขียนคำตอบ) ต้องใช้ตัวเดียวกัน
+    #
+    # เดิมด่านตรวจใช้ search_query แต่ขั้นเขียนคำตอบใช้ query เจอจริง: ถาม "ค่าเทอมเท่าไหร่" แล้วต่อด้วย
+    # "ของ comsci" ขั้นค้นและด่านตรวจใช้คำถามที่เขียนใหม่ว่า "ค่าเทอมหลักสูตรวิทยาการคอมพิวเตอร์เท่าไหร่"
+    # แต่ขั้นเขียนคำตอบได้ "ของ comsci" ตามลำพัง จึงตอบภาพรวมหลักสูตรแทนค่าเทอม
+    #
+    # แยกจาก search_query เพราะคำถามภาษาอังกฤษค้นด้วยคำไทยล้วนได้ (ขั้น 2.5) ซึ่งเป็นแค่คำค้น
+    # ถ้าส่งให้ขั้นเขียนคำตอบ โมเดลจะเห็นคำถามเป็นภาษาไทยแล้วตอบผิดภาษา
+    interpreted = query
 
     # --- 2. ถ้ามีประวัติ ลองเขียนคำถามใหม่แล้วค้นซ้ำ ---
     # คำถามต่อเนื่องอย่าง "แล้วกี่หน่วยกิต" คะแนนดิบจะต่ำเพราะขาดบริบท จึงให้
@@ -1150,11 +1188,18 @@ def prepare_answer(
     if history and query == message:
         rewritten = _condense(connector, history, message, context_programme)
         if rewritten != message:
+            # ถามต่อเรื่องค่าเทอมโดยไม่มีคำว่าค่าเทอม เช่น "ค่าเทอมเท่าไหร่" แล้วต่อด้วย "ของ comsci"
+            # ขั้นค่าเทอม (0.5) ตรวจแค่ข้อความดิบจึงไม่เห็น เดิมข้อความนี้ไปค้นเอกสาร มคอ.2 ซึ่งไม่มีค่าเทอม
+            # และด่านตรวจเอกสารยังปล่อยผ่านด้วย "ค่าลงทะเบียนเหมาจ่าย 24,000 บาทต่อคนต่อปี" จากเอกสาร
+            # ซึ่งไม่ใช่ประกาศค่าเทอมของคณะ จึงส่งไปตารางค่าเทอมทันทีที่ตีความแล้วเป็นคำถามค่าเทอม
+            if is_tuition_question(rewritten):
+                return _tuition_reply(session.id, rewritten)
             alt = _retrieve(db, connector, rewritten)
             alt_score = alt[0].score if alt else 0.0
             gained_scope = not own_scope and resolve_scope(db, rewritten) is not None
             if gained_scope or alt_score > best_score:
                 chunks, best_score, search_query = alt, alt_score, rewritten
+                interpreted = rewritten
 
     # --- 2.5 คำถามภาษาอังกฤษ: ลองค้นด้วยคำไทยที่แปลได้ แล้วเลือกอันที่ดีกว่า ---
     # เอกสารเป็นภาษาไทยล้วน การเติมคำไทยต่อท้ายคำถามอังกฤษยังไม่พอเพราะถ้อยคำอังกฤษ
@@ -1176,7 +1221,7 @@ def prepare_answer(
     # จะต่ำแค่ไหน คะแนนต่ำในกรณีนี้แปลว่า "เอกสารไม่มีเรื่องที่ถาม" ไม่ใช่ "ถามนอกเรื่อง"
     # ซึ่งต้องตอบคนละแบบ — เจอจริงกับหลักสูตรสาธารณสุขศาสตร์ที่คลังมีแต่ข้อมูลจากหน้าเว็บ
     # ไม่มีรายวิชา ผู้ใช้ถามถึงวิชาบังคับแล้วถูกตอบว่าถามนอกเรื่อง
-    names_program = _names_a_program(db, search_query)
+    names_program = _names_a_program(db, interpreted) or _names_a_program(db, search_query)
     if best_score < OFF_TOPIC_THRESHOLD and not names_program:
         # ต่ำขนาดนี้คือไม่มีอะไรในคลังใกล้เคียงเลย ตัดจบโดยไม่ต้องเสียเวลาเรียก LLM
         reply_text, status = out_of_scope, "out_of_scope"
@@ -1186,10 +1231,10 @@ def prepare_answer(
     elif (
         best_score < AMBIGUOUS_UNTIL
         and not names_program
-        and not _is_about_scope(connector, search_query)
+        and not _is_about_scope(connector, interpreted)
     ):
         reply_text, status = out_of_scope, "out_of_scope"
-    elif not _can_answer_from(connector, chunks, search_query, comparison=_compares_programmes(db, search_query)):
+    elif not _can_answer_from(connector, chunks, interpreted, comparison=_compares_programmes(db, interpreted)):
         reply_text, status = not_found, "not_found"
     else:
         status = "answered"
@@ -1201,8 +1246,8 @@ def prepare_answer(
         for m in history:
             messages.append(LLMMessage(role=m.role, content=m.content))
         messages.append(
-            # ใช้คำถามที่แทนคำอ้างอิงแล้ว เพื่อให้โมเดลรู้แน่ว่า "สาขานี้" คือสาขาไหน
-            LLMMessage(role="user", content=build_chat_prompt(_format_chunks(chunks), query))
+            # คำถามที่ตีความแล้วตัวเดียวกับที่ด่านตรวจใช้ ("สาขานี้" ถูกแทนด้วยชื่อสาขาแล้ว หรือคำถามที่เขียนใหม่)
+            LLMMessage(role="user", content=build_chat_prompt(_format_chunks(chunks), interpreted))
         )
         citations = [
             ChatCitation(
