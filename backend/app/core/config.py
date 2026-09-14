@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     # --- Rate limiting (applied in middleware, see api/deps.py) ---
     rate_limit_per_minute: int = 30
 
+    # --- คำตอบจากข้อมูลหลักสูตรที่มีโครงสร้าง (มคอ. Phase 2) ---
+    # off    = ไม่ทำอะไรเลย (ค่าตั้งต้น)
+    # shadow = คำนวณคำตอบจากฐานข้อมูลเทียบกับคำตอบเดิมแล้วบันทึกลง mko.shadow_answers ไม่เปลี่ยนคำตอบที่ผู้ใช้เห็น
+    # on     = ยังไม่เปิดใน Phase 2 ระบบทำงานเป็น shadow (ดู services/structured_shadow.py)
+    # เก็บเป็นข้อความแทน Literal เพื่อให้ค่าที่พิมพ์ผิดกลายเป็น off แทนที่จะทำให้ backend เปิดไม่ขึ้น
+    structured_answers: str = Field("off", alias="STRUCTURED_ANSWERS")
+
 
 @lru_cache
 def get_settings() -> Settings:

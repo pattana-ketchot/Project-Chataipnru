@@ -281,6 +281,16 @@ def main(argv: list[str] | None = None) -> int:
                 logger.info("%-20s %-8s %s", row["original_filename"], extraction.template,
                             json.dumps({f"{k}:{s}": n for (k, s), n in sorted(counts.items())}, ensure_ascii=False))
 
+        # ผลตรวจของคนผูกกับค่า ไม่ผูกกับแถวของรอบสกัด จึงต้องนำกลับไปใช้กับรอบใหม่ทุกครั้ง (ดู review.py)
+        if conn.execute("SELECT to_regclass('mko.review_decisions') IS NOT NULL AS ok").fetchone()["ok"]:
+            from pipeline.mko.review import reapply
+
+            with conn.transaction():
+                reviewed = reapply(conn)
+            logger.info("นำผลตรวจของคนกลับมาใช้ %d จาก %d รายการ", reviewed["applied"], reviewed["decisions"])
+            for item in reviewed["stale"]:
+                logger.warning("ผลตรวจเดิมไม่ถูกใช้เพราะค่าที่สกัดได้เปลี่ยนไป: %s", item)
+
     logger.info("สรุปสถานะทั้งหมด: %s", dict(totals))
     for problem in problems:
         logger.error(problem)

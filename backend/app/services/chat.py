@@ -40,6 +40,7 @@ from app.services.program_list import asks_for_program_list, program_list_answer
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
 from app.services.small_talk import match_small_talk
+from app.services.structured_shadow import submit as shadow_submit
 from app.services.tuition import answer as tuition_answer, find_program as find_tuition_program, is_tuition_question
 from app.services.vector_search import search_similar_chunks
 
@@ -420,6 +421,10 @@ class Prepared:
     cacheable: bool = True
     # สภาพคลังเอกสารตอนตอบ ใช้ผูกแถวในแคชไว้กับคลังรุ่นที่ใช้ตอบจริง
     corpus_version: str = ""
+    # คำถามที่ตีความแล้ว และคำถามนี้มีบทสนทนาก่อนหน้าหรือไม่ — ใช้เฉพาะบันทึกผลโหมด shadow
+    # คำตอบสำเร็จรูปที่คืนก่อนถึงขั้นตีความจะเป็นค่าว่าง แล้วโหมด shadow ใช้ข้อความของผู้ใช้แทน
+    interpreted: str = ""
+    has_history: bool = False
 
 
 # คำที่บ่งชี้ว่าผู้ใช้ถามหาตัวเลขเจาะจง ไม่ใช่คำอธิบายกว้างๆ
@@ -1272,6 +1277,8 @@ def prepare_answer(
         allow_fallback=status != "answered",
         cacheable=not history,
         corpus_version=version,
+        interpreted=interpreted,
+        has_history=bool(history),
     )
 
 
@@ -1303,6 +1310,10 @@ def answer_question(
             db, message, p.corpus_version, p.status, reply_text,
             [c.model_dump(mode="json") for c in p.citations],
         )
+    # โหมด shadow ของคำตอบจากข้อมูลที่มีโครงสร้าง ทำงานหลังได้คำตอบแล้วใน thread แยก ไม่เปลี่ยนคำตอบนี้
+    # STRUCTURED_ANSWERS=off (ค่าตั้งต้น) ไม่ทำอะไรเลย ดู services/structured_shadow.py
+    shadow_submit(question=message, interpreted=p.interpreted, has_history=p.has_history,
+                  served_status=p.status, served_reply=reply_text)
 
     return ChatReply(
         session_id=p.session_id,
@@ -1368,6 +1379,9 @@ def stream_answer(
                 fresh, message, p.corpus_version, p.status, reply_text,
                 [c.model_dump(mode="json") for c in p.citations],
             )
+    # ดูหมายเหตุเดียวกันใน answer_question — ส่งหลังตัวอักษรสุดท้ายถึงผู้ใช้แล้ว ไม่หน่วงหรือเปลี่ยนคำตอบ
+    shadow_submit(question=message, interpreted=p.interpreted, has_history=p.has_history,
+                  served_status=p.status, served_reply=reply_text)
     yield _sse("done", {})
 
 
