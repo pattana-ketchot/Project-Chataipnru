@@ -73,6 +73,8 @@ services:
       LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
       EMBED_MODEL: ${EMBED_MODEL:-bge-m3}
       EMBED_DIM: ${EMBED_DIM:-1024}
+      # คำตอบจากข้อมูลหลักสูตรที่มีโครงสร้าง: off (ค่าตั้งต้น) / shadow — on ยังไม่เปิดใน Phase 2
+      STRUCTURED_ANSWERS: ${STRUCTURED_ANSWERS:-off}
       # หน้าเว็บเรียก API ผ่าน origin เดียวกันอยู่แล้ว จึงไม่ต้องตั้ง CORS
       # แต่ใส่ไว้เผื่อมีการเรียกตรงจากเครื่องมือทดสอบ
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-["http://localhost:3000"]}

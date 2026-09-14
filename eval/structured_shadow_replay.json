@@ -1,0 +1,3765 @@
+{
+  "summary": {
+    "questions": 125,
+    "route": {
+      "rag": 74,
+      "structured": 51
+    },
+    "route_reason": {
+      "unsupported_topic": 30,
+      "single_programme_field": 51,
+      "no_supported_field": 42,
+      "no_programme": 2
+    },
+    "structured_status": {
+      "answered": 23,
+      "no_data": 28
+    },
+    "comparison": {
+      "agree": 20,
+      "unclear": 2,
+      "partial": 1
+    }
+  },
+  "records": [
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ มีวิชาบังคับอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) มีหมวดวิชาศึกษาทั่วไป กลุ่มวิชาบังคับ ไม่น้อยกว่า 24 หน่วยกิต ซึ่งประกอบด้วยกลุ่มภาษาและการสื่อสาร, กลุ่มพัฒนาความเป็นมนุษย์, กลุ่มวิทยาศาสตร์ เทคโนโลยีและนวัตกรรม และกลุ่มสหวิทยาการและการจัดการ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 48
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ต้องเรียนกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566) และ หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: cs66.pdf หน้า 2; cs61.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "02bb0f00-a6af-448b-8772-b064d399f770",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566)",
+            "edition_year": 2566,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cs66.pdf",
+              "page_start": 2,
+              "page_end": 2,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          },
+          {
+            "course_id": "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561)",
+            "edition_year": 2561,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cs61.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) ต้องเรียนจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 16
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ในชั้นปีที่ 1 ภาคการศึกษาที่ 1 ของสาขาวิชาเทคโนโลยีการจัดการสุขภาพ มีรายวิชาอะไรที่ต้องลงทะเบียนเรียนบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ในชั้นปีที่ 1 ภาคการศึกษาที่ 1 ของหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีการจัดการสุขภาพ (Bachelor of Science Program in Technology of Health Management) มีรายวิชาที่ต้องลงทะเบียนเรียนดังนี้:\n- ภาษาไทยเพื่อการสื่อสารในชีวิตประจำวัน (รหัส 0010201)\n- การตระหนักรู้และการปรับตัวต่อการเปลี่ยนแปลง (รหัส 0040101)\n- การออกกำลังกายเพื่อสุขภาพ (รหัส 0050101)\n- ชีววิทยาทั่วไป (รหัส 4031109)\n- ปฏิบัติการชีววิทยาทั่วไป (รหัส 4011110)\n- กายวิภาคและสรีรวิทยาของมนุษย์ (รหัส 4071101)\n- สุขศึกษาและพฤติกรรมสุขภาพ (รหัส 4071205)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ช่วยสรุปหมวดวิชาศึกษาทั่วไปของหลักสูตรวิทยาการคอมพิวเตอร์ให้หน่อย",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หมวดวิชาศึกษาทั่วไปของหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) มีจำนวนไม่น้อยกว่า 30 หน่วยกิต ประกอบด้วยกลุ่มวิชาบังคับไม่น้อยกว่า 24 หน่วยกิต และกลุ่มวิชาเลือกไม่น้อยกว่า 6 หน่วยกิต",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ผู้ที่จะสมัครเรียนหลักสูตรวิทยาการคอมพิวเตอร์ต้องจบการศึกษาระดับใด หรือจบจากสายการเรียนใดบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "admission",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "admission",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สมัครเข้าศึกษาในหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) ต้องสำเร็จการศึกษาระดับมัธยมศึกษาตอนปลายหรือเทียบเท่า หรือเป็นไปตามประกาศ ระเบียบ ข้อบังคับของมหาวิทยาลัยราชภัฏพระนคร",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 14
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "เป้าหมายหลักหรือจุดเด่นของหลักสูตรเทคโนโลยีสารสนเทศคืออะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) มุ่งเน้นผลิตบัณฑิตที่มีความรู้ความเชี่ยวชาญเพื่อตอบสนองแรงงานในยุคดิจิทัล ขับเคลื่อนเศรษฐกิจและสังคมให้ก้าวทันเวทีโลกด้วยคุณธรรมจริยธรรม \nจุดเด่นคือการเตรียมความพร้อมด้านการออกแบบและพัฒนาระบบสารสนเทศ ซอฟต์แวร์ เครือข่ายการสื่อสาร ความปลอดภัย และการบริหารจัดการเทคโนโลยีสารสนเทศเพื่องานธุรกิจและชุมชน",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "เมื่อนักศึกษาเรียนจบหลักสูตรวิทยาการคอมพิวเตอร์แล้ว จะมีความสามารถหรือทักษะสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) จะมีความสามารถและทักษะสำคัญดังนี้:\n\n- มีความรู้ทางด้านวิทยาการคอมพิวเตอร์ในภาคทฤษฎีและภาคปฏิบัติ สามารถพัฒนาองค์ความรู้ และนำความรู้ไปประยุกต์ใช้งานได้\n- มีคุณธรรม จริยธรรม จรรยาบรรณต่อวิชาชีพ สามารถบูรณาการความรู้เพื่อประโยชน์ต่อสังคมได้\n- มีความรอบรู้ มีโลกทัศน์ มีเหตุผล รู้จักแสวงหาความรู้ด้วยตนเองเพื่อพัฒนาตนเอง พัฒนางาน และพัฒนาสังคม",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีสารสนเทศมีวัตถุประสงค์อะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "objectives",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "b85149f2-fd1e-4629-a546-924dcca090bf",
+        "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "วัตถุประสงค์ของหลักสูตร ตามหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2566)\n1. มีความรอบรู้และความเชี่ยวชาญ และมีทักษะพื้นฐานบูรณาการองค์ความรู้ในสาขา เทคโนโลยีสารสนเทศ สามารถประยุกต์ใช้ความรู้อย่างเหมาะสมในสถานการณ์ต่างๆ\n2. มีความสามารถในการออกแบบและพัฒนาระบบสารสนเทศเพื่อสนับสนุนการดำเนินงานของ องค์กรในด้านระบบสารสนเทศและคอมพิวเตอร์ เครือข่ายการสื่อสารและความปลอดภัย ตลอดจนการบริหารจัดการเทคโนโลยีสารสนเทศเพื่องานในชุมชนและธุรกิจ\n3. มีเจตคติที่ดีต่อการเรียนรู้และนำความรู้ด้านเทคโนโลยีสารสนเทศไปประยุกต์เพื่อพัฒนา วิชาชีพอย่างต่อเนื่อง โดยมีคุณธรรมจริยธรรมวิชาชีพ\n4. มีความสามารถในการคิดวิเคราะห์ สังเคราะห์ วิจารณญาณและสร้างสรรค์ เพื่อการทำงาน ด้านเทคโนโลยีสารสนเทศ\n5. มีภาวะผู้นำ มนุษย์สัมพันธ์ดี สื่อสารกับบุคคลได้ดี รู้เท่าทันเทคโนโลยี และสามารถทำงาน ร่วมกับบุคคลอื่นได้\nยังไม่มีข้อมูลที่ผ่านการตรวจของ หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2561)\nที่มา: it66.pdf หน้า 13",
+      "facts": {
+        "status": "answered",
+        "field": "objectives",
+        "facts": [
+          {
+            "course_id": "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2566)",
+            "edition_year": 2566,
+            "value_int": null,
+            "value_text": null,
+            "items": [
+              "มีความรอบรู้และความเชี่ยวชาญ และมีทักษะพื้นฐานบูรณาการองค์ความรู้ในสาขา เทคโนโลยีสารสนเทศ สามารถประยุกต์ใช้ความรู้อย่างเหมาะสมในสถานการณ์ต่างๆ",
+              "มีความสามารถในการออกแบบและพัฒนาระบบสารสนเทศเพื่อสนับสนุนการดำเนินงานของ องค์กรในด้านระบบสารสนเทศและคอมพิวเตอร์ เครือข่ายการสื่อสารและความปลอดภัย ตลอดจนการบริหารจัดการเทคโนโลยีสารสนเทศเพื่องานในชุมชนและธุรกิจ",
+              "มีเจตคติที่ดีต่อการเรียนรู้และนำความรู้ด้านเทคโนโลยีสารสนเทศไปประยุกต์เพื่อพัฒนา วิชาชีพอย่างต่อเนื่อง โดยมีคุณธรรมจริยธรรมวิชาชีพ",
+              "มีความสามารถในการคิดวิเคราะห์ สังเคราะห์ วิจารณญาณและสร้างสรรค์ เพื่อการทำงาน ด้านเทคโนโลยีสารสนเทศ",
+              "มีภาวะผู้นำ มนุษย์สัมพันธ์ดี สื่อสารกับบุคคลได้ดี รู้เท่าทันเทคโนโลยี และสามารถทำงาน ร่วมกับบุคคลอื่นได้"
+            ],
+            "source": {
+              "file": "it66.pdf",
+              "page_start": 13,
+              "page_end": 13,
+              "quote": null
+            },
+            "reviewed_by": "auto:documents_agree"
+          }
+        ],
+        "missing_editions": [
+          "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2561)"
+        ],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "วัตถุประสงค์ของหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) พ.ศ. 2566 มีดังนี้:\n1. มีความรอบรู้และความเชี่ยวชาญ และมีทักษะพื้นฐานบูรณาการองค์ความรู้ในสาชาเทคโนโลยีสารสนเทศ สามารถประยุกต์ใช้ความรู้อย่างเหมาะสมในสถานการณ์ต่างๆ\n2. มีความสามารถในการออกแบบและพัฒนาระบบสารสนเทศเพื่อสนับสนุนการดำเนินงานขององค์กรในด้านระบบสารสนเทศและคอมพิวเตอร์ เครือข่ายการสื่อสารและความปลอดภัย ตลอดจนการบริหารจัดการเทคโนโลยีสารสนเทศเพื่องานในชุมชนและธุรกิจ\n3. มีเจตคติที่ดีต่อการเรียนรู้และนำความรู้ด้านเทคโนโลยีสารสนเทศไปประยุกต์เพื่อพัฒนาวิชาชีพอย่างต่อเนื่อง โดยมีคุณธรรมจริยธรรมวิชาชีพ\n4. มีความสามารถในการคิดวิเคราะห์ สังเคราะห์ วิจารณญาณและสร้างสรรค์ เพื่อการทำงานด้านเทคโนโลยีสารสนเทศ\n5. มีภาวะผู้นำ มนุษย์สัมพันธ์ดี สื่อสารกับบุคคลได้ดี รู้เท่าทันเทคโนโลยี และสามารถทำงานร่วมกับบุคคลอื่นได้",
+      "comparison": "agree",
+      "comparison_detail": {
+        "items": 5,
+        "covered": 5,
+        "coverage": [
+          0.98,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "latency_ms": 15
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ จบไปแล้วสามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้ที่สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) สามารถประกอบอาชีพได้ดังนี้:\n1. นักพัฒนาซอฟต์แวร์ (Software Developer)\n2. นักวิเคราะห์และออกแบบระบบงานคอมพิวเตอร์ (Computer Systems Analyst and Designer)\n3. นักพัฒนาเว็บไซต์ (Web Developer)\n4. นักบริหารงานฐานข้อมูล (Database Administrator)\n5. นักวิชาการคอมพิวเตอร์ (Computer Academic)\n6. ผู้ดูแลระบบเครือข่าย (Network Administrator)\n7. ผู้ดูแลระบบงานคอมพิวเตอร์ (Computer Systems Administrator)\n8. ผู้ประกอบการด้านคอมพิวเตอร์ (Computer Entrepreneur)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 23
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "บัณฑิตที่จบจากสาขาวิชาเทคโนโลยีสารสนเทศ สามารถทำงานในตำแหน่งไหนได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "b85149f2-fd1e-4629-a546-924dcca090bf",
+        "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "อาชีพที่สามารถประกอบได้หลังสำเร็จการศึกษาของหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) (พ.ศ. 2566) มีดังนี้:\n1. นักเทคโนโลยีสารสนเทศ (Information Technologist)\n2. นักพัฒนาระบบ (System Developer) นักพัฒนาเว็บไซต์ (Web Developer)\n3. ผู้ดูแลระบบเครือข่ายคอมพิวเตอร์และเครื่องแม่ข่าย (Computer Network and Server Administrator)\n4. นักวิเคราะห์และออกแบบระบบงานสารสนเทศ (Information System Analyst and Designer)\n5. นักพัฒนาโปรแกรมประยุกต์สำหรับอุปกรณ์เคลื่อนที่ (Mobile Application Developer)\n6. ผู้ช่วยผู้จัดการโครงการสารสนเทศ หรือ ผู้ช่วยผู้จัดการซอฟต์แวร์ (Assistant Information Project Manager or Assistant Software Manager)\n7. ผู้ตรวจสอบในสถานประกอบการที่มีการใช้เทคโนโลยีสารสนเทศ (IT Auditor)\n8. นักวิทยาศาสตร์ข้อมูล (Data Scientist)\n9. นักวิเคราะห์ข้อมูลทางธุรกิจ (Business Data Analyst)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 15
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาการแพทย์แผนไทยประยุกต์ทำงานอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "d4142e19-bd32-4490-8f39-0b025aaf29a6",
+        "37ebaf72-0f2c-4299-9198-0aba2b6a6d2c"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาหลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) สามารถประกอบอาชีพได้ดังนี้:\n1. เป็นผู้ประกอบวิชาชีพการแพทย์แผนไทยประยุกต์ในสถานพยาบาลทั้งภาครัฐและเอกชนทุกระดับ\n2. เป็นผู้ประกอบวิชาชีพการแพทย์แผนไทยประยุกต์ในสถานที่ขายยาแผนโบราณ สถานที่นำหรือสั่งยาแผนโบราณเข้ามาในราชอาณาจักร และสถานที่ผลิตยาแผนโบราณ\n3. นักวิชาการในสถาบันการศึกษาที่มีการเปิดสอนหลักสูตรที่เกี่ยวข้องและหน่วยงานทั้งภาครัฐและเอกชน\n4. อาชีพอิสระด้านการแพทย์แผนไทยประยุกต์\n5. ผู้ดำเนินการในสถานผลิตยาและผลิตภัณฑ์สมุนไพร รวมทั้งร้านขายยาสมุนไพร",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 14
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์เครื่องสำอางจบไปประกอบอาชีพอะไรได้",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "36b63165-a7a2-44c0-8b0f-2b231d8acd5e",
+        "fb69cc26-f51c-4625-a975-0d2be2620b6f"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) มีแนวทางการประกอบอาชีพดังนี้:\n1. ผู้ประกอบการสถานเสริมความงามครบวงจร\n2. ที่ปรึกษาในสถานเสริมความงาม และสุขภาพความงาม (Beauty and Health Consultant)\n3. ผู้ดูแลการผลิต การควบคุมประสิทธิภาพ และคุณภาพของเครื่องสำอาง\n4. นักวิทยาศาสตร์ประจำห้องปฏิบัติการทางด้านวิทยาศาสตร์เครื่องสำอางหรือสาขาที่ใกล้เคียง (Cosmetic Scientist)\n5. ผู้ดูแลการพัฒนาผลิตภัณฑ์ คุณภาพของเครื่องสำอาง และจดแจ้งเครื่องสำอาง\n6. ผู้แทนฝ่ายขายวัตถุดิบและแนะนำผลิตภัณฑ์ความงามและสุขภาพ (Sales Representative)\n7. ผู้บริหารจัดการด้านเทคโนโลยีความงาม (Beauty Technology Manager)\n8. ผู้วางแผนการตลาดธุรกิจด้านความงามและสุขภาพ (Beauty Marketing Planner)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "สาขาวิชาเทคโนโลยีการจัดการสุขภาพ เรียนจบทำอาชีพไหนได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "54e64214-919a-45ab-bf19-40613d74f7ea"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีการจัดการสุขภาพ (Bachelor of Science Program in Technology of Health Management) สามารถประกอบอาชีพได้ดังนี้:\n1. นักวิชาการสาธารณสุขทั้งในหน่วยงานของรัฐบาลและเอกชน (Public Health Academician)\n2. เจ้าหน้าที่ประจำสถานบริการสุขภาพ (Health Service Personnel)\n3. ประกอบอาชีพอิสระ ได้แก่ ผู้ดูแลผู้สูงอายุ (Elderly Caregiver) นักประชาสัมพันธ์ด้านสุขภาพ (Health Public Relations Officer)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 14
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ใครเป็นอาจารย์ผู้รับผิดชอบหลักสูตรวิทยาการคอมพิวเตอร์บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) มีอาจารย์ผู้รับผิดชอบหลักสูตรดังนี้\n1. ผู้ช่วยศาสตราจารย์ ดร.สมคิด สุทธิธารธวัช\n2. ผู้ช่วยศาสตราจารย์วาสนา เสนาะ\n3. ผู้ช่วยศาสตราจารย์ ดร.รณกร รัตนธรรมมา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "รายชื่ออาจารย์ประจำหลักสูตรเทคโนโลยีสารสนเทศมีใครบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) มีอาจารย์ประจำหลักสูตรตามเอกสาร ได้แก่ นางวาสนา เสนาะ, นางสาวสมคิด สุทธิธารธวัช, นางลัดดา สรรพคุณ, นายรณกร รัตนธรรมมา, นางสาวพวงผกา ภูยาดาว, และนายนัฐพงศ์ ส่งเนียม",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์มีห้องปฏิบัติการหรือเครื่องมืออะไรสนับสนุนการเรียนบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) มีสิ่งสนับสนุนการเรียนรู้ ได้แก่ ห้องเรียน ห้องปฏิบัติการคอมพิวเตอร์ ห้องซ่อมบำรุงคอมพิวเตอร์ และสำนักวิทยบริการและเทคโนโลยีสารสนเทศที่มีหนังสือ ตำรา และการสืบค้นผ่านฐานข้อมูล",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ห้องปฏิบัติการคอมพิวเตอร์หรือเครื่องมือเฉพาะทางของสาขาเทคโนโลยีสารสนเทศอยู่ที่ไหน",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ห้องปฏิบัติการคอมพิวเตอร์และพื้นที่บริการของสาขาวิชาเทคโนโลยีสารสนเทศ (Information Technology) ตั้งอยู่บริเวณอาคาร 8 และสำนักวิทยบริการสารสนเทศ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบวิทคอมทำงานอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คำถามนี้ตอบได้ต่างกันไปในแต่ละสาขา ขอทราบก่อนครับว่าสนใจสาขาไหน\n\nคณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร เปิดสอนหลักสูตรระดับปริญญาตรี 12 สาขา ดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 12
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "เรียนยังไงบ้าง Comsci",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) จัดการศึกษาในระบบทวิภาค โดย 1 ปีการศึกษาแบ่งออกเป็น 2 ภาคการศึกษาปกติ และอาจมีภาคการศึกษาฤดูร้อน \nการเรียนการสอนมีทั้งแบบชั้นเรียนและแบบออนไลน์ โดยมีการฝึกประสบการณ์วิชาชีพในสถานประกอบการเป็นเวลาไม่น้อยกว่า 16 สัปดาห์ พร้อมทั้งเน้นการปฏิบัติ การค้นคว้าด้วยตนเอง และการทำงานร่วมกันเป็นทีม",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบไอทีไปทำงานอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "b85149f2-fd1e-4629-a546-924dcca090bf",
+        "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คำถามนี้ตอบได้ต่างกันไปในแต่ละสาขา ขอทราบก่อนครับว่าสนใจสาขาไหน\n\nคณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร เปิดสอนหลักสูตรระดับปริญญาตรี 12 สาขา ดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 12
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "สามารถกู้ยืมกองทุนเงินให้กู้ยืมเพื่อการศึกษา กยศ. ได้ไหม",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ผมไม่พบข้อมูลนี้ในเอกสารหลักสูตร (มคอ.2) ที่มีอยู่ครับ จึงยังตอบให้ไม่ได้ แนะนำให้ติดต่อหน่วยงานที่เกี่ยวข้องโดยตรง เช่น ฝ่ายวิชาการของคณะ สำนักส่งเสริมวิชาการและงานทะเบียน หรือกองพัฒนานักศึกษา แล้วแต่เรื่องที่สอบถาม หรือจะลองถามในมุมที่เอกสารหลักสูตรระบุไว้ก็ได้ครับ เช่น โครงสร้างหลักสูตร รายวิชาที่ต้องเรียน จำนวนหน่วยกิต คุณสมบัติผู้เข้าศึกษา หรืออาชีพหลังสำเร็จการศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "วิธีการสมัครเข้าศึกษาต่อรอบโควตาต้องดำเนินการอย่างไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ผมไม่พบข้อมูลนี้ในเอกสารหลักสูตร (มคอ.2) ที่มีอยู่ครับ จึงยังตอบให้ไม่ได้ แนะนำให้ติดต่อหน่วยงานที่เกี่ยวข้องโดยตรง เช่น ฝ่ายวิชาการของคณะ สำนักส่งเสริมวิชาการและงานทะเบียน หรือกองพัฒนานักศึกษา แล้วแต่เรื่องที่สอบถาม หรือจะลองถามในมุมที่เอกสารหลักสูตรระบุไว้ก็ได้ครับ เช่น โครงสร้างหลักสูตร รายวิชาที่ต้องเรียน จำนวนหน่วยกิต คุณสมบัติผู้เข้าศึกษา หรืออาชีพหลังสำเร็จการศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 3
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "เกรดเฉลี่ยขั้นต่ำ GPAX ที่ใช้ในการสมัครเข้าศึกษาต่อหลักสูตรเทคโนโลยีสารสนเทศคือเท่าไหร่",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ผมไม่พบข้อมูลนี้ในเอกสารหลักสูตร (มคอ.2) ที่มีอยู่ครับ จึงยังตอบให้ไม่ได้ แนะนำให้ติดต่อหน่วยงานที่เกี่ยวข้องโดยตรง เช่น ฝ่ายวิชาการของคณะ สำนักส่งเสริมวิชาการและงานทะเบียน หรือกองพัฒนานักศึกษา แล้วแต่เรื่องที่สอบถาม หรือจะลองถามในมุมที่เอกสารหลักสูตรระบุไว้ก็ได้ครับ เช่น โครงสร้างหลักสูตร รายวิชาที่ต้องเรียน จำนวนหน่วยกิต คุณสมบัติผู้เข้าศึกษา หรืออาชีพหลังสำเร็จการศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "โครงสร้างหลักสูตรของสาขาวิชาคอมพิวเตอร์ธุรกิจ ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาคอมพิวเตอร์ธุรกิจ ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ต่างจากเทคโนโลยีสารสนเทศยังไง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ผมไม่พบข้อมูลนี้ในเอกสารหลักสูตร (มคอ.2) ที่มีอยู่ครับ จึงยังตอบให้ไม่ได้ แนะนำให้ติดต่อหน่วยงานที่เกี่ยวข้องโดยตรง เช่น ฝ่ายวิชาการของคณะ สำนักส่งเสริมวิชาการและงานทะเบียน หรือกองพัฒนานักศึกษา แล้วแต่เรื่องที่สอบถาม หรือจะลองถามในมุมที่เอกสารหลักสูตรระบุไว้ก็ได้ครับ เช่น โครงสร้างหลักสูตร รายวิชาที่ต้องเรียน จำนวนหน่วยกิต คุณสมบัติผู้เข้าศึกษา หรืออาชีพหลังสำเร็จการศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "อัตราการได้งานทำของบัณฑิตรุ่นล่าสุดเป็นเท่าไหร่",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ผมไม่พบข้อมูลนี้ในเอกสารหลักสูตร (มคอ.2) ที่มีอยู่ครับ จึงยังตอบให้ไม่ได้ แนะนำให้ติดต่อหน่วยงานที่เกี่ยวข้องโดยตรง เช่น ฝ่ายวิชาการของคณะ สำนักส่งเสริมวิชาการและงานทะเบียน หรือกองพัฒนานักศึกษา แล้วแต่เรื่องที่สอบถาม หรือจะลองถามในมุมที่เอกสารหลักสูตรระบุไว้ก็ได้ครับ เช่น โครงสร้างหลักสูตร รายวิชาที่ต้องเรียน จำนวนหน่วยกิต คุณสมบัติผู้เข้าศึกษา หรืออาชีพหลังสำเร็จการศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรไหนของคณะนี้มีคนสมัครเยอะที่สุด",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ผมไม่พบข้อมูลนี้ในเอกสารหลักสูตร (มคอ.2) ที่มีอยู่ครับ จึงยังตอบให้ไม่ได้ แนะนำให้ติดต่อหน่วยงานที่เกี่ยวข้องโดยตรง เช่น ฝ่ายวิชาการของคณะ สำนักส่งเสริมวิชาการและงานทะเบียน หรือกองพัฒนานักศึกษา แล้วแต่เรื่องที่สอบถาม หรือจะลองถามในมุมที่เอกสารหลักสูตรระบุไว้ก็ได้ครับ เช่น โครงสร้างหลักสูตร รายวิชาที่ต้องเรียน จำนวนหน่วยกิต คุณสมบัติผู้เข้าศึกษา หรืออาชีพหลังสำเร็จการศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "เรียนวิทยาการคอมพิวเตอร์กับเรียนคณิตศาสตร์ อันไหนหางานง่ายกว่า",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ผมไม่พบข้อมูลนี้ในเอกสารหลักสูตร (มคอ.2) ที่มีอยู่ครับ จึงยังตอบให้ไม่ได้ แนะนำให้ติดต่อหน่วยงานที่เกี่ยวข้องโดยตรง เช่น ฝ่ายวิชาการของคณะ สำนักส่งเสริมวิชาการและงานทะเบียน หรือกองพัฒนานักศึกษา แล้วแต่เรื่องที่สอบถาม หรือจะลองถามในมุมที่เอกสารหลักสูตรระบุไว้ก็ได้ครับ เช่น โครงสร้างหลักสูตร รายวิชาที่ต้องเรียน จำนวนหน่วยกิต คุณสมบัติผู้เข้าศึกษา หรืออาชีพหลังสำเร็จการศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ทีมลิเวอร์พูลเป็นยังไงบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "ขออภัยครับ ผมตอบได้เฉพาะเรื่องหลักสูตรและการเรียนการสอนของมหาวิทยาลัยเท่านั้น ลองถามเกี่ยวกับหลักสูตรที่เปิดสอน วิชาที่ต้องเรียน หรือแนวทางการประกอบอาชีพหลังจบได้ครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ช่วยเขียนโค้ด python เรียงลำดับให้หน่อย",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "ขออภัยครับ ผมตอบได้เฉพาะเรื่องหลักสูตรและการเรียนการสอนของมหาวิทยาลัยเท่านั้น ลองถามเกี่ยวกับหลักสูตรที่เปิดสอน วิชาที่ต้องเรียน หรือแนวทางการประกอบอาชีพหลังจบได้ครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "สูตรทำต้มยำกุ้งทำยังไง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "ขออภัยครับ ผมตอบได้เฉพาะเรื่องหลักสูตรและการเรียนการสอนของมหาวิทยาลัยเท่านั้น ลองถามเกี่ยวกับหลักสูตรที่เปิดสอน วิชาที่ต้องเรียน หรือแนวทางการประกอบอาชีพหลังจบได้ครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ราคาบิตคอยน์วันนี้เท่าไหร่",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "ขออภัยครับ ผมตอบได้เฉพาะเรื่องหลักสูตรและการเรียนการสอนของมหาวิทยาลัยเท่านั้น ลองถามเกี่ยวกับหลักสูตรที่เปิดสอน วิชาที่ต้องเรียน หรือแนวทางการประกอบอาชีพหลังจบได้ครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "สวัสดีครับ",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "สวัสดีครับ 👋 ผมเป็นผู้ช่วยตอบคำถามเรื่องหลักสูตรของคณะครับ ตอบจากเอกสารหลักสูตร (มคอ.2) จริง ถามได้เช่น หลักสูตรไหนเรียนอะไรบ้าง ต้องเรียนกี่หน่วยกิต หรือจบไปทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ขอบคุณครับ",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "ยินดีครับ ถ้ามีอะไรอยากรู้เพิ่มเติมเกี่ยวกับหลักสูตร ถามได้เลยครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "คุณคือใคร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "ผมเป็นผู้ช่วยตอบคำถามเรื่องหลักสูตรของคณะครับ ตอบจากเอกสารหลักสูตร (มคอ.2) จริง ถามได้เช่น หลักสูตรไหนเรียนอะไรบ้าง ต้องเรียนกี่หน่วยกิต หรือจบไปทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ต้องถามยังไงถึงจะตอบได้",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "ผมเป็นผู้ช่วยตอบคำถามเรื่องหลักสูตรของคณะครับ ตอบจากเอกสารหลักสูตร (มคอ.2) จริง ถามได้เช่น หลักสูตรไหนเรียนอะไรบ้าง ต้องเรียนกี่หน่วยกิต หรือจบไปทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรแอนิเมชันและมัลติมีเดียเรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาแอนิเมชันและมัลติมีเดีย ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 3
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการจัดการเทคโนโลยีการเกษตรเรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาการจัดการเทคโนโลยีการเกษตร ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2560 เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) มุ่งเน้นการให้บริการดูแลรักษาสุขภาพแบบองค์รวมด้วยศาสตร์การแพทย์แผนไทย ทั้งด้านการส่งเสริม ป้องกัน รักษา และฟื้นฟูสุขภาพให้ได้มาตรฐานเป็นที่ยอมรับในระดับชาติและนานาชาติ \nการเรียนการสอนครอบคลุมหมวดวิชาศึกษาทั่วไป หมวดวิชาเฉพาะซึ่งประกอบด้วยกลุ่มวิชาพื้นฐานวิชาชีพ (เช่น วิชาแกน ปรีคลินิก คลินิก) และกลุ่มวิชาเฉพาะด้าน เช่น เวชกรรมแผนไทย เภสัชกรรมแผนไทย หัตถเวชกรรมแผนไทย และการผดุงครรภ์",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2565 เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) พ.ศ. 2565 ศึกษาเกี่ยวกับศาสตร์ด้านการแพทย์แผนไทยและการแพทย์แผนไทยประยุกต์ หมวดวิชาศึกษาทั่วไป หมวดวิชาเฉพาะ รวมถึงกลุ่มวิชาพื้นฐานวิชาชีพและกลุ่มวิชาชีพการแพทย์แผนไทย ตลอดจนวิทยาศาสตร์การแพทย์ที่เกี่ยวข้องกับการรักษาพยาบาลและการดูแลสุขภาพ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจเรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship) มุ่งเน้นการเรียนรู้ด้านเทคโนโลยีและกระบวนการผลิตผลิตภัณฑ์ชีวภาพ การควบคุมคุณภาพ รวมถึงการพัฒนาทักษะด้านการประกอบธุรกิจและการจัดการผลิตภัณฑ์ชีวภาพขนาดย่อม",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์เครื่องสำอาง พ.ศ. 2561 เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) พ.ศ. 2561 ศึกษาเกี่ยวกับวิทยาศาสตร์ทางเคมีเครื่องสำอาง การผลิตเครื่องสำอาง การควบคุมดูแลประสิทธิภาพและคุณภาพ เภสัชวิทยาเกี่ยวกับเครื่องสำอาง รวมถึงศาสตร์ทางด้านสุขภาพ สมุนไพรเพื่อสุขภาพและความงาม ผลิตภัณฑ์จากธรรมชาติ ผลิตภัณฑ์อาหารเสริม และการจัดการธุรกิจเครื่องสำอาง",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 3
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2561 เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) พ.ศ. 2561 เน้นการพัฒนาองค์ความรู้ด้านวิทยาการคอมพิวเตอร์ทั้งภาคทฤษฎีและภาคปฏิบัติ เพื่อนำไปใช้พัฒนานวัตกรรมทางซอฟต์แวร์และฮาร์ดแวร์ ตลอดจนการประยุกต์ใช้งานเพื่อตอบสนองความต้องการของภาคอุตสาหกรรม",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2566 เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) พ.ศ. 2566 มุ่งเน้นการศึกษาด้านเทคโนโลยีและวิธีการทางซอฟต์แวร์ โครงสร้างพื้นฐานของระบบ เครือข่ายและอุปกรณ์ การประยุกต์ใช้คอมพิวเตอร์ รวมถึงการจัดการวิทยาการข้อมูลและการพัฒนาโปรแกรม เพื่อให้ผู้เรียนมีความรู้ความสามารถในการประยุกต์ใช้เทคโนโลยีที่ทันสมัยในการแก้ปัญหา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรคหกรรมศาสตร์เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรศิลปศาสตรบัณฑิต สาขาวิชาคหกรรมศาสตร์ (Bachelor of Arts Program in Home Economics) เป็นสหวิทยาการที่บูรณาการความรู้ทางวิทยาศาสตร์ สังคมศาสตร์ และมนุษยศาสตร์ เพื่อพัฒนาพื้นฐานชีวิตและครอบครัว \n\nการศึกษาครอบคลุมการจัดการทรัพยากรบุคคล วัสดุ และสิ่งแวดล้อม เพื่อพัฒนาอาชีพและเสริมสร้างคุณภาพชีวิต โดยมีกลุ่มวิชาเฉพาะเลือกที่น่าสนใจ ได้แก่ อาหารและโภชนาการ สิ่งทอและเครื่องนุ่งห่ม พัฒนาการมนุษย์และครอบครัว รวมถึงศิลปะประดิษฐ์และงานสร้างสรรค์",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 3
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อมเรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อม (Bachelor of Science Program in Environmental Science and Technology) มุ่งบูรณาการความรู้ด้านวิทยาศาสตร์ เทคโนโลยี วิศวกรรมศาสตร์ ศึกษาศาสตร์ สังคมศาสตร์ และมนุษยศาสตร์ เพื่อพัฒนาคุณภาพชีวิตและสิ่งแวดล้อมอย่างยั่งยืน เน้นผลิตบัณฑิตที่มีความรู้ความสามารถในการประกอบวิชาชีพด้านการควบคุมมลพิษและการประเมินผลกระทบสิ่งแวดล้อม ทั้งในหน่วยงานภาครัฐและเอกชน",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติเรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management) เน้นการเรียนรู้ด้านวิทยาศาสตร์พื้นฐาน เทคโนโลยีสิ่งแวดล้อม และการจัดการสิ่งแวดล้อมผ่านการปฏิบัติจริง\n\nผู้เรียนจะได้ศึกษาเกี่ยวกับการอนุรักษ์ทรัพยากรธรรมชาติ การจัดการมลพิษ (ดิน น้ำ เสียง) การวิจัยสิ่งแวดล้อม รวมถึงจริยธรรมและธรรมาภิบาลสิ่งแวดล้อม เพื่อนำไปประยุกต์ใช้ในการวิเคราะห์และแก้ไขปัญหาด้านสิ่งแวดล้อมอย่างเป็นรูปธรรมครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship) มุ่งเน้นการเรียนรู้ด้านวิทยาศาสตร์และเทคโนโลยีอาหาร ควบคู่ไปกับการพัฒนาทักษะความเป็นผู้ประกอบการ\n\nเนื้อหาครอบคลุมตั้งแต่กระบวนการผลิต การพัฒนาผลิตภัณฑ์อาหาร การประกันคุณภาพและความปลอดภัย ไปจนถึงการบริหารจัดการธุรกิจอาหาร การตลาด และการใช้เทคโนโลยีดิจิทัลเพื่อต่อยอดนวัตกรรมอาหารสู่เชิงพาณิชย์ครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์และเทคโนโลยีการอาหารเรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีการอาหาร (Bachelor of Science Program in Food Science and Technology) มุ่งเน้นการเรียนรู้ด้านวิทยาศาสตร์การอาหารและเทคโนโลยีที่ผสมผสานกัน เพื่อให้ผู้เรียนมีทักษะในวิชาชีพผ่านรายวิชา เช่น หลักการแปรรูปอาหาร กระบวนการแปรรูปผลิตภัณฑ์อาหาร การประกันคุณภาพและความปลอดภัยของอาหาร และการพัฒนาผลิตภัณฑ์อาหาร นอกจากนี้ยังเน้นให้นักศึกษามีทักษะในการทำงานวิจัยผ่านวิชาโครงการพิเศษอีกด้วย",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีการจัดการสุขภาพเรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีการจัดการสุขภาพ (Bachelor of Science Program in Technology of Health Management) เรียนเกี่ยวกับศาสตร์ด้านการจัดการสุขภาพ ระบบบริการสุขภาพ เทคโนโลยีสารสนเทศทางสุขภาพ และการประยุกต์ใช้เทคโนโลยีเพื่อพัฒนาคุณภาพชีวิต\n\nเนื้อหาครอบคลุมตั้งแต่พื้นฐานทางวิทยาศาสตร์ กายวิภาคและสรีรวิทยา การสาธารณสุขเบื้องต้น ไปจนถึงการบริหารจัดการสถานบริการสุขภาพ การจัดการการบริบาลผู้สูงอายุ และความรอบรู้ทางสุขภาพและการสื่อสารสุขภาพ เพื่อให้ผู้เรียนสามารถนำความรู้ไปประยุกต์ใช้ในการปฏิบัติงานจริงในสถานบริการสุขภาพและงานด้านสาธารณสุขได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2561 เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) พ.ศ. 2561 มุ่งเน้นการพัฒนาทักษะด้านการออกแบบและพัฒนาซอฟต์แวร์ ระบบฐานข้อมูล ระบบเว็บ เทคโนโลยีเครือข่าย และการประยุกต์ใช้เทคโนโลยีสารสนเทศในงานธุรกิจ\n\nนักศึกษาจะได้เรียนรู้ผ่านกลุ่มวิชาเฉพาะด้านและวิชาเลือก เช่น การเขียนโปรแกรมจาวา (Java Programming), ระบบฐานข้อมูลขั้นสูง (Advanced Database System), ความมั่นคงทางไซเบอร์ (Cybersecurity) และการวิเคราะห์ข้อมูลทางธุรกิจและข้อมูลขนาดใหญ่ (Business Data Analytics and Big Data) พร้อมทั้งฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษาเพื่อเตรียมความพร้อมสู่ตลาดแรงงาน",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2566 เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) พ.ศ. 2566 มุ่งเน้นการพัฒนาองค์ความรู้ด้านเทคโนโลยีสารสนเทศในยุคดิจิทัล โดยครอบคลุมเนื้อหาด้านปัญญาประดิษฐ์ (Artificial Intelligence), การพัฒนาแอปพลิเคชันบนอุปกรณ์เคลื่อนที่ (Mobile Application Development), อินเทอร์เน็ตของสรรพสิ่ง (Internet of Things), ความมั่นคงปลอดภัยไซเบอร์ (Cybersecurity) และการวิเคราะห์ข้อมูล (Data Analytics) นอกจากนี้ยังเน้นการเรียนรู้ผ่านการลงมือปฏิบัติจริงเพื่อเตรียมความพร้อมสู่การประกอบอาชีพในสายงานเทคโนโลยีสารสนเทศ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรคณิตศาสตร์เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (Bachelor of Science Program in Mathematics) มุ่งเน้นการเรียนรู้ทั้งด้านคณิตศาสตร์บริสุทธิ์ คณิตศาสตร์ประยุกต์ ประกันภัย และสถิติ เพื่อเตรียมความพร้อมสำหรับการประกอบวิชาชีพหรือการศึกษาต่อในระดับที่สูงขึ้น โดยมีการบูรณาการทักษะการคิดเชิงระบบ การแก้ปัญหา และการใช้เทคโนโลยีสารสนเทศมาประยุกต์ใช้ในงานด้านคณิตศาสตร์ครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 3
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์เครื่องสำอาง พ.ศ. 2566 เรียนเกี่ยวกับอะไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) มุ่งเน้นการเรียนรู้ด้านวิทยาศาสตร์ที่เกี่ยวข้องกับเครื่องสำอาง ทั้งในส่วนของวัตถุดิบ การผลิต การพัฒนาผลิตภัณฑ์ การประเมินคุณภาพ ตลอดจนความรู้ด้านเทคโนโลยีความงามและการจัดการธุรกิจเครื่องสำอาง เพื่อสร้างนวัตกรรมและทักษะวิชาชีพที่สามารถนำไปประยุกต์ใช้ได้จริงครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรแอนิเมชันและมัลติมีเดียมีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาแอนิเมชันและมัลติมีเดียมีรายวิชาสำคัญ ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการจัดการเทคโนโลยีการเกษตรมีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาการจัดการเทคโนโลยีการเกษตรมีรายวิชาสำคัญอ ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2560 มีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ไม่พบข้อมูลเกี่ยวกับรายวิชาสำคัญระบุไว้ในเอกสารหลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) แนะนำให้ติดต่อฝ่ายวิชาการของคณะเพื่อสอบถามรายละเอียดเพิ่มเติมครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2565 มีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (พ.ศ. 2565) (Bachelor of Applied Thai Traditional Medicine Program) มีหมวดวิชาสำคัญประกอบด้วย หมวดวิชาศึกษาทั่วไป ไม่น้อยกว่า 30 หน่วยกิต และหมวดวิชาเฉพาะ ไม่น้อยกว่า 111 หน่วยกิต ซึ่งครอบคลุมกลุ่มวิชาพื้นฐานวิชาชีพและกลุ่มวิชาชีพการแพทย์แผนไทย",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจมีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship) มีรายวิชาสำคัญครอบคลุมหมวดวิชาศึกษาทั่วไป หมวดวิชาเฉพาะ (กลุ่มวิชาแกนและกลุ่มวิชาเฉพาะด้าน เช่น วิชาเอกผลิตภัณฑ์จุลินทรีย์และการควบคุมคุณภาพ วิชาเอกผลิตภัณฑ์ธรรมชาติ และวิชาเอกวัสดุชีวภาพและบรรจุภัณฑ์) รวมถึงหมวดวิชาเลือกเสรี \n\nสามารถสอบถามรายละเอียดรายวิชาเพิ่มเติมได้ที่ฝ่ายวิชาการของคณะหรือสำนักส่งเสริมวิชาการและงานทะเบียน",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์เครื่องสำอาง พ.ศ. 2561 มีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) พ.ศ. 2561 มีรายวิชาสำคัญแบ่งตามหมวดหมู่ เช่น กลุ่มวิชาแกน เช่น เคมี 1 และชีววิทยาทั่วไป กลุ่มวิชาพื้นฐานวิชาชีพ เช่น วัตถุดิบเครื่องสำอาง และการตั้งตำรับเครื่องสำอาง และกลุ่มวิชาเฉพาะด้าน เช่น เคมีอินทรีย์สำหรับวิทยาศาสตร์เครื่องสำอาง และเครื่องสำอางเกี่ยวกับผิวหนัง",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2561 มีวิชาบังคับอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) พ.ศ. 2561 มีรายวิชาบังคับในหมวดวิชาศึกษาทั่วไป หมวดวิชาเฉพาะ และกลุ่มวิชาต่างๆ ตามโครงสร้างหลักสูตร โดยสามารถตรวจสอบรายวิชาบังคับทั้งหมดได้จากแผนการศึกษาและโครงสร้างรายวิชาในเอกสารหลักสูตรของคณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร หากต้องการรายละเอียดรายวิชาบังคับแบบเจาะจง กรุณาติดต่อสำนักส่งเสริมวิชาการและงานทะเบียน",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2566 มีวิชาบังคับอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "not_found",
+      "served_reply": "ไม่พบข้อมูลรายวิชาบังคับทั้งหมดในเอกสารหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) พ.ศ. 2566 กรุณาติดต่อสำนักส่งเสริมวิชาการและงานทะเบียน",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรคหกรรมศาสตร์มีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรศิลปศาสตรบัณฑิต สาขาวิชาคหกรรมศาสตร์ (Bachelor of Arts Program in Home Economics) มีรายวิชาในหมวดวิชาเฉพาะบังคับ ได้แก่:\n1. การจัดการทรัพยากรครอบครัวและชุมชน (Family and Community Resources Management)\n2. โภชนาการ (Nutrition)\n3. หลักการประกอบอาหาร (Principles of Cookery)\n4. สุขาภิบาลอาหารและการควบคุมคุณภาพ (Food Sanitation and Quality Control)\n5. พัฒนาการครอบครัวและอนามัยเจริญพันธุ์ (Family Developmental and Reproductive Health)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อมมีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อม (Bachelor of Science Program in Environmental Science and Technology) มีหมวดวิชาสำคัญประกอบด้วยหมวดวิชาศึกษาทั่วไป หมวดวิชาเฉพาะ และหมวดวิชาเลือกเสรี โดยโครงสร้างหลักสูตรประกอบด้วยกลุ่มวิชาแกน กลุ่มวิชาพื้นฐานวิชาชีพ และกลุ่มวิชาเฉพาะด้าน",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติมีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management) มีหมวดวิชาสำคัญ ได้แก่ หมวดวิชาศึกษาทั่วไปไม่น้อยกว่า 30 หน่วยกิต และหมวดวิชาเฉพาะด้านไม่น้อยกว่า 99 หน่วยกิต ซึ่งประกอบด้วยวิชาวิทยาศาสตร์พื้นฐาน วิชาเฉพาะด้านบังคับ วิชาเฉพาะด้านเลือก และวิชาฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่มีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship) มีรายวิชาเฉพาะด้านที่เป็นวิชาบังคับและวิชาแกนที่สำคัญดังนี้ครับ\n\n* ชีวเคมีทางอาหารเบื้องต้น\n* ปฏิบัติการสำหรับชีวเคมีทาง",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์และเทคโนโลยีการอาหารมีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "แปรรูปผลิตภัณฑ์อาหาร ที่เน้นให้ผู้เรียนมีทักษะในวิชาชีพ วิชาการประกันคุณภาพและความ...\"\n            But page 184 has a clean, numbered list of 5 courses that are explicitly listed under \"เนื่องจากหลายรายวิชาเป็นการผสมผสานระหว่างด้านวิทยาศาสตร์การอาหารและด้านเทคโนโลยีเข้าด้วยกัน ดังนี้\". This is the most complete and",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีการจัดการสุขภาพมีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีการจัดการสุขภาพ (Bachelor of Science Program in Technology of Health Management) มีรายวิชาบังคับในกลุ่มวิชาเฉพาะด้านที่สำคัญ ดังนี้:\n\n1. กายวิภาคและสรีรวิทยาของมนุษย์ (Human Anatomy and Physiology)\n2. การสาธารณสุขเบื้องต้น (Introduction to Public Health)\n3. สุขศึกษาและพฤติกรรมสุขภาพ (Health Education and Health Behavior)\n4. ระบบบริการสุขภาพและการจัดการในงานสาธารณสุข\n5. ความรอบรู้ทางสุขภาพและเทคโนโลยีการสื่อสารสุขภาพ\n6. ระบาดวิทยาเบื้องต้น (Basic Epidemiology)\n7. กฎหมายสาธารณสุขและจริยธรรมวิชาชีพ (Public Health Laws and Ethics)\n8. เภสัชวิทยาเบื้องต้นในงานสาธารณสุข (Basic Pharmacology in Public Health)\n9. เวชศาสตร์ฟื้นฟู (Rehabilitation Medicine)\n10. อาชีวอนามัยและความปลอดภัย (Occupational Health and Safety)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2561 มีวิชาบังคับอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) พ.ศ. 2561 มีรายวิชาบังคับในหมวดวิชาศึกษาทั่วไป ดังนี้:\n\n1. ภาษาไทยเพื่อการสื่อสาร (0010101)\n2. ภาษาอังกฤษเพื่อการสื่อสารในชีวิตประจำวัน (0010201)\n3. ภาษาอังกฤษเพื่อพัฒนาทักษะการเรียน (0010202)\n4. การพัฒนาตนและอัตลักษณ์คนพระนคร (0020101)\n5. คุณค่าแห่งความงาม คุณธรรมและความสุข (0020102)\n6. วิถีไทยและปรัชญาของเศรษฐกิจพอเพียง (0020103)\n7. กฎหมายในชีวิตประจำวัน (0020104)\n8. ฉลาดคิดทางวิทยาศาสตร์ (0030101)\n9. การตระหนักรู้และปรับตัวต่อการเปลี่ยนแปลง (0040101)\n10. การออกกำลังกายเพื่อสุขภาพ (0050101)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2566 มีวิชาบังคับอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) พ.ศ. 2566 มีรายวิชาบังคับในหมวดวิชาศึกษาทั่วไปและหมวดวิชาเฉพาะ ดังนี้:\n\n**หมวดวิชาศึกษาทั่วไป (24 หน่วยกิต)**\n1. กลุ่มภาษาและการสื่อสาร: ภาษาไทยเพื่อการสื่อสาร, ภาษาอังกฤษเพื่อพัฒนาทักษะการเรียน, ภาษาอังกฤษสำหรับผู้เรียนในศตวรรษที่ 21\n2. กลุ่มพัฒนาความเป็นมนุษย์: ความจริงของชีวิต, สุนทรียภาพและวัฒนธรรมไทย, ความเป็นไทย วิถีชาติ และศาสตร์พระราชา, กฎหมายและความเป็นพลเมืองดี\n3. กลุ่มวิทยาศาสตร์ เทคโนโลยีและนวัตกรรม: ฉลาดคิดทางวิทยาศาสตร์, การออกกำลังกายและกีฬาเพื่อสุขภาพ\n4. กลุ่มสหวิทยาการและการจัดการ: การตระหนักรู้และปรับตัวต่อการเปลี่ยนแปลงในโลกยุคใหม่, องค์กรแห่งความสุข\n\n**หมวดวิชาเฉพาะ (94 หน่วยกิต)**\n1. กลุ่มวิชาแกน: ภาษาอังกฤษสำหรับเทคโนโลยีสารสนเทศ 1, ภาษาอังกฤษสำหรับเทคโนโลยีสารสนเทศ 2, เทคโนโลยีสารสนเทศเพื่อการเรียนรู้สู่ชุมชน, สถิติสำหรับเทคโนโลยีสารสนเทศ, คณิตศาสตร์สำหรับเทคโนโลยีสารสนเทศ\n2. กลุ่มวิชาเฉพาะด้าน: จริยธรรมและกฎหมายทางคอมพิวเตอร์, การวิเคราะห์และการออกแบบระบบ, เทคโนโลยีสารสนเทศสำหรับอัจฉริยะภาพทางธุรกิจ, ระบบสื่อสารข้อมูลและเครือข่าย, การวิเคราะห์และออกแบบเชิงวัตถุด้วยโปรแกรมภาษาจาวา, การเขียนโปรแกรมบนเว็บ, วิทยาการข้อมูลและเครื่องมือ, ความมั่นคงปลอดภัยไซเบอร์, ทักษะการเขียนโปรแกรมคอมพิวเตอร์ 1, ดิจิทัลแพลตฟอร์มและโครงสร้างพื้นฐาน, การวางแผนทรัพยากรองค์กร\n3. กลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา: การเตรียมความพร้อมฝึกประสบการณ์วิชาชีพและสหกิจศึกษา และเลือกเรียนระหว่าง การฝึกประสบการณ์วิชาชีพเทคโนโลยีสารสนเทศ หรือ สหกิจศึกษา",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 4
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรคณิตศาสตร์มีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (Bachelor of Science Program in Mathematics) มีรายวิชาบังคับในกลุ่มวิชาเฉพาะด้านที่สำคัญ ดังนี้:\n\n- หลักการคณิตศาสตร์ (Principles of Mathematics)\n- การสำรวจเรขาคณิต (Survey of Geometry)\n- พีชคณิตเชิงเส้น 1 (Linear Algebra 1)\n- พีชคณิตนามธรรม 1 (Abstract Algebra 1)\n- แคลคูลัส 1 (Calculus 1)\n- แคลคูลัส 2 (Calculus 2)\n- แคลคูลัส 3 (Calculus 3)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์เครื่องสำอาง พ.ศ. 2566 มีรายวิชาสำคัญอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) มีรายวิชาสำคัญในหมวดวิชาเฉพาะ ดังนี้:\n\n**กลุ่มวิชาแกน**\n- ฟิสิกส์สำหรับวิทยาศาสตร์เครื่องสำอาง (Physics for Cosmetic Science)\n- เคมีสำหรับวิทยาศาสตร์เครื่องสำอาง (Chemistry for Cosmetic Science)\n- ชีววิทยาสำหรับวิทยาศาสตร์เครื่องสำอาง (Biology for Cosmetic Science)\n- เครื่องมือปฏิบัติการสำหรับวิทยาศาสตร์เครื่องสำอาง (Laboratory Instruments for Cosmetic Science)\n- คณิตศาสตร์พื้นฐาน (Basic Mathematics)\n- หลักสถิติ (Principles of Statistics)\n- ภาษาอังกฤษสำหรับวิทยาศาสตร์เครื่องสำอาง 1 (English for Cosmetic Science 1)\n- ภาษาอังกฤษสำหรับวิทยาศาสตร์เครื่องสำอาง 2 (English for Cosmetic Science 2)\n\n**กลุ่มวิชาพื้นฐานวิชาชีพ**\n- จุลชีววิทยาสำหรับวิทยาศาสตร์เครื่องสำอาง (Microbiology for Cosmetic Science)\n- เคมีเชิงฟิสิกส์สำหรับวิทยาศาสตร์เครื่องสำอาง (Physical Chemistry for Cosmetic Science)\n- วัตถุดิบธรรมชาติและสมุนไพรสำหรับเครื่องสำอาง (Natural Raw Materials and Herbs for Cosmetic Science)\n- การตั้งตำรับเครื่องสำอาง (Cosmetic Formulation)\n- การประเมินผลิตภัณฑ์เครื่องสำอาง (Cosmetic Product Evaluation)\n- กฎหมาย การจดแจ้ง และมาตรฐานเกี่ยวกับเครื่องสำอาง (Laws, Notification and Standards for Cosmetics)\n- การพัฒนาผลิตภัณฑ์เครื่องสำอางใหม่ (New Cosmetic Product Development)\n\n**กลุ่มวิชาเฉพาะด้าน (วิชาบังคับ)**\n- เครื่องสำอางแต่งสี (Color Cosmetics)\n- ชีวเคมีสำหรับวิทยาศาสตร์เครื่องสำอาง (Biochemistry for Cosmetic Science)\n- เคมีอินทรีย์สำหรับวิทยาศาสตร์เครื่องสำอาง (Organic Chemistry for Cosmetic Science)\n- เภสัชเคมีสำหรับวิทยาศาสตร์เครื่องสำอาง (Pharmaceutical Chemistry for Cosmetic Science)\n- เครื่องสำอางเกี่ยวกับผิวหนัง (Skin Cosmetics)\n- เครื่องสำอางเกี่ยวกับผมและเล็บ (Hair and Nail Cosmetics)\n- สัมมนาทางวิทยาศาสตร์เครื่องสำอาง (Seminar on Cosmetic Science)\n- โครงร่างวิจัยทางวิทยาศาสตร์เครื่องสำอางเบื้องต้น (Basic Research Proposal for Cosmetic Science)\n- การวิจัยทางวิทยาศาสตร์เครื่องสำอางเบื้องต้น (Introduction to Research in Cosmetic Science)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรแอนิเมชันและมัลติมีเดียต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "4caeb377-0845-46ab-9c80-010795a00389",
+        "a6b4c251-3d62-48fa-a68d-bf4c36d0fc5a"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (พ.ศ. 2564) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 127 หน่วยกิต\nยังไม่มีข้อมูลที่ผ่านการตรวจของ หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (พ.ศ. 2569)\nที่มา: animation64.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "4caeb377-0845-46ab-9c80-010795a00389",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (พ.ศ. 2564)",
+            "edition_year": 2564,
+            "value_int": 127,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "animation64.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 127 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [
+          "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (พ.ศ. 2569)"
+        ],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาแอนิเมชันและมัลติมีเดีย ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "unclear",
+      "comparison_detail": {
+        "expected": [
+          127
+        ],
+        "found_in_reply": []
+      },
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการจัดการเทคโนโลยีการเกษตรต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "1bcfb69c-a88f-4652-8799-c3d9fb6aa11d"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาการจัดการเทคโนโลยีการเกษตรสมัยใหม่ (พ.ศ. 2564) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: atm.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "1bcfb69c-a88f-4652-8799-c3d9fb6aa11d",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาการจัดการเทคโนโลยีการเกษตรสมัยใหม่ (พ.ศ. 2564)",
+            "edition_year": 2564,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "atm.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาการจัดการเทคโนโลยีการเกษตร ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "unclear",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": []
+      },
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2560 ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "d4142e19-bd32-4490-8f39-0b025aaf29a6",
+        "37ebaf72-0f2c-4299-9198-0aba2b6a6d2c"
+      ],
+      "year_be": 2560,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (พ.ศ. 2560) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 149 หน่วยกิต\nที่มา: attm.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "d4142e19-bd32-4490-8f39-0b025aaf29a6",
+            "course_title": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (พ.ศ. 2560)",
+            "edition_year": 2560,
+            "value_int": 149,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "attm.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 149 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) พ.ศ. 2560 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 149 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          149
+        ],
+        "found_in_reply": [
+          149
+        ]
+      },
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2565 ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "d4142e19-bd32-4490-8f39-0b025aaf29a6",
+        "37ebaf72-0f2c-4299-9198-0aba2b6a6d2c"
+      ],
+      "year_be": 2565,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (พ.ศ. 2565) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 147 หน่วยกิต\nที่มา: attm65.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "37ebaf72-0f2c-4299-9198-0aba2b6a6d2c",
+            "course_title": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (พ.ศ. 2565)",
+            "edition_year": 2565,
+            "value_int": 147,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "attm65.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 147 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) พ.ศ. 2565 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 147 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          147
+        ],
+        "found_in_reply": [
+          147
+        ]
+      },
+      "latency_ms": 15
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "051a0318-b06e-4fba-9838-66f184a62239"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (พ.ศ. 2568) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 127 หน่วยกิต\nที่มา: bio2568.pdf หน้า 7",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "051a0318-b06e-4fba-9838-66f184a62239",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (พ.ศ. 2568)",
+            "edition_year": 2568,
+            "value_int": 127,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "bio2568.pdf",
+              "page_start": 7,
+              "page_end": 7,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 127 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 127 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          127
+        ],
+        "found_in_reply": [
+          127
+        ]
+      },
+      "latency_ms": 17
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์เครื่องสำอาง พ.ศ. 2561 ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "36b63165-a7a2-44c0-8b0f-2b231d8acd5e",
+        "fb69cc26-f51c-4625-a975-0d2be2620b6f"
+      ],
+      "year_be": 2561,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: cosmetic61.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "36b63165-a7a2-44c0-8b0f-2b231d8acd5e",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (พ.ศ. 2561)",
+            "edition_year": 2561,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cosmetic61.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) พ.ศ. 2561 ต้องเรียนจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 12
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2561 ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": 2561,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: cs61.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561)",
+            "edition_year": 2561,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cs61.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) พ.ศ. 2561 นักศึกษาต้องเรียนจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2566 ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": 2566,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: cs66.pdf หน้า 2",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "02bb0f00-a6af-448b-8772-b064d399f770",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566)",
+            "edition_year": 2566,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cs66.pdf",
+              "page_start": 2,
+              "page_end": 2,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) พ.ศ. 2566 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรคหกรรมศาสตร์ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "3685010f-d8f9-450d-95ad-a4649bf93dc1"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรศิลปศาสตรบัณฑิต สาขาวิชาคหกรรมศาสตร์ (พ.ศ. 2564) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: ds2564.pdf หน้า 1",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "3685010f-d8f9-450d-95ad-a4649bf93dc1",
+            "course_title": "หลักสูตรศิลปศาสตรบัณฑิต สาขาวิชาคหกรรมศาสตร์ (พ.ศ. 2564)",
+            "edition_year": 2564,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "ds2564.pdf",
+              "page_start": 1,
+              "page_end": 1,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรศิลปศาสตรบัณฑิต สาขาวิชาคหกรรมศาสตร์ (Bachelor of Arts Program in Home Economics) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อมต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "15e8b611-e1a9-4431-8291-3e8682171729"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อม (พ.ศ. 2560) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 138 หน่วยกิต\nที่มา: en60.pdf หน้า 2",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "15e8b611-e1a9-4431-8291-3e8682171729",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อม (พ.ศ. 2560)",
+            "edition_year": 2560,
+            "value_int": 138,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "en60.pdf",
+              "page_start": 2,
+              "page_end": 2,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 138 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อม (Bachelor of Science Program in Environmental Science and Technology) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 138 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          138
+        ],
+        "found_in_reply": [
+          138
+        ]
+      },
+      "latency_ms": 14
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "4024d0b0-ebee-4d6d-9b92-5e826aaf3956"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (พ.ศ. 2565) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 135 หน่วยกิต\nที่มา: en65.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "4024d0b0-ebee-4d6d-9b92-5e826aaf3956",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (พ.ศ. 2565)",
+            "edition_year": 2565,
+            "value_int": 135,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "en65.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 135 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 135 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          135
+        ],
+        "found_in_reply": [
+          135
+        ]
+      },
+      "latency_ms": 9
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "10af2695-ed83-4d53-846f-52123d9d8961"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (พ.ศ. 2566) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 124 หน่วยกิต\nที่มา: food66.pdf หน้า 7",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "10af2695-ed83-4d53-846f-52123d9d8961",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (พ.ศ. 2566)",
+            "edition_year": 2566,
+            "value_int": 124,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "food66.pdf",
+              "page_start": 7,
+              "page_end": 7,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 124 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 124 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          124
+        ],
+        "found_in_reply": [
+          124
+        ]
+      },
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์และเทคโนโลยีการอาหารต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "93fb8193-ecaa-4b96-9049-8e3b64e1fde8"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีการอาหาร (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: fs61.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "93fb8193-ecaa-4b96-9049-8e3b64e1fde8",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีการอาหาร (พ.ศ. 2561)",
+            "edition_year": 2561,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "fs61.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีการอาหาร (Bachelor of Science Program in Food Science and Technology) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีการจัดการสุขภาพต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "54e64214-919a-45ab-bf19-40613d74f7ea"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีการจัดการสุขภาพ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: ht61.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "54e64214-919a-45ab-bf19-40613d74f7ea",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีการจัดการสุขภาพ (พ.ศ. 2561)",
+            "edition_year": 2561,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "ht61.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีการจัดการสุขภาพ (Bachelor of Science Program in Technology of Health Management) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 10
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2561 ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "b85149f2-fd1e-4629-a546-924dcca090bf",
+        "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf"
+      ],
+      "year_be": 2561,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 127 หน่วยกิต\nที่มา: it61.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "b85149f2-fd1e-4629-a546-924dcca090bf",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2561)",
+            "edition_year": 2561,
+            "value_int": 127,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "it61.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 127 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) พ.ศ. 2561 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 127 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          127
+        ],
+        "found_in_reply": [
+          127
+        ]
+      },
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2566 ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "b85149f2-fd1e-4629-a546-924dcca090bf",
+        "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf"
+      ],
+      "year_be": 2566,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2566) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: it66.pdf หน้า 5",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2566)",
+            "edition_year": 2566,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "it66.pdf",
+              "page_start": 5,
+              "page_end": 5,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \n จำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) พ.ศ. 2566 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิตครับ",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 10
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรคณิตศาสตร์ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "589bc11f-0b3c-4ad7-a545-6fe25685ea40",
+        "163c0edc-a4e2-4ff2-ae96-b21160348ec1"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2564) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nยังไม่มีข้อมูลที่ผ่านการตรวจของ หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569)\nที่มา: ma64.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "589bc11f-0b3c-4ad7-a545-6fe25685ea40",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2564)",
+            "edition_year": 2564,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "ma64.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จ ำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [
+          "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569)"
+        ],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (Bachelor of Science Program in Mathematics) พ.ศ. 2564 กำหนดจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต ส่วนหลักสูตร พ.ศ. 2569 กำหนดจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 124 หน่วยกิตครับ",
+      "comparison": "partial",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          124,
+          130
+        ]
+      },
+      "latency_ms": 10
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "หลักสูตรวิทยาศาสตร์เครื่องสำอาง พ.ศ. 2566 ต้องเรียนทั้งหมดกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "36b63165-a7a2-44c0-8b0f-2b231d8acd5e",
+        "fb69cc26-f51c-4625-a975-0d2be2620b6f"
+      ],
+      "year_be": 2566,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (พ.ศ. 2566) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: cos66.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "fb69cc26-f51c-4625-a975-0d2be2620b6f",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (พ.ศ. 2566)",
+            "edition_year": 2566,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cos66.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) พ.ศ. 2566 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 14
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาแอนิเมชันและมัลติมีเดียสามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "4caeb377-0845-46ab-9c80-010795a00389",
+        "a6b4c251-3d62-48fa-a68d-bf4c36d0fc5a"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาแอนิเมชันและมัลติมีเดียสามารถประกอบอาชีพอ ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาการจัดการเทคโนโลยีการเกษตรสามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "1bcfb69c-a88f-4652-8799-c3d9fb6aa11d"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาการจัดการเทคโนโลยีการเกษตรสามารถประกอบอาช ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบหลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2560 สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "d4142e19-bd32-4490-8f39-0b025aaf29a6",
+        "37ebaf72-0f2c-4299-9198-0aba2b6a6d2c"
+      ],
+      "year_be": 2560,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "สูตรครั้งแรก ให้ใส่ชื่อภาษาอังกฤษในวงเล็บต่อท้ายด้วย\".\n        So, a brief statement of the course name is required.\n        Let's make the first line the course name reference:\n        หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) กำหนดอาชีพที่สามารถประกอบได้ดังนี้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบหลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2565 สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "d4142e19-bd32-4490-8f39-0b025aaf29a6",
+        "37ebaf72-0f2c-4299-9198-0aba2b6a6d2c"
+      ],
+      "year_be": 2565,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) สามารถประกอบอาชีพได้ดังนี้\n\n1. แพทย์แผนไทยประยุกต์ในสถานพยาบาลทั้งภาครัฐและเอกชนทุกระดับ (Applied Thai Traditional Medicine Practitioner)\n2. นักวิชาการในสถาบันการศึกษาที่มีการ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจสามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "051a0318-b06e-4fba-9838-66f184a62239"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship) สามารถประกอบอาชีพได้ดังนี้:\n1. นักวิชาการ/นักวิจัยพัฒนาผลิตภัณฑ์ด้านต่าง ๆ เช่น ผลิตภัณฑ์ชีวภาพ วัสดุบรรจุภัณฑ์ชีวภาพ และผลิตภัณฑ์จากธรรมชาติ (Academic/Product Research and Development Scientist)\n2. นักตรวจสอบคุณภาพผลิตภัณฑ์ (Product Quality Inspector)\n3. นักวิเคราะห์ควบคุมคุณภาพ/นักวิทยาศาสตร์ห้องปฏิบัติการ (Quality Control Analyst/Laboratory Scientist)\n4. เจ้าหน้าที่เชี่ยวชาญฝ่ายเทคนิคเครื่องมือวิเคราะห์ (Technical Specialist for Analytical Instruments)\n5. ประกอบอาชีพอิสระที่เกี่ยวข้อง เช่น ธุรกิจ Startup, SME ผู้ประกอบการธุรกิจที่เกี่ยวข้องกับผลิตภัณฑ์ธรรมชาติ วัสดุชีวภาพและบรรจุภัณฑ์ (Independent Business Owner/Entrepreneur)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 8
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบหลักสูตรวิทยาศาสตร์เครื่องสำอาง พ.ศ. 2561 สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "36b63165-a7a2-44c0-8b0f-2b231d8acd5e",
+        "fb69cc26-f51c-4625-a975-0d2be2620b6f"
+      ],
+      "year_be": 2561,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) สามารถประกอบอาชีพได้ดังนี้:\n1. นักวิทยาศาสตร์ประจำห้องปฏิบัติการทางด้านวิทยาศาสตร์เครื่องสำอางหรือสาขาที่ใกล้เคียง (Cosmetic Scientist / Laboratory Scientist)\n2. ผู้ดูแลการพัฒนาผลิตภัณฑ์ คุณภาพของเครื่องสำอาง และจดแจ้งเครื่องสำอาง (Product Development & Quality Assurance Manager)\n3. ผู้ให้คำปรึกษาในสถานเสริมความงามและสุขภาพ (Beauty and Health Consultant)\n4. ผู้ประกอบการสถานเสริมความงามครบวงจร (Full-Service Beauty Salon Entrepreneur)\n5. ผู้แทนฝ่ายขายวัตถุดิบและแนะนำผลิตภัณฑ์ความงามและสุขภาพ (Raw Material Sales Representative / Beauty Product Advisor)\n6. ผู้บริหารจัดการด้านเทคโนโลยีความงาม (Beauty Technology Manager)\n7. ผู้วางแผนการตลาดธุรกิจด้านความงามและสุขภาพ (Beauty and Health Marketing Planner)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบหลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2561 สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": 2561,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) สามารถประกอบอาชีพได้ดังนี้:\n1. นักพัฒนาซอฟต์แวร์ (Software Developer)\n2. นักวิเคราะห์และออกแบบระบบงานคอมพิวเตอร์ (Computer Systems Analyst)\n3. นักพัฒนาเว็บไซต์ (Web Developer)\n4. นักบริหารงานฐานข้อมูล (Database Administrator)\n5. นักวิชาการคอมพิวเตอร์ (Computer Academic)\n6. ผู้ดูแลระบบเครือข่าย (Network Administrator)\n7. ผู้ดูแลระบบงานคอมพิวเตอร์ (Computer Systems Administrator)\n8. ผู้ประกอบการด้านคอมพิวเตอร์ (Computer Entrepreneur)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบหลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2566 สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": 2566,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) สามารถประกอบอาชีพได้ดังนี้ครับ:\n1. นักพัฒนาซอฟต์แวร์ (Software Developer)\n2. นักวิชาการคอมพิวเตอร์ หรือนักวิทยาศาสตร์ทางคอมพิวเตอร์ (Computer Scientist)\n3. นักวิจัยด้านวิทยาการคอมพิวเตอร์ (Computer Science Researcher)\n4. นักวิเคราะห์และออกแบบระบบ (Systems Analyst)\n5. นักทดสอบโปรแกรมคอมพิวเตอร์ (Software Tester)\n6. ผู้ดูแลระบบฐานข้อมูล (Database Administrator)\n7. ผู้ดูแลระบบเครือข่าย (Network Administrator)\n8. นักวิทยาศาสตร์ข้อมูล (Data Scientist)\n9. ผู้ประกอบการด้านคอมพิวเตอร์ (Computer Entrepreneur)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 12
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อมสามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "15e8b611-e1a9-4431-8291-3e8682171729"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีสิ่งแวดล้อม (Bachelor of Science Program in Environmental Science and Technology) สามารถประกอบอาชีพได้ดังนี้:\n- เป็นนักวิชาการหรือนักวิทยาศาสตร์สิ่งแวดล้อม และใช้คุณวุฒิวิทยาศาสตรบัณฑิตสาขาสิ่งแวดล้อม สมัครสอบมาตรฐานเพื่อขึ้นทะเบียนเป็นผู้ควบคุมระบบบำบัดมลพิษน้ำ ผู้ควบคุมระบบบำบัดมลพิษอากาศ และผู้ควบคุมระบบการจัดการมลพิษกากอุตสาหกรรม ในหน่วยงานเอกชน เช่น บริษัทที่ปรึกษาด้านสิ่งแวดล้อม นิคมอุตสาหกรรม หรือโรงงานอุตสาหกรรม\n- เป็นนักวิชาการหรือนักวิทยาศาสตร์สิ่งแวดล้อม และสามารถสมัครสอบเพื่อขอรับใบอนุญาตเป็นผู้ควบคุมมลพิษทางน้ำ ในหน่วยงานเอกชน เช่น บริษัทที่ปรึกษาด้านสิ่งแวดล้อม\n- เป็นนักวิชาการหรือนักวิทยาศาสตร์สิ่งแวดล้อม และสามารถสมัครสอบเพื่อขอรับใบอนุญาตเป็นผู้ควบคุมมลพิษทางอากาศ ผู้ควบคุมมลพิษเสียงและความสั่นสะเทือน ผู้ควบคุมของเสียอันตราย ผู้ควบคุมขยะมูลฝอยและสิ่งปฏิกูล ในหน่วยงานเอกชน เช่น บริษัทที่ปรึกษาด้านสิ่งแวดล้อม โดยผ่านการอบรมเพิ่มเติมตามข้อบังคับสภาวิชาชีพวิทยาศาสตร์และเทคโนโลยี\n- เป็นนักวิชาการหรือนักวิทยาศาสตร์สิ่งแวดล้อม และสามารถสมัครสอบเพื่อขอรับใบอนุญาตเป็นผู้เชี่ยวชาญเฉพาะด้านการวิเคราะห์ผลกระทบสิ่งแวดล้อมด้านวิทยาศาสตร์ในหน่วยงานเอกชน เช่น บริษัทที่ปรึกษาด้านสิ่งแวดล้อม\n- เป็นนักวิชาการหรือนักวิทยาศาสตร์สิ่งแวดล้อม ปฏิบัติงาน ติดตามตรวจสอบคุณภาพสิ่งแวดล้อม เก็บตัวอย่างสิ่งแวดล้อมภาคสนาม วิเคราะห์ตัวอย่างสิ่งแวดล้อมในห้องปฏิบัติการ หรือบริหารจัดการระบบการจัดการสิ่งแวดล้อม และระบบการจัดการอื่น ๆ ที่เกี่ยวข้องกับงานสิ่งแวดล้อมในหน่วยงานรัฐและเอกชน\n- เป็นนักวิชาการหรือนักวิทยาศาสตร์สิ่งแวดล้อมในหน่วยงานรัฐวิสาหกิจ หรือหน่วยงานรัฐ ทั้งส่วนกลางและส่วนท้องถิ่น",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติสามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "4024d0b0-ebee-4d6d-9b92-5e826aaf3956"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ในหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาการจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management) สามารถประกอบอาชีพได้ดังนี้ครับ:\n8.1 นักวิชาการนักวิทยาศาสตร์สิ่งแวดล้อมหรือนักจัดการสิ่งแวดล้อม (Environmental Scientist / Environmental Manager) และใช้คุณวุฒิวิทยาศาสตรบัณฑิตสาขาสิ่งแวดล้อม สมัครสอบมาตรฐานเพื่อขึ้นทะเบียนเป็นผู้ควบคุมระบบบำบัดมลพิษน้ำ ผู้ควบคุมระบบบำบัดมลพิษอากาศ และผู้ควบคุมระบบการจัดการมลพิษกากอุตสาหกรรม ในหน่วยงานเอกชน เช่น บริษัทที่ปรึกษาด้านสิ่งแวดล้อม นิคมอุตสาหกรรม หรือโรงงานอุตสาหกรรม\n8.2 นักวิชาการ นักวิทยาศาสตร์สิ่งแวดล้อมหรือนักจัดการสิ่งแวดล้อม (Environmental Scientist / Environmental Manager) และสามารถสมัครสอบเพื่อขอรับใบอนุญาตเป็นผู้ควบคุมมลพิษทางน้ำ ในหน่วยงานเอกชน เช่น บริษัทที่ปรึกษาด้านสิ่งแวดล้อม\n8.3 นักวิชาการ นักวิทยาศาสตร์สิ่งแวดล้อมหรือนักจัดการสิ่งแวดล้อม (Environmental Scientist / Environmental Manager) และสามารถสมัครสอบเพื่อขอรับใบอนุญาต เป็นผู้ควบคุมมลพิษทางอากาศ ผู้ควบคุมมลพิษเสียงและความสั่นสะเทือน ผู้ควบคุมของเสียอันตรายผู้ควบคุมขยะมูลฝอยและสิ่งปฏิกูล ในหน่วยงานเอกชน เช่น บริษัทที่ปรึกษาด้านสิ่งแวดล้อม โดยผ่านการอบรมเพิ่มเติมตามข้อบังคับสภาวิชาชีพวิทยาศาสตร์และเทคโนโลยี\n8.4 นักวิชาการ นักวิทยาศาสตร์สิ่งแวดล้อมหรือนักจัดการสิ่งแวดล้อม (Environmental Scientist / Environmental Manager)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "10af2695-ed83-4d53-846f-52123d9d8961"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship) สามารถประกอบอาชีพได้ดังนี้:\n1. นักวิทยาศาสตร์ด้านเทคโนโลยีอาหารในสถานประกอบการ และโรงงานอุตสาหกรรม (Food Technologist)\n2. นักโภชนาการด้านอาหารในโรงพยาบาล และสถานประกอบการด้านสุขภาพ (Dietitian)\n3. นักวิจัยทางด้านเทคโนโลยีอาหารในหน่วยงานภาครัฐและเอกชน (Food Technology Researcher)\n4. ผู้ประกอบการธุรกิจอาหาร (Food Business Entrepreneur)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 13
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาวิทยาศาสตร์และเทคโนโลยีการอาหารสามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "93fb8193-ecaa-4b96-9049-8e3b64e1fde8"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์และเทคโนโลยีการอาหาร (Bachelor of Science Program in Food Science and Technology) สามารถประกอบอาชีพได้ดังนี้:\n1. นักวิจัยด้านวิทยาศาสตร์และเทคโนโลยีการอาหาร (Food Science and Technology Researcher)\n2. นักวิทยาศาสตร์และเทคโนโลยีการอาหารในสถานประกอบการ โรงงานอุตสาหกรรม โรงพยาบาล และห้างสรรพสินค้า (Food Scientist and Technologist)\n3. ผู้ประกอบการอิสระโดยใช้ความรู้ความสามารถทางวิทยาศาสตร์และเทคโนโลยีการอาหาร (Independent Entrepreneur)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 10
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาเทคโนโลยีการจัดการสุขภาพสามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "54e64214-919a-45ab-bf19-40613d74f7ea"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีการจัดการสุขภาพ (Bachelor of Science Program in Technology of Health Management) สามารถประกอบอาชีพได้ดังนี้:\n1. นักวิชาการสาธารณสุขทั้งในหน่วยงานของรัฐบาลและเอกชน (Public Health Academician)\n2. เจ้าหน้าที่ประจำสถานบริการสุขภาพ (Health Service Personnel)\n3. ประกอบอาชีพอิสระ ได้แก่ ผู้ดูแลผู้สูงอายุ (Elderly Caregiver) นักประชาสัมพันธ์ด้านสุขภาพ (Health Public Relations Officer)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 12
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบหลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2561 สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "b85149f2-fd1e-4629-a546-924dcca090bf",
+        "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf"
+      ],
+      "year_be": 2561,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) พ.ศ. 2561 สามารถประกอบอาชีพได้ดังนี้:\n- นักวิชาการคอมพิวเตอร์ (Computer Academician)\n- เจ้าหน้าที่เทคโนโลยีสารสนเทศ (Information Technology Officer)\n- นักวิเคราะห์และออกแบบระบบงานสารสนเทศ (Systems Analyst and Designer)\n- นักพัฒนาโปรแกรมคอมพิวเตอร์ (Computer Programmer)\n- นักพัฒนาเว็บไซต์ (Web Developer)\n- นักพัฒนาโปรแกรมประยุกต์สำหรับอุปกรณ์เคลื่อนที่ (Mobile Application Developer)\n- นักออกแบบ พัฒนา และดูแลระบบเครือข่าย (Network Designer, Developer, and Administrator)\n- ผู้ช่วยผู้จัดการโครงการเทคโนโลยีสารสนเทศ (Assistant Information Technology Project Manager)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 11
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบหลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2566 สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "b85149f2-fd1e-4629-a546-924dcca090bf",
+        "2fa6627f-e2fa-4956-b9d0-d0c82ad3dcaf"
+      ],
+      "year_be": 2566,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology) สามารถประกอบอาชีพได้ดังนี้ครับ:\n1. นักเทคโนโลยีสารสนเทศ (Information Technologist)\n2. นักพัฒนาระบบ นักพัฒนาเว็บไซต์ (System Developer / Web Developer)\n3. ผู้ดูแลระบบเครือข่ายคอมพิวเตอร์และเครื่องแม่ข่าย (Computer Network and Server Administrator)\n4. นักวิเคราะห์และออกแบบระบบงานสารสนเทศ (Information Systems Analyst and Designer)\n5. นักพัฒนาโปรแกรมประยุกต์สำหรับอุปกรณ์เคลื่อนที่ (Mobile Application Developer)\n6. ผู้ช่วยผู้จัดการโครงการสารสนเทศ หรือ ผู้ช่วยผู้จัดการซอฟต์แวร์ (Assistant IT Project Manager / Assistant Software Manager)\n7. ผู้ตรวจสอบในสถานประกอบการที่มีการใช้เทคโนโลยีสารสนเทศ (IT Auditor)\n8. นักวิทยาศาสตร์ข้อมูล (Data Scientist)\n9. นักวิเคราะห์ข้อมูลทางธุรกิจ (Business Data Analyst)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 10
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาคณิตศาสตร์สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "589bc11f-0b3c-4ad7-a545-6fe25685ea40",
+        "163c0edc-a4e2-4ff2-ae96-b21160348ec1"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (Bachelor of Science Program in Mathematics) สามารถประกอบอาชีพได้ดังนี้ครับ:\n1. นักวิชาการด้านคณิตศาสตร์ (Mathematician)\n2. เจ้าหน้าที่ควบคุมคุณภาพ และนักสถิติ (Quality Control Officer and Statistician)\n3. เจ้าหน้าที่วิเคราะห์ข้อมูลในสถาบันการเงิน และบริษัทประกันภัย (Data Analyst in Financial Institutions and Insurance Companies)\n4. นักคณิตศาสตร์ประกันภัย นักคณิตกร วิทยากรคณิตวิเคราะห์ (Actuary, Mathematician, Mathematical Analysis Lecturer)\n5. อาชีพในหน่วยงานที่ต้องใช้ความรู้ ความสามารถทางทักษะ/กระบวนการคณิตศาสตร์ สถิติ และคอมพิวเตอร์ เช่น นักวิจัย นักวิชาการศึกษา นักวางแผนและวิเคราะห์ระบบงาน นักคณิตศาสตร์การเงิน เจ้าหน้าที่บริหารฐานข้อมูล พนักงานธนาคาร",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 12
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบหลักสูตรวิทยาศาสตร์เครื่องสำอาง พ.ศ. 2566 สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "36b63165-a7a2-44c0-8b0f-2b231d8acd5e",
+        "fb69cc26-f51c-4625-a975-0d2be2620b6f"
+      ],
+      "year_be": 2566,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science) พ.ศ. 2566 สามารถประกอบอาชีพได้ดังนี้ครับ:\n1. นักวิจัยและพัฒนาผลิตภัณฑ์เครื่องสำอาง (Cosmetic Researcher and Developer)\n2. นักวิทยาศาสตร์ประจำห้องปฏิบัติการทางด้านวิทยาศาสตร์เครื่องสำอางหรือสาขาวิชาที่ใกล้เคียง (Cosmetic Scientist or Related Fields)\n3. เจ้าหน้าที่ควบคุมและประกันคุณภาพเครื่องสำอาง (Cosmetic Quality Control and Assurance Officer)\n4. เจ้าหน้าที่ฝ่ายกฎหมายและขึ้นทะเบียนผลิตภัณฑ์เครื่องสำอาง (Cosmetic Regulatory Affairs Officer)\n5. ผู้แทนฝ่ายขายวัตถุดิบและเครื่องมือทางเครื่องสำอาง (Cosmetic Raw Material and Equipment Sales Representative)\n6. เจ้าหน้าที่ฝ่ายการตลาดเครื่องสำอาง (Cosmetic Marketing Officer)\n7. ผู้ประกอบการเกี่ยวกับผลิตภัณฑ์เครื่องสำอาง (Cosmetic Entrepreneur)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 9
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "จบสาขาคหกรรมศาสตร์สามารถประกอบอาชีพอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "3685010f-d8f9-450d-95ad-a4649bf93dc1"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "careers",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ผู้สำเร็จการศึกษาจากหลักสูตรศิลปศาสตรบัณฑิต สาขาวิชาคหกรรมศาสตร์ (Bachelor of Arts Program in Home Economics) สามารถประกอบอาชีพได้ดังนี้:\n1. ผู้ผลิตและบริการด้านอุตสาหกรรมบริการอาหารในสถานประกอบการต่างๆ เช่น โรงแรม ภัตตาคาร ธุรกิจแฟรนไชส์ (franchise)\n2. ผู้ดูแลงานด้านอาหารและโภชนาการในสถานศึกษา\n3. ผู้ประกอบการธุรกิจอาหาร\n4. นักวิชาการด้านอาหารและโภชนาการ (Food and Nutrition Academic)\n5. นักเคหกิจชุมชน (งานส่งเสริมและพัฒนาคุณภาพชีวิตในชุมชน) (Community Home Economist)\n6. พนักงานบริการด้านอาหารและการจัดเลี้ยง (Food Service and Catering Staff)\n7. ผู้ประกอบการธุรกิจงานด้านศิลปะประดิษฐ์\n8. นักออกแบบและพัฒนางานศิลปะประดิษฐ์ (Decorative Arts Designer and Developer)\n9. นักพัฒนางานศิลปะประดิษฐ์ในชุมชน (Community Decorative Arts Developer)\n10. ผู้บริหารจัดการงานศิลปะประดิษฐ์ (Decorative Arts Manager)\n11. นักสาธิตผลิตภัณฑ์อาหารและงานศิลปะประดิษฐ์ (Food and Decorative Arts Product Demonstrator)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 9
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ค่าเทอมของคณะนี้ราคาเทอมละเท่าไหร่",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "ค่าเทอมของแต่ละสาขาไม่เท่ากันครับ (ตั้งแต่ 11,000 ถึง 30,000 บาทต่อภาคการศึกษา) ลองระบุชื่อสาขาที่สนใจมาด้วย เช่น คณิตศาสตร์, เทคโนโลยีสารสนเทศ, วิทยาการคอมพิวเตอร์, วิทยาศาสตร์และเทคโนโลยีการอาหาร หรือสาขาอื่นในคณะ\n\nที่มา: ประกาศรายละเอียดค่าเทอมของคณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร — สาขาวิชาที่เปิดรับหรือไม่เปิดรับอาจมีการเปลี่ยนแปลง ให้ติดตามประกาศของมหาวิทยาลัยอีกครั้ง",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ค่าเทอมวิทยาการคอมพิวเตอร์เท่าไหร่",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "สาขาวิทยาการคอมพิวเตอร์ (วท.บ. 4 ปี) ค่าเทอมภาคปกติ 12,000 บาท · ภาคเสาร์-อาทิตย์ 14,000 บาท\n\nที่มา: ประกาศรายละเอียดค่าเทอมของคณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร — สาขาวิชาที่เปิดรับหรือไม่เปิดรับอาจมีการเปลี่ยนแปลง ให้ติดตามประกาศของมหาวิทยาลัยอีกครั้ง",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 3
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "เรียนแพทย์แผนไทยประยุกต์ค่าเทอมแพงไหม",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "สาขาการแพทย์แผนไทยประยุกต์ (พทป.บ. 4 ปี) ค่าเทอมภาคปกติ 30,000 บาท · ไม่เปิดรับภาคเสาร์-อาทิตย์\nสาขานี้มีค่าเทอมสูงกว่าสาขาอื่นในคณะซึ่งส่วนใหญ่อยู่ที่ 12,000 บาท\n\nที่มา: ประกาศรายละเอียดค่าเทอมของคณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร — สาขาวิชาที่เปิดรับหรือไม่เปิดรับอาจมีการเปลี่ยนแปลง ให้ติดตามประกาศของมหาวิทยาลัยอีกครั้ง",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "ค่าเทอมวิทคอมกับไอทีต่างกันไหม",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "สาขาวิทยาการคอมพิวเตอร์ (วท.บ. 4 ปี) ค่าเทอมภาคปกติ 12,000 บาท · ภาคเสาร์-อาทิตย์ 14,000 บาท\n\nที่มา: ประกาศรายละเอียดค่าเทอมของคณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร — สาขาวิชาที่เปิดรับหรือไม่เปิดรับอาจมีการเปลี่ยนแปลง ให้ติดตามประกาศของมหาวิทยาลัยอีกครั้ง",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "คหกรรมศาสตร์ค่าเล่าเรียนเทอมละเท่าไร",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "unsupported_topic",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "สาขาคหกรรมศาสตร์ (ศศ.บ. 4 ปี) ค่าเทอมภาคปกติ 11,000 บาท · ไม่เปิดรับภาคเสาร์-อาทิตย์\n\nที่มา: ประกาศรายละเอียดค่าเทอมของคณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร — สาขาวิชาที่เปิดรับหรือไม่เปิดรับอาจมีการเปลี่ยนแปลง ให้ติดตามประกาศของมหาวิทยาลัยอีกครั้ง",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 1
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "คณะมีสาขาอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร เปิดสอนหลักสูตรระดับปริญญาตรี 12 สาขา ดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 3
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "คณะวิทยาศาสตร์และเทคโนโลยีเปิดสอนหลักสูตรอะไรบ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร เปิดสอนหลักสูตรระดับปริญญาตรี 12 สาขา ดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "อยากรู้รายชื่อสาขาที่เปิดสอนทั้งหมด",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร เปิดสอนหลักสูตรระดับปริญญาตรี 12 สาขา ดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "คณะเปิดสอนกี่สาขา",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร เปิดสอนหลักสูตรระดับปริญญาตรี 12 สาขา ดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 2
+    },
+    {
+      "source": "result_final_v16.json",
+      "mode": "replay",
+      "question": "มีหลักสูตรไหนบ้างที่เลือกเรียนได้",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": null,
+      "route": "rag",
+      "route_reason": "no_supported_field",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": "answered",
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏพระนคร เปิดสอนหลักสูตรระดับปริญญาตรี 12 สาขา ดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 4
+    },
+    {
+      "source": "web_prompts_review.json",
+      "mode": "replay",
+      "question": "สาขาวิทยาการคอมพิวเตอร์ พ.ศ. 2566 เรียนกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": 2566,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: cs66.pdf หน้า 2",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "02bb0f00-a6af-448b-8772-b064d399f770",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566)",
+            "edition_year": 2566,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cs66.pdf",
+              "page_start": 2,
+              "page_end": 2,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": null,
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) พ.ศ. 2566 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 11
+    },
+    {
+      "source": "web_prompts_review.json",
+      "mode": "replay",
+      "question": "สาขาคณิตศาสตร์ พ.ศ. 2569 เรียนกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "589bc11f-0b3c-4ad7-a545-6fe25685ea40",
+        "163c0edc-a4e2-4ff2-ae96-b21160348ec1"
+      ],
+      "year_be": 2569,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "total_credits",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (Bachelor of Science Program in Mathematics) พ.ศ. 2569 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 124 หน่วยกิต",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 14
+    },
+    {
+      "source": "web_prompts_review.json",
+      "mode": "replay",
+      "question": "หลักสูตรการแพทย์แผนไทยประยุกต์ พ.ศ. 2565 เรียนกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "d4142e19-bd32-4490-8f39-0b025aaf29a6",
+        "37ebaf72-0f2c-4299-9198-0aba2b6a6d2c"
+      ],
+      "year_be": 2565,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (พ.ศ. 2565) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 147 หน่วยกิต\nที่มา: attm65.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "37ebaf72-0f2c-4299-9198-0aba2b6a6d2c",
+            "course_title": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (พ.ศ. 2565)",
+            "edition_year": 2565,
+            "value_int": 147,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "attm65.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 147 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": null,
+      "served_reply": "หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (Bachelor of Applied Thai Traditional Medicine Program) พ.ศ. 2565 มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 147 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          147
+        ],
+        "found_in_reply": [
+          147
+        ]
+      },
+      "latency_ms": 10
+    },
+    {
+      "source": "web_prompts_review.json",
+      "mode": "replay",
+      "question": "สาขาการประกอบอาหารและการบริการอาหารเรียนกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "7b46836a-de02-447d-a8e0-53cb45830e36"
+      ],
+      "year_be": null,
+      "structured_status": "no_data",
+      "structured_answer": null,
+      "facts": {
+        "status": "no_data",
+        "field": "total_credits",
+        "facts": [],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": null,
+        "note": "ยังไม่มีข้อมูลที่เผยแพร่"
+      },
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "หลักสูตรศิลปศาสตรบัณฑิต สาขาวิชาการประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 128 หน่วยกิตครับ",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 17
+    },
+    {
+      "source": "change_recheck_live.json",
+      "mode": "replay",
+      "question": "สาขาวิทยาการคอมพิวเตอร์เรียนกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "structured",
+      "route_reason": "single_programme_field",
+      "course_ids": [
+        "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+        "02bb0f00-a6af-448b-8772-b064d399f770"
+      ],
+      "year_be": null,
+      "structured_status": "answered",
+      "structured_answer": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566) และ หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 130 หน่วยกิต\nที่มา: cs66.pdf หน้า 2; cs61.pdf หน้า 6",
+      "facts": {
+        "status": "answered",
+        "field": "total_credits",
+        "facts": [
+          {
+            "course_id": "02bb0f00-a6af-448b-8772-b064d399f770",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566)",
+            "edition_year": 2566,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cs66.pdf",
+              "page_start": 2,
+              "page_end": 2,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          },
+          {
+            "course_id": "34c21266-4e5a-407c-8e77-fc95d7c94fe1",
+            "course_title": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561)",
+            "edition_year": 2561,
+            "value_int": 130,
+            "value_text": null,
+            "items": [],
+            "source": {
+              "file": "cs61.pdf",
+              "page_start": 6,
+              "page_end": 6,
+              "quote": "จำนวนหน่วยกิตที่เรียนตลอดหลักสูตร \n \n \nจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต"
+            },
+            "reviewed_by": "auto:two_locations_agree"
+          }
+        ],
+        "missing_editions": [],
+        "other_editions": [],
+        "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+        "note": null
+      },
+      "publication_id": "92e34932-2863-4604-a5f6-4611fc6e9b51",
+      "served_status": null,
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต",
+      "comparison": "agree",
+      "comparison_detail": {
+        "expected": [
+          130
+        ],
+        "found_in_reply": [
+          130
+        ]
+      },
+      "latency_ms": 12
+    },
+    {
+      "source": "change_recheck_live.json",
+      "mode": "replay",
+      "question": "แล้วจบไปทำงานอะไรได้บ้าง",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "careers",
+      "route": "rag",
+      "route_reason": "no_programme",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science) บัณฑิตสามารถประกอบอาชีพได้ดังนี้:\n1. นักพัฒนาซอฟต์แวร์ (Software Developer)\n2. นักวิชาการคอมพิวเตอร์ หรือนักวิทยาศาสตร์ทางคอมพิวเตอร์ (Computer Academic / Computer Scientist)\n3. นักวิจัยด้านวิทยาการคอมพิวเตอร์ (Computer Science Researcher)\n4. นักวิเคราะห์และออกแบบระบบ (Systems Analyst)\n5. นักทดสอบโปรแกรมคอมพิวเตอร์ (Computer Programmer Tester)\n6. ผู้ดูแลระบบฐานข้อมูล (Database Administrator)\n7. ผู้ดูแลระบบเครือข่าย (Network Administrator)\n8. นักวิทยาศาสตร์ข้อมูล (Data Scientist)\n9. ผู้ประกอบการด้านคอมพิวเตอร์ (Computer Entrepreneur)",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 4
+    },
+    {
+      "source": "change_recheck_live.json",
+      "mode": "replay",
+      "question": "สาขาคอมพิวเตอร์ธุรกิจเรียนกี่หน่วยกิต",
+      "interpreted_question": null,
+      "has_history": false,
+      "intent_field": "total_credits",
+      "route": "rag",
+      "route_reason": "no_programme",
+      "course_ids": [],
+      "year_be": null,
+      "structured_status": "not_applicable",
+      "structured_answer": null,
+      "facts": {},
+      "publication_id": null,
+      "served_status": null,
+      "served_reply": "คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขาคอมพิวเตอร์ธุรกิจ ครับ สาขาที่เปิดสอนอยู่มีดังนี้\n\n- การจัดการสิ่งแวดล้อมและทรัพยากรธรรมชาติ (Bachelor of Science Program in Environmental and Natural Resource Management)\n- การจัดการเทคโนโลยีการเกษตรสมัยใหม่ (Bachelor of Science Program in Modern Agricultural Technology Management)\n- การประกอบอาหารและการบริการอาหาร (Bachelor of Arts Program in Culinary Arts and Service)\n- การแพทย์แผนไทยประยุกต์ (Bachelor of Applied Thai Traditional Medicine Program)\n- คณิตศาสตร์ (Bachelor of Science Program in Mathematics)\n- คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย (Bachelor of Science Program in Computer Animation and Multimedia)\n- วิทยาการคอมพิวเตอร์ (Bachelor of Science Program in Computer Science)\n- วิทยาศาสตร์เครื่องสำอาง (Bachelor of Science Program in Cosmetic Science)\n- สาธารณสุขศาสตร์ (Bachelor of Public Health Program in Public Health)\n- เทคโนโลยีผลิตภัณฑ์ชีวภาพกับการประกอบธุรกิจ (Bachelor of Science Program in Biological Product Technology and Entrepreneurship)\n- เทคโนโลยีสารสนเทศ (Bachelor of Science Program in Information Technology)\n- เทคโนโลยีอาหารและความเป็นผู้ประกอบการสมัยใหม่ (Bachelor of Science Program in Food Technology and Modern Entrepreneurship)\n\nและมีหลักสูตรระดับบัณฑิตศึกษาอีก 2 หลักสูตร\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาเอก)\n- การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน (ปริญญาโท)\n\nถามรายละเอียดของสาขาไหนต่อได้เลยครับ เช่น เรียนกี่หน่วยกิต เรียนอะไรบ้าง หรือจบแล้วทำงานอะไรได้",
+      "comparison": "not_compared",
+      "comparison_detail": {},
+      "latency_ms": 4
+    }
+  ]
+}
