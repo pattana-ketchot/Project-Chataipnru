@@ -337,12 +337,39 @@ def _can_answer_from(connector, chunks, question: str, comparison: bool = False)
     เพราะไม่มีเอกสารเล่มไหนเขียนเปรียบเทียบกับหลักสูตรอื่นไว้ (ตัวเลขที่วัดอยู่ใน prompts.GROUNDING_COMPARISON_
     SYSTEM_PROMPT) คำถามหลักสูตรเดียวยังใช้เกณฑ์เดิมทุกประการ
     """
-    return _ask_json_flag(
-        connector,
-        GROUNDING_COMPARISON_SYSTEM_PROMPT if comparison else GROUNDING_CHECK_SYSTEM_PROMPT,
-        build_grounding_check_prompt(_format_chunks(chunks), question),
-        "can_answer",
-    )
+    return _grounding_verdict(connector, chunks, question, comparison)[0]
+
+
+def _grounding_verdict(connector, chunks, question: str, comparison: bool = False) -> tuple[bool, str]:
+    """
+    ผลตัดสินของด่านตรวจเอกสารพร้อมเหตุผลที่โมเดลให้ คืน (ตอบได้ไหม, เหตุผล)
+
+    ให้เขียนเหตุผลก่อนตัดสิน เดิมให้ตอบแค่ true/false ผลกับคำถามและหลักฐานชุดเดียวกันพลิกไปมา และเหตุผล
+    ทำให้ย้อนดูได้ว่าตัดสินจากข้อเท็จจริงไหน วัดก่อน-หลังด้วยคำถาม หลักฐาน และโมเดล (gemini-3.1-flash-lite)
+    ชุดเดียวกัน 15 กรณี แล้วอ่านเหตุผลเทียบหลักฐานทีละข้อ
+        ควรตอบและหลักฐานมีครบ         ตอบแค่ผลตัดสิน 12/15    เขียนเหตุผลก่อน 15/15
+        ผ่านทั้งที่หลักฐานไม่มี          ตอบแค่ผลตัดสิน 3 ครั้ง   เขียนเหตุผลก่อน 0 ครั้ง
+        ไม่มีข้อมูล นอกเรื่อง คนละสาขา/ปี  18/18 ทั้งสองแบบ
+    กรณีที่ผ่านทั้งที่ไม่มีหลักฐาน: เปรียบเทียบอาชีพของสองหลักสูตร แต่หลักฐานไม่มีรายชื่ออาชีพของหลักสูตรหนึ่ง
+
+    ล้มหรืออ่านผลไม่ได้ให้ถือว่าตอบได้เหมือนเดิม (ดู _ask_json_flag)
+    """
+    try:
+        raw = connector.chat(
+            [
+                LLMMessage(
+                    role="system",
+                    content=GROUNDING_COMPARISON_SYSTEM_PROMPT if comparison else GROUNDING_CHECK_SYSTEM_PROMPT,
+                ),
+                LLMMessage(role="user", content=build_grounding_check_prompt(_format_chunks(chunks), question)),
+            ],
+            temperature=0.0,
+            json_mode=True,
+        )
+        data = json.loads(raw)
+        return bool(data.get("can_answer", True)), str(data.get("reason") or "")
+    except (LLMConnectionError, json.JSONDecodeError, AttributeError, TypeError):
+        return True, ""
 
 
 def _compares_programmes(db: Session, question: str) -> bool:
