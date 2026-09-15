@@ -88,13 +88,15 @@ class ScopesChecks(unittest.TestCase):
 
 
 def chunk(owner, score, tag):
-    return SimpleNamespace(chunk_id=f"{owner.id}-{tag}", course_id=owner.id, course_title=owner.title, score=score)
+    return SimpleNamespace(chunk_id=f"{owner.id}-{tag}", course_id=owner.id, course_title=owner.title, score=score,
+                           content="เนื้อหาทดสอบ")
 
 
 class RetrieveChecks(unittest.TestCase):
+    # หลักฐานรายด้านของคำถามหลายหลักสูตรมาจาก comparison_evidence.programme_evidence (เดิม program_match.newest_core_chunks)
     def setUp(self):
         self.search_calls, self.core_calls = [], []
-        self._saved = (chat.search_similar_chunks, program_match.newest_core_chunks)
+        self._saved = (chat.search_similar_chunks, chat.programme_evidence)
 
         def fake_search(db, vector, top_k=8, course_ids=None):
             self.search_calls.append((top_k, course_ids))
@@ -109,11 +111,11 @@ class RetrieveChecks(unittest.TestCase):
             return [chunk(owner, score, "core-0"), chunk(owner, score, "core-1")]
 
         chat.search_similar_chunks = fake_search
-        program_match.newest_core_chunks = fake_core
+        chat.programme_evidence = fake_core
         self.connector = SimpleNamespace(embed=lambda text: [0.0])
 
     def tearDown(self):
-        chat.search_similar_chunks, program_match.newest_core_chunks = self._saved
+        chat.search_similar_chunks, chat.programme_evidence = self._saved
 
     def test_สองหลักสูตรได้แก่นของหลักสูตรนำหน้าชิ้นที่ค้นเจอของแต่ละหลักสูตร(self):
         chunks = chat._retrieve(FakeDb(), self.connector, "คณิตศาสตร์กับวิทยาศาสตร์เครื่องสำอางต่างกันอย่างไร")

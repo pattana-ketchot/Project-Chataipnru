@@ -27,6 +27,15 @@ from app.db.session import SessionLocal
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat import ChatReply, ChatCitation
 from app.services.chat_history import user_first
+from app.services.comparison_evidence import (
+    MISSING_PROGRAMME,
+    SUPPORTED,
+    comparison_support,
+    describe_evidence,
+    is_garbled,
+    programme_evidence,
+)
+from app.services.follow_up import explicit_programmes, rewrite_keeps_explicit, swap_follow_up
 from app.services.course_scope import (
     _distinctive_name,
     programmes_named,
@@ -46,6 +55,7 @@ from app.services.vector_search import search_similar_chunks
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
 from llm.prompts import (  # noqa: E402
+    CHAT_COMPARISON_RULES,
     CHAT_SYSTEM_PROMPT,
     CONDENSE_SYSTEM_PROMPT,
     GROUNDING_CHECK_SYSTEM_PROMPT,
@@ -167,7 +177,9 @@ def _load_history(db: Session, session_id: uuid.UUID) -> list[ChatMessage]:
     return list(reversed(rows))  # เรียงเก่า -> ใหม่ ก่อนส่งเข้า prompt
 
 
-def _format_history_for_condense(history: list[ChatMessage], programme: str | None = None) -> str:
+def _format_history_for_condense(
+    history: list[ChatMessage], programme: str | None = None, explicit: list[str] | None = None
+) -> str:
     """
     ส่งเฉพาะคำถามของผู้ใช้เข้า prompt เขียนคำถามใหม่ ไม่ส่งคำตอบของผู้ช่วย
 
@@ -184,10 +196,20 @@ def _format_history_for_condense(history: list[ChatMessage], programme: str | No
     lines = "\n".join(f"- {q}" for q in users) if users else "(ไม่มี)"
     if programme:
         lines = f"(หลักสูตรที่กำลังคุยกันล่าสุด: {programme})\n{lines}"
+    if explicit:
+        # คำถามล่าสุดเอ่ยชื่อหลักสูตรเอง บางชื่อเป็นชื่อศาสตร์ที่มีรายวิชาชื่อเดียวกัน โมเดลเคยอ่านเป็นรายวิชาของหลักสูตร
+        # ก่อนหน้า (ดู services/follow_up.py) จึงบอกให้ชัดว่าคำนั้นคือหลักสูตรที่ถาม ผลที่ยังเปลี่ยนหลักสูตรถูกทิ้งอีกชั้น
+        lines = (
+            f"{lines}\n(คำถามล่าสุดระบุชื่อหลักสูตรเอง: {', '.join(explicit)} — คำนี้คือชื่อหลักสูตร ไม่ใช่ชื่อรายวิชา "
+            "คำถามที่เขียนใหม่ต้องถามถึงหลักสูตรนี้ ถ้าคำถามล่าสุดอ้างถึงเรื่องที่ถามก่อนหน้า ให้คงเรื่องนั้นไว้แล้วเปลี่ยนเฉพาะหลักสูตร)"
+        )
     return lines
 
 
-def _condense(connector, history: list[ChatMessage], message: str, programme: str | None = None) -> str:
+def _condense(
+    connector, history: list[ChatMessage], message: str, programme: str | None = None,
+    explicit: list[str] | None = None,
+) -> str:
     """เขียนคำถามใหม่ให้สมบูรณ์ คืนคำถามเดิมถ้าทำไม่สำเร็จ"""
     try:
         raw = connector.chat(
@@ -195,7 +217,7 @@ def _condense(connector, history: list[ChatMessage], message: str, programme: st
                 LLMMessage(role="system", content=CONDENSE_SYSTEM_PROMPT),
                 LLMMessage(
                     role="user",
-                    content=build_condense_prompt(_format_history_for_condense(history, programme), message),
+                    content=build_condense_prompt(_format_history_for_condense(history, programme, explicit), message),
                 ),
             ],
             temperature=0.0,
@@ -229,6 +251,11 @@ def _format_chunks(chunks) -> str:
     return "\n\n".join(parts)
 
 
+def _with_note(note: str, content_block: str) -> str:
+    """ต่อสรุปหลักฐานของคำถามหลายหลักสูตรไว้หน้าเนื้อหา ให้ด่านตรวจเอกสารและขั้นเขียนคำตอบเห็นสรุปเดียวกัน"""
+    return f"{note}\n\n{content_block}" if note else content_block
+
+
 def _retrieve(db: Session, connector, question: str):
     """
     ค้นเนื้อหาที่เกี่ยวข้อง โดยจำกัดขอบเขตไว้ที่หลักสูตรเดียวถ้าระบุได้จากคำถาม
@@ -243,22 +270,30 @@ def _retrieve(db: Session, connector, question: str):
 
     คำถามที่เอ่ยถึงหลายหลักสูตร (เช่น เปรียบเทียบสองสาขา) ค้นแยกทีละหลักสูตรโดยแบ่งจำนวนชิ้นเท่าๆ กัน
     ถ้าค้นรวมกันในครั้งเดียว หลักสูตรแรกที่เจอกินที่ทั้งหมด (เคยได้ 25 ต่อ 0 ชิ้น) อีกหลักสูตรไม่มีหลักฐาน
-    เหลือให้เทียบ (ดู course_scope.resolve_scopes) และวางแก่นของแต่ละหลักสูตร (อาชีพ วัตถุประสงค์) ไว้ก่อน
-    ชิ้นที่ค้นเจอของหลักสูตรนั้น เพราะคำค้นหลังตัดชื่อแทบไม่มีเรื่องให้ค้น ชิ้นที่ได้จึงไม่มีข้อเท็จจริงที่ใช้เทียบ
-    (ดู program_match.newest_core_chunks) จัดเป็นกลุ่มตามหลักสูตรเพื่อให้โมเดลแยกได้ว่าข้อเท็จจริงเป็นของใคร
+    เหลือให้เทียบ (ดู course_scope.resolve_scopes) และวางหลักฐานรายด้านของแต่ละหลักสูตร (ปรัชญา วัตถุประสงค์ อาชีพ
+    โครงสร้างหลักสูตร พร้อมปีของฉบับที่มา) ไว้ก่อนชิ้นที่ค้นเจอของหลักสูตรนั้น เพราะคำค้นหลังตัดชื่อแทบไม่มีเรื่องให้ค้น
+    ชิ้นที่ได้จึงไม่มีข้อเท็จจริงที่ใช้เทียบ (ดู comparison_evidence.programme_evidence) จัดเป็นกลุ่มตามหลักสูตรเพื่อให้
+    โมเดลแยกได้ว่าข้อเท็จจริงเป็นของใคร ชิ้นที่เป็นสารบัญหรืออ่านไม่ออกถูกตัดทิ้ง
     """
     scopes = resolve_scopes(db, question)
     if len(scopes) >= 2:
-        from app.services.program_match import newest_core_chunks
+        from app.services.program_match import _looks_like_table_of_contents
 
         vector = connector.embed(scopes[0].search_text)
         per_programme = -(-TOP_K_CHUNKS // len(scopes))
         chunks = []
         for scope in scopes:
-            found = search_similar_chunks(db, vector, top_k=per_programme, course_ids=scope.course_ids)
-            core = newest_core_chunks(db, scope.course_ids, score=found[0].score if found else 0.0)
-            core_ids = {c.chunk_id for c in core}
-            chunks += core + [c for c in found if c.chunk_id not in core_ids]
+            found = [
+                c for c in search_similar_chunks(db, vector, top_k=per_programme, course_ids=scope.course_ids)
+                if not is_garbled(c.content) and not _looks_like_table_of_contents(c.content)
+            ]
+            evidence = programme_evidence(db, scope.course_ids, score=found[0].score if found else 0.0)
+            evidence_ids = {c.chunk_id for c in evidence}
+            found = [c for c in found if c.chunk_id not in evidence_ids]
+            # หลักฐานรายด้านมาก่อน ชิ้นที่ค้นเจอเติมจนเต็มงบของหลักสูตรนั้น แต่ไม่น้อยกว่าครึ่งงบ เพราะชิ้นที่ค้นเจอคือหลักฐาน
+            # ของเรื่องที่ถามเจาะจง เช่น รายวิชาที่เกี่ยวข้อง ซึ่งหัวข้อตามแบบ มคอ.2 ไม่ครอบคลุม
+            keep = max(per_programme - len(evidence), per_programme // 2)
+            chunks += evidence + found[:keep]
         return chunks
     scope = resolve_scope(db, question)
     if scope is None:
@@ -330,7 +365,7 @@ def _program_names(db: Session) -> list[str]:
     return _PROGRAM_NAMES
 
 
-def _can_answer_from(connector, chunks, question: str, comparison: bool = False) -> bool:
+def _can_answer_from(connector, chunks, question: str, comparison: bool = False, note: str = "") -> bool:
     """
     เนื้อหาที่ค้นเจอมีข้อเท็จจริงตอบคำถามนี้ได้จริงไหม
 
@@ -338,10 +373,12 @@ def _can_answer_from(connector, chunks, question: str, comparison: bool = False)
     เพราะไม่มีเอกสารเล่มไหนเขียนเปรียบเทียบกับหลักสูตรอื่นไว้ (ตัวเลขที่วัดอยู่ใน prompts.GROUNDING_COMPARISON_
     SYSTEM_PROMPT) คำถามหลักสูตรเดียวยังใช้เกณฑ์เดิมทุกประการ
     """
-    return _grounding_verdict(connector, chunks, question, comparison)[0]
+    return _grounding_verdict(connector, chunks, question, comparison, note)[0]
 
 
-def _grounding_verdict(connector, chunks, question: str, comparison: bool = False) -> tuple[bool, str]:
+def _grounding_verdict(
+    connector, chunks, question: str, comparison: bool = False, note: str = ""
+) -> tuple[bool, str]:
     """
     ผลตัดสินของด่านตรวจเอกสารพร้อมเหตุผลที่โมเดลให้ คืน (ตอบได้ไหม, เหตุผล)
 
@@ -362,7 +399,7 @@ def _grounding_verdict(connector, chunks, question: str, comparison: bool = Fals
                     role="system",
                     content=GROUNDING_COMPARISON_SYSTEM_PROMPT if comparison else GROUNDING_CHECK_SYSTEM_PROMPT,
                 ),
-                LLMMessage(role="user", content=build_grounding_check_prompt(_format_chunks(chunks), question)),
+                LLMMessage(role="user", content=build_grounding_check_prompt(_with_note(note, _format_chunks(chunks)), question)),
             ],
             temperature=0.0,
             json_mode=True,
@@ -1151,7 +1188,15 @@ def prepare_answer(
     own_scope = resolve_scope(db, message) is not None
     context_programme = _context_programme(db, history) if history and not own_scope else None
     query = message
-    if not own_scope and _REFERENCE.search(message):
+    # --- 0.85 คำถามต่อเนื่องที่เปลี่ยนแค่หลักสูตรหรือปี ("แล้ว X ล่ะ") -> ประกอบคำถามใหม่จากคำถามก่อนหน้าด้วยโค้ด ---
+    # เรื่องที่ถามคงเดิม เปลี่ยนเฉพาะสิ่งที่ผู้ใช้ระบุใหม่ ไม่ให้โมเดลเดาว่าชื่อที่ผู้ใช้พิมพ์คือหลักสูตรหรือรายวิชา
+    # (ดู services/follow_up.py) ไม่ใช่กรณีนี้ก็ไปขั้นแทนคำอ้างอิงและขั้นเขียนคำถามใหม่ตามเดิม
+    swapped = swap_follow_up(db, history, message, context_programme) if history else None
+    if swapped:
+        if is_tuition_question(swapped):
+            return _tuition_reply(session.id, swapped)
+        query = swapped
+    elif not own_scope and _REFERENCE.search(message):
         if context_programme:
             query = _resolve_reference(message, context_programme)
         elif ask := _ask_which_program(db, written_in_thai(message)):
@@ -1191,7 +1236,14 @@ def prepare_answer(
     # มีตัวเลือกมากกว่าจึงได้คะแนนสูงกว่าเกือบเสมอ แม้จะเป็นเนื้อหาของสาขาอื่น — อาการเดียวกับ
     # ที่ทำให้ "สาขานี้" ได้คำตอบของเทคโนโลยีสารสนเทศ
     if history and query == message:
-        rewritten = _condense(connector, history, message, context_programme)
+        # ผู้ใช้เอ่ยชื่อหลักสูตรเอง: บอกขั้นเขียนคำถามใหม่ทั้งหลักสูตรที่คุยก่อนหน้าและหลักสูตรที่ระบุ แล้วทิ้งผลที่เปลี่ยนชุด
+        # หลักสูตรที่ผู้ใช้ระบุ ไม่ว่าคะแนนค้นหาจะสูงกว่าเท่าไร เพราะคะแนนต่างขอบเขตเทียบกันไม่ได้
+        # (docs/MKO_PHASE2_SHADOW_EVAL.md ข้อ 4)
+        explicit = explicit_programmes(db, message)
+        previous = context_programme or (_context_programme(db, history) if explicit else None)
+        rewritten = _condense(connector, history, message, previous, explicit=explicit)
+        if rewritten != message and not rewrite_keeps_explicit(db, message, rewritten):
+            rewritten = message
         if rewritten != message:
             # ถามต่อเรื่องค่าเทอมโดยไม่มีคำว่าค่าเทอม เช่น "ค่าเทอมเท่าไหร่" แล้วต่อด้วย "ของ comsci"
             # ขั้นค่าเทอม (0.5) ตรวจแค่ข้อความดิบจึงไม่เห็น เดิมข้อความนี้ไปค้นเอกสาร มคอ.2 ซึ่งไม่มีค่าเทอม
@@ -1227,6 +1279,17 @@ def prepare_answer(
     # ซึ่งต้องตอบคนละแบบ — เจอจริงกับหลักสูตรสาธารณสุขศาสตร์ที่คลังมีแต่ข้อมูลจากหน้าเว็บ
     # ไม่มีรายวิชา ผู้ใช้ถามถึงวิชาบังคับแล้วถูกตอบว่าถามนอกเรื่อง
     names_program = _names_a_program(db, interpreted) or _names_a_program(db, search_query)
+    # คำถามที่เอ่ยถึงหลายหลักสูตรใช้เกณฑ์เดียวกันทั้งด่านตรวจเอกสารและขั้นเขียนคำตอบ พร้อมสรุปหลักฐานรายด้านชุดเดียวกัน
+    comparison = _compares_programmes(db, interpreted)
+    evidence_note = describe_evidence(chunks) if comparison else ""
+    # คำถามหลายหลักสูตร: "มีเรื่องที่ถามของทุกหลักสูตรไหม" ตัดสินจากหลักฐานด้วยโค้ดก่อน ผลเดิมทุกครั้ง ไม่ให้ด่านตรวจที่เป็นโมเดล
+    # สุ่มผ่าน/ไม่ผ่านกับหลักฐานชุดเดียวกัน ส่วนที่โค้ดตัดสินไม่ได้จึงใช้ด่านตรวจที่เป็นโมเดลตามเดิม (ดู comparison_evidence)
+    support = (
+        comparison_support(interpreted, [s.matched_name for s in resolve_scopes(db, interpreted)], chunks)
+        if comparison else None
+    )
+    if support is not None and (support_line := support.note_line()):
+        evidence_note = f"{evidence_note}\n{support_line}" if evidence_note else support_line
     if best_score < OFF_TOPIC_THRESHOLD and not names_program:
         # ต่ำขนาดนี้คือไม่มีอะไรในคลังใกล้เคียงเลย ตัดจบโดยไม่ต้องเสียเวลาเรียก LLM
         reply_text, status = out_of_scope, "out_of_scope"
@@ -1239,7 +1302,12 @@ def prepare_answer(
         and not _is_about_scope(connector, interpreted)
     ):
         reply_text, status = out_of_scope, "out_of_scope"
-    elif not _can_answer_from(connector, chunks, interpreted, comparison=_compares_programmes(db, interpreted)):
+    elif support is not None and support.decision == MISSING_PROGRAMME:
+        # มีหลักสูตรที่ไม่มีเนื้อหาที่ใช้ได้เลย เปรียบเทียบไม่ได้แน่นอน
+        reply_text, status = not_found, "not_found"
+    elif not (support is not None and support.decision == SUPPORTED) and not _can_answer_from(
+        connector, chunks, interpreted, comparison=comparison, note=evidence_note
+    ):
         reply_text, status = not_found, "not_found"
     else:
         status = "answered"
@@ -1247,12 +1315,13 @@ def prepare_answer(
     messages: list[LLMMessage] = []
     if status == "answered":
         reply_text = None
-        messages = [LLMMessage(role="system", content=CHAT_SYSTEM_PROMPT)]
+        system_prompt = f"{CHAT_SYSTEM_PROMPT}\n\n{CHAT_COMPARISON_RULES}" if comparison else CHAT_SYSTEM_PROMPT
+        messages = [LLMMessage(role="system", content=system_prompt)]
         for m in history:
             messages.append(LLMMessage(role=m.role, content=m.content))
         messages.append(
             # คำถามที่ตีความแล้วตัวเดียวกับที่ด่านตรวจใช้ ("สาขานี้" ถูกแทนด้วยชื่อสาขาแล้ว หรือคำถามที่เขียนใหม่)
-            LLMMessage(role="user", content=build_chat_prompt(_format_chunks(chunks), interpreted))
+            LLMMessage(role="user", content=build_chat_prompt(_with_note(evidence_note, _format_chunks(chunks)), interpreted))
         )
         citations = [
             ChatCitation(
