@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
+from app.services.course_scope import degree_level_of, degree_of_title
 from app.services.curriculum_facts import ANSWERED, FactsResult, lookup
 from app.services.structured_intent import STRUCTURED, detect
 
@@ -51,6 +52,15 @@ _ITEM_COVERED = 0.6
 _THAI_DIGITS = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
 _CREDIT_NUMBER = re.compile(r"(\d{2,3})\s*หน่วยกิต")
 _YEAR = re.compile(r"(?<!\d)25\d{2}(?!\d)")
+
+# หลักสูตรบัณฑิตศึกษามียอดรวมต่ำกว่าเพดานข้างบน (เช่น ป.โท 36, ป.เอก 48) เพดานเดียวจึงใช้กับทุกระดับไม่ได้
+# แต่การลดเพดานทั้งระบบจะทำให้หน่วยกิตรายหมวดของปริญญาตรี (24, 30, 6) ถูกนับเป็นยอดรวม
+# จึงรับตัวเลขที่ต่ำกว่าเพดานเฉพาะเมื่อ (1) ทุกฉบับที่เทียบเป็นบัณฑิตศึกษา และ (2) ตัวเลขอยู่ในบริบท "ยอดรวมตลอดหลักสูตร"
+_GRADUATE_LEVELS = frozenset({"master", "doctoral"})
+_TOTAL_CREDIT_CONTEXT = re.compile(
+    r"(?:ตลอดหลักสูตร|หน่วยกิตรวม)[^0-9\n]{0,40}?(\d{1,3})\s*หน่วยกิต"
+    r"|(\d{1,3})\s*หน่วยกิต(?:รวม)?ตลอดหลักสูตร"
+)
 
 _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()
@@ -88,6 +98,27 @@ def _coverage(item: str, folded_reply: str, size: int = 4) -> float:
     return sum(g in folded_reply for g in grams) / len(grams)
 
 
+def _fact_levels(result: FactsResult) -> set[str | None]:
+    """ระดับปริญญาของทุกฉบับที่กำลังเทียบ — ฉบับที่อ่านระดับจากชื่อไม่ได้จะให้ None เพื่อให้ตัดสินแบบระมัดระวัง"""
+    return {degree_level_of(degree_of_title(f.course_title or "")) for f in result.facts}
+
+
+def _total_credits_in_reply(reply: str, levels: set[str | None]) -> list[int]:
+    """
+    ตัวเลขในคำตอบเดิมที่ถือว่าเป็น "หน่วยกิตรวมตลอดหลักสูตร"
+
+    ปริญญาตรี (และกรณีที่อ่านระดับไม่ได้) ใช้กฎเดิมคือเลข >= _TOTAL_CREDIT_FLOOR เท่านั้น
+    ถ้าทุกฉบับที่เทียบเป็นบัณฑิตศึกษา ให้รับเลขที่อยู่ในบริบทยอดรวมเพิ่มด้วย เพราะยอดรวมของระดับนี้
+    อยู่ต่ำกว่าเพดาน — บริบทเป็นตัวกันไม่ให้หน่วยกิตรายหมวดหรือหน่วยกิตวิทยานิพนธ์ถูกนับเป็นยอดรวม
+    """
+    plain = reply.replace(",", "")
+    found = {int(n) for n in _CREDIT_NUMBER.findall(plain) if int(n) >= _TOTAL_CREDIT_FLOOR}
+    if levels and levels <= _GRADUATE_LEVELS:
+        for match in _TOTAL_CREDIT_CONTEXT.finditer(plain):
+            found.add(int(match.group(1) or match.group(2)))
+    return sorted(found)
+
+
 def _set_verdict(expected: list[int], found: list[int]) -> str:
     if not found:
         return "unclear"
@@ -105,8 +136,11 @@ def compare(result: FactsResult | None, served_status: str | None, served_reply:
 
     if result.field == "total_credits":
         expected = sorted({f.value_int for f in result.facts})
-        found = sorted({int(n) for n in _CREDIT_NUMBER.findall(reply.replace(",", "")) if int(n) >= _TOTAL_CREDIT_FLOOR})
-        return _set_verdict(expected, found), {"expected": expected, "found_in_reply": found}
+        levels = _fact_levels(result)
+        found = _total_credits_in_reply(reply, levels)
+        detail = {"expected": expected, "found_in_reply": found,
+                  "degree_levels": sorted(lv for lv in levels if lv is not None)}
+        return _set_verdict(expected, found), detail
     if result.field == "edition_year":
         expected = sorted({f.value_int for f in result.facts})
         found = sorted({int(y) for y in _YEAR.findall(reply)})
