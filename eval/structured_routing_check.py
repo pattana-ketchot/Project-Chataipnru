@@ -19,7 +19,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:5
 os.environ.setdefault("JWT_SECRET", "local-test-only")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from app.services.course_scope import _distinctive_name  # noqa: E402
+from app.services.course_scope import _distinctive_name, degree_levels_of, degree_of_title  # noqa: E402
 from app.services.structured_intent import RAG, STRUCTURED, detect, years_in  # noqa: E402
 
 
@@ -196,11 +196,29 @@ class RealCatalogueChecks(unittest.TestCase):
 
     def test_every_programme_routes_to_itself(self):
         self.assertGreater(len(self.by_name), 10)
+        titles = {c.id: c.title for c in self.courses}
         for name, ids in self.by_name.items():
             with self.subTest(programme=name):
                 intent = detect(self.db, f"หลักสูตร{name}ต้องเรียนทั้งหมดกี่หน่วยกิต")
+                if len(degree_levels_of(list(ids), titles)) > 1:
+                    # ชื่อสาขาเดียวกันมีหลายระดับปริญญา คำถามที่ไม่ได้ระบุระดับจึงกำกวม — ไม่เดาให้ผู้ใช้
+                    self.assertEqual((intent.route, intent.reason), (RAG, "multiple_degree_levels"))
+                    continue
                 self.assertEqual((intent.route, intent.field, intent.programme), (STRUCTURED, "total_credits", name))
                 self.assertEqual(set(intent.course_ids), ids)
+
+    def test_a_programme_with_several_degree_levels_is_reachable_by_degree(self):
+        titles = {c.id: c.title for c in self.courses}
+        mixed = {name: ids for name, ids in self.by_name.items() if len(degree_levels_of(list(ids), titles)) > 1}
+        if not mixed:
+            self.skipTest("ฐานข้อมูลนี้ไม่มีชื่อสาขาที่มีหลายระดับปริญญา")
+        for name, ids in mixed.items():
+            for cid in ids:
+                degree = degree_of_title(titles[cid])
+                with self.subTest(programme=name, degree=degree):
+                    intent = detect(self.db, f"หลักสูตร{degree} สาขาวิชา{name} ต้องเรียนทั้งหมดกี่หน่วยกิต")
+                    self.assertEqual((intent.route, intent.field), (STRUCTURED, "total_credits"))
+                    self.assertEqual(set(intent.course_ids), {cid})
 
     def test_every_pair_is_left_to_rag(self):
         names = sorted(self.by_name)

@@ -84,6 +84,65 @@ def _year_in(text: str) -> str | None:
     return m.group(0) if m else None
 
 
+# ระดับปริญญา — อ่านจากชื่อปริญญาในชื่อหลักสูตร ไม่ผูกกับชื่อสาขาใด
+#
+# ต้องเรียงจากเฉพาะเจาะจงไปกว้าง เพราะ "ดุษฎีบัณฑิต" และ "มหาบัณฑิต" มีคำว่า "บัณฑิต" อยู่ด้วย
+# รูปแบบอักษรย่อ (วท.บ. / วท.ม. / ปร.ด.) ใช้ตัวท้ายเป็นตัวบอกระดับ ไม่ชนกับ "พ.ศ." เพราะตัวท้ายคนละตัว
+_DEGREE_LEVEL_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
+    (re.compile(r"ดุษฎีบัณฑิต|ดุษฏีบัณฑิต|ปริญญาเอก|ป\.\s*เอก|[ก-๙]{1,6}\.\s*ด\."), "doctoral"),
+    (re.compile(r"มหาบัณฑิต|ปริญญาโท|ป\.\s*โท|[ก-๙]{1,6}\.\s*ม\."), "master"),
+    # "บัณฑิต" ต้องเป็นส่วนท้ายของชื่อปริญญา (มีอักษรไทยนำหน้า) ไม่ใช่คำว่า "บัณฑิต" ลอยๆ ที่แปลว่าผู้จบการศึกษา
+    (re.compile(r"[ก-๙]{2,}บัณฑิต|ปริญญาตรี|ป\.\s*ตรี|[ก-๙]{1,6}\.\s*บ\."), "bachelor"),
+)
+
+
+def degree_of_title(title: str) -> str:
+    """
+    ชื่อปริญญาจากชื่อหลักสูตรในระบบ
+
+    'หลักสูตรวิทยาศาสตรมหาบัณฑิต สาขาวิชาการจัดการเทคโนโลยีการเกษตรฯ (พ.ศ. 2568)' -> 'วิทยาศาสตรมหาบัณฑิต'
+    'หลักสูตรการแพทย์แผนไทยประยุกต์บัณฑิต (พ.ศ. 2560)'                          -> 'การแพทย์แผนไทยประยุกต์บัณฑิต'
+    """
+    name = re.sub(r"\s*\(.*?\)\s*$", "", title).strip()
+    head = name.split("สาขาวิชา", 1)[0]
+    return re.sub(r"^หลักสูตร", "", head).strip()
+
+
+def degree_level_of(text: str) -> str | None:
+    """ระดับปริญญาที่ข้อความนี้บอก (bachelor / master / doctoral) คืน None ถ้าไม่ได้บอก"""
+    for pattern, level in _DEGREE_LEVEL_PATTERNS:
+        if pattern.search(text):
+            return level
+    return None
+
+
+def requested_degree_level(question: str) -> str | None:
+    """ระดับปริญญาที่ผู้ใช้ระบุในคำถาม — ชื่อปริญญา อักษรย่อ หรือคำว่าปริญญาตรี/โท/เอก"""
+    return degree_level_of(question)
+
+
+def degree_levels_of(ids: list[uuid.UUID], titles: dict[uuid.UUID, str]) -> set[str]:
+    """ระดับปริญญาทั้งหมดของหลักสูตรชุดนี้ (ชื่อที่อ่านระดับไม่ได้จะไม่ถูกนับ)"""
+    return {level for cid in ids if (level := degree_level_of(degree_of_title(titles.get(cid, "")))) is not None}
+
+
+def _narrow_by_degree(ids: list[uuid.UUID], titles: dict[uuid.UUID, str], question: str) -> list[uuid.UUID]:
+    """
+    ถ้าคำถามระบุระดับปริญญา ให้เหลือเฉพาะหลักสูตรระดับนั้น
+
+    คลังนี้มีสาขาที่ชื่อสาขาและปีเดียวกันแต่คนละระดับปริญญา (การจัดการเทคโนโลยีการเกษตรและบริหาร
+    ทรัพยากรชุมชน พ.ศ. 2568 มีทั้งปริญญาโทและปริญญาเอก) ชื่อเฉพาะของทั้งสองเล่มเท่ากัน และปีก็เท่ากัน
+    ตัวกรองเดิมจึงแยกไม่ได้ ผู้ใช้ที่พิมพ์ "วิทยาศาสตรมหาบัณฑิต" มาจะได้เล่มปริญญาเอก
+
+    ถ้าระดับที่ระบุไม่ตรงกับเล่มใดเลย ให้คงรายการเดิมไว้ ด้วยเหตุผลเดียวกับการกรองปี
+    """
+    level = requested_degree_level(question)
+    if level is None:
+        return ids
+    matched = [cid for cid in ids if degree_level_of(degree_of_title(titles.get(cid, ""))) == level]
+    return matched or ids
+
+
 def _narrow_by_year(
     ids: list[uuid.UUID], titles: dict[uuid.UUID, str], question: str
 ) -> list[uuid.UUID]:
@@ -105,6 +164,11 @@ def _narrow_by_year(
     return matched or ids
 
 
+def _narrow(ids: list[uuid.UUID], titles: dict[uuid.UUID, str], question: str) -> list[uuid.UUID]:
+    """จำกัดขอบเขตด้วยสิ่งที่คำถามระบุ: ปีการศึกษาก่อน แล้วจึงระดับปริญญา"""
+    return _narrow_by_degree(_narrow_by_year(ids, titles, question), titles, question)
+
+
 def resolve_scope(db: Session, question: str) -> CourseScope | None:
     """คืนขอบเขตหลักสูตรถ้าระบุได้ มิฉะนั้นคืน None (แปลว่าให้ค้นทั้งคลัง)"""
     courses = db.scalars(select(Course).where(Course.is_active.is_(True))).all()
@@ -121,7 +185,7 @@ def resolve_scope(db: Session, question: str) -> CourseScope | None:
     # ส่วนหนึ่งของชื่อยาวชนะ (เช่น 'คณิตศาสตร์' อยู่ใน 'คหกรรมศาสตร์' ไม่ได้ แต่กันไว้)
     for name in sorted(by_name, key=len, reverse=True):
         if name and name.lower() in lowered:
-            return _build(_narrow_by_year(by_name[name], titles, question), name, question)
+            return _build(_narrow(by_name[name], titles, question), name, question)
 
     # ไม่เจอชื่อตรงๆ ลองผ่านคำย่อ เช่น 'วิทคอม' -> 'วิทยาการคอมพิวเตอร์'
     #
@@ -134,7 +198,7 @@ def resolve_scope(db: Session, question: str) -> CourseScope | None:
         for name in by_name:
             if name and name in full:
                 # ตัดคำย่อออกจากคำถามแทนชื่อเต็ม เพราะในคำถามมีแค่คำย่อ
-                ids = _narrow_by_year(by_name[name], titles, question)
+                ids = _narrow(by_name[name], titles, question)
                 return _build(ids, name, question, strip=alias)
     return None
 
@@ -173,7 +237,7 @@ def resolve_scopes(db: Session, question: str) -> list[CourseScope]:
 
     search_text = _search_text(question, [target for _, target in found])
     return [
-        CourseScope(course_ids=_narrow_by_year(by_name[name], titles, question), matched_name=name, search_text=search_text)
+        CourseScope(course_ids=_narrow(by_name[name], titles, question), matched_name=name, search_text=search_text)
         for name, _ in found
     ]
 
