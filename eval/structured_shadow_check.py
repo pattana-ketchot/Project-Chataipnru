@@ -212,12 +212,23 @@ class ChatHookChecks(unittest.TestCase):
         self.assertEqual(off.model_dump(), broken.model_dump())
 
 
-def facts(field, *values, items=None):
-    rows = [EditionFact(course_id=str(uuid.uuid4()), course_title=f"ฉบับ {n}", edition_year=2560 + n, value_int=v)
+def facts(field, *values, items=None, titles=None):
+    names = list(titles or [])
+    rows = [EditionFact(course_id=str(uuid.uuid4()),
+                        course_title=names[n] if n < len(names) else f"ฉบับ {n}",
+                        edition_year=2560 + n, value_int=v)
             for n, v in enumerate(values)]
     if items is not None:
-        rows = [EditionFact(course_id=str(uuid.uuid4()), course_title="ฉบับ", edition_year=2566, items=items)]
+        rows = [EditionFact(course_id=str(uuid.uuid4()), course_title=names[0] if names else "ฉบับ",
+                            edition_year=2566, items=items)]
     return FactsResult(ANSWERED, field, rows)
+
+
+# ชื่อหลักสูตรสมมุติ ใช้แต่รูปแบบชื่อปริญญาเพื่อให้ตัวเทียบอ่านระดับได้ ไม่ผูกกับสาขาใดจริง
+BACHELOR = "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาทดสอบ (พ.ศ. 2566)"
+BACHELOR_OLD = "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาทดสอบ (พ.ศ. 2560)"
+MASTER = "หลักสูตรวิทยาศาสตรมหาบัณฑิต สาขาวิชาทดสอบ (พ.ศ. 2566)"
+DOCTORAL = "หลักสูตรปรัชญาดุษฎีบัณฑิต สาขาวิชาทดสอบ (พ.ศ. 2566)"
 
 
 class CompareChecks(unittest.TestCase):
@@ -244,6 +255,111 @@ class CompareChecks(unittest.TestCase):
         self.assertEqual(shadow.compare(facts("total_credits", 130), "not_found", "ไม่พบข้อมูล")[0], "served_no_answer")
         self.assertEqual(shadow.compare(FactsResult(NO_DATA, "careers"), "answered", "x")[0], "not_compared")
         self.assertEqual(shadow.compare(None, "answered", "x")[0], "not_compared")
+
+
+class GraduateCreditCompareChecks(unittest.TestCase):
+    """
+    หน่วยกิตรวมของทุกระดับปริญญา — ยอดรวมของบัณฑิตศึกษาต่ำกว่าเพดานของปริญญาตรี
+
+    กติกาที่ต้องจริงพร้อมกัน
+        - ปริญญาตรียังคงรับเฉพาะเลข >= เพดาน หน่วยกิตรายหมวดต้องไม่ถูกนับเป็นยอดรวม
+        - ป.โท/ป.เอก รับเลขต่ำกว่าเพดานได้เฉพาะเมื่ออยู่ในบริบทยอดรวมตลอดหลักสูตร
+        - ชื่อหลักสูตรที่อ่านระดับไม่ได้ หรือชุดที่ปนหลายระดับ ให้ใช้กติกาเดิมที่เข้มกว่า
+    """
+
+    def verdict(self, result, reply):
+        return shadow.compare(result, "answered", reply)[0]
+
+    def test_1_bachelor_total_still_agrees(self):
+        result = facts("total_credits", 130, titles=[BACHELOR])
+        for reply in ("หน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต",
+                      "ต้องเรียน ๑๓๐ หน่วยกิต",
+                      "ไม่น้อยกว่า 130 หน่วยกิต หมวดศึกษาทั่วไป 30 หน่วยกิต"):
+            with self.subTest(reply=reply):
+                self.assertEqual(self.verdict(result, reply), "agree")
+        for value in (124, 127, 128):
+            with self.subTest(value=value):
+                other = facts("total_credits", value, titles=[BACHELOR])
+                self.assertEqual(self.verdict(other, f"รวมตลอดหลักสูตร {value} หน่วยกิต"), "agree")
+
+    def test_2_bachelor_category_credits_are_not_a_total(self):
+        result = facts("total_credits", 130, titles=[BACHELOR])
+        for reply in ("หมวดวิชาศึกษาทั่วไป 30 หน่วยกิต หมวดวิชาเฉพาะ 24 หน่วยกิต",
+                      "หน่วยกิตรวมตลอดหลักสูตรของหมวดนี้ 24 หน่วยกิต"):
+            with self.subTest(reply=reply):
+                self.assertNotEqual(self.verdict(result, reply), "agree")
+                self.assertEqual(self.verdict(result, reply), "unclear")
+
+    def test_3_master_total_agrees(self):
+        result = facts("total_credits", 36, titles=[MASTER])
+        for reply in ("หน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 36 หน่วยกิต",
+                      "เรียน 36 หน่วยกิตตลอดหลักสูตร",
+                      "จำนวนหน่วยกิตรวมตลอดหลักสูตร ๓๖ หน่วยกิต"):
+            with self.subTest(reply=reply):
+                self.assertEqual(self.verdict(result, reply), "agree")
+
+    def test_4_doctoral_total_agrees(self):
+        result = facts("total_credits", 48, titles=[DOCTORAL])
+        self.assertEqual(self.verdict(result, "หน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 48 หน่วยกิต"), "agree")
+        self.assertEqual(self.verdict(facts("total_credits", 54, titles=[DOCTORAL]),
+                                      "รวมตลอดหลักสูตร 54 หน่วยกิต"), "agree")
+
+    def test_5_graduate_category_credits_are_not_a_total(self):
+        result = facts("total_credits", 36, titles=[MASTER])
+        for reply in ("หมวดวิชาบังคับ 24 หน่วยกิต หมวดวิชาเลือก 6 หน่วยกิต",
+                      "ใช้เวลาศึกษาตลอดหลักสูตร 2 ปี มีวิทยานิพนธ์ 12 หน่วยกิต",
+                      "ขึ้นกับแผนการเรียน"):
+            with self.subTest(reply=reply):
+                self.assertNotEqual(self.verdict(result, reply), "agree")
+                self.assertEqual(self.verdict(result, reply), "unclear")
+
+    def test_6_graduate_wrong_total_disagrees(self):
+        self.assertEqual(self.verdict(facts("total_credits", 48, titles=[DOCTORAL]),
+                                      "หน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 36 หน่วยกิต"), "disagree")
+        self.assertEqual(self.verdict(facts("total_credits", 36, titles=[MASTER]),
+                                      "หน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 48 หน่วยกิต"), "disagree")
+
+    def test_7_many_numbers_with_the_right_total_still_agrees(self):
+        reply = ("โครงสร้างหลักสูตร หมวดวิชาบังคับ 12 หน่วยกิต หมวดวิชาเลือก 6 หน่วยกิต "
+                 "วิทยานิพนธ์ 18 หน่วยกิต หน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 36 หน่วยกิต")
+        result = facts("total_credits", 36, titles=[MASTER])
+        self.assertEqual(self.verdict(result, reply), "agree")
+        self.assertEqual(shadow.compare(result, "answered", reply)[1]["found_in_reply"], [36])
+
+    def test_8_multi_edition_totals_are_unchanged(self):
+        result = facts("total_credits", 124, 130, titles=[BACHELOR_OLD, BACHELOR])
+        self.assertEqual(self.verdict(result, "ฉบับ พ.ศ. 2560 124 หน่วยกิต ฉบับ พ.ศ. 2566 130 หน่วยกิต"), "agree")
+        self.assertEqual(self.verdict(result, "130 หน่วยกิต"), "partial")
+        graduate = facts("total_credits", 36, 42, titles=[MASTER, MASTER])
+        self.assertEqual(self.verdict(graduate, "รวมตลอดหลักสูตร 36 หน่วยกิต และอีกฉบับ 42 หน่วยกิตตลอดหลักสูตร"), "agree")
+
+    def test_9_other_fields_are_unchanged(self):
+        for field, title in (("careers", MASTER), ("objectives", DOCTORAL), ("admission", BACHELOR)):
+            result = facts(field, items=["นักวิเคราะห์ข้อมูล", "นักพัฒนาซอฟต์แวร์", "ผู้ดูแลระบบเครือข่าย"], titles=[title])
+            with self.subTest(field=field):
+                self.assertEqual(self.verdict(result, "นักวิเคราะห์ข้อมูล นักพัฒนาซอฟต์แวร์ และผู้ดูแลระบบเครือข่าย"), "agree")
+                self.assertEqual(self.verdict(result, "เป็นนักวิเคราะห์ข้อมูลได้"), "partial")
+                self.assertEqual(self.verdict(result, "ครูสอนคณิตศาสตร์"), "disagree")
+        year = facts("edition_year", 2566, titles=[MASTER])
+        self.assertEqual(self.verdict(year, "หลักสูตรปรับปรุง พ.ศ. 2566"), "agree")
+
+    def test_10_no_data_and_served_no_answer_are_unchanged(self):
+        result = facts("total_credits", 36, titles=[MASTER])
+        self.assertEqual(shadow.compare(result, "not_found", "ไม่พบข้อมูล")[0], "served_no_answer")
+        self.assertEqual(shadow.compare(result, "out_of_scope", "อยู่นอกขอบเขต")[0], "served_no_answer")
+        self.assertEqual(shadow.compare(FactsResult(NO_DATA, "total_credits"), "answered", "36 หน่วยกิต")[0], "not_compared")
+        self.assertEqual(shadow.compare(None, "answered", "36 หน่วยกิต")[0], "not_compared")
+
+    def test_unreadable_or_mixed_levels_keep_the_stricter_rule(self):
+        unreadable = facts("total_credits", 36)  # ชื่อ 'ฉบับ 0' อ่านระดับปริญญาไม่ได้
+        self.assertEqual(self.verdict(unreadable, "หน่วยกิตรวมตลอดหลักสูตร 36 หน่วยกิต"), "unclear")
+        mixed = facts("total_credits", 36, 130, titles=[MASTER, BACHELOR])
+        self.assertEqual(shadow.compare(mixed, "answered",
+                                        "ป.โท รวมตลอดหลักสูตร 36 หน่วยกิต ป.ตรี 130 หน่วยกิต")[1]["found_in_reply"], [130])
+
+    def test_detail_reports_the_degree_levels_used(self):
+        detail = shadow.compare(facts("total_credits", 48, titles=[DOCTORAL]), "answered", "48 หน่วยกิตตลอดหลักสูตร")[1]
+        self.assertEqual(detail, {"expected": [48], "found_in_reply": [48], "degree_levels": ["doctoral"]})
 
 
 class ShadowRecordChecks(unittest.TestCase):
