@@ -25,7 +25,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.course import Course
-from app.services.course_scope import _distinctive_name, resolve_scopes, without_programme_names
+from app.services.course_scope import (
+    _distinctive_name,
+    degree_levels_of,
+    requested_degree_level,
+    resolve_scopes,
+    without_programme_names,
+)
 
 STRUCTURED = "structured"
 RAG = "rag"
@@ -145,6 +151,13 @@ def detect(db: Session, question: str) -> StructuredIntent:
         return StructuredIntent(RAG, "multiple_programmes", field_key)
 
     scope = scopes[0]
+
+    # ชื่อสาขาเดียวกันอาจมีหลายระดับปริญญา (โท/เอก ปีเดียวกัน) ถ้าผู้ใช้ไม่ได้บอกระดับ
+    # การเลือกเล่มใดเล่มหนึ่งคือการเดา ให้ไป RAG ตามหลักของโมดูลนี้ (ไม่แน่ใจ = ไม่ตอบจากฐานข้อมูล)
+    titles = {c.id: c.title for c in courses}
+    if requested_degree_level(question) is None and len(degree_levels_of(list(scope.course_ids), titles)) > 1:
+        return StructuredIntent(RAG, "multiple_degree_levels", field_key)
+
     return StructuredIntent(
         STRUCTURED,
         "single_programme_field",

@@ -23,6 +23,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models.course import Course
+from app.services.course_scope import degree_levels_of
 from app.services.structured_intent import STRUCTURED, StructuredIntent
 
 ANSWERED = "answered"
@@ -195,6 +196,13 @@ def lookup(db: Session, intent: StructuredIntent) -> FactsResult:
         ids = [cid for cid in ids if years.get(cid) == intent.year_be]
         if not ids:
             return FactsResult(NO_DATA, intent.field, note=f"ไม่มีหลักสูตรฉบับ พ.ศ. {intent.year_be} ของ{intent.programme}")
+
+    # ค่าเดี่ยวแสดงทุกฉบับพร้อมชื่อหลักสูตรเต็ม (ซึ่งมีชื่อปริญญาอยู่) จึงไม่มีการเลือกแทนผู้ใช้
+    # แต่รายการแสดงฉบับเดียว ถ้าชุดนี้มีหลายระดับปริญญาการหยิบฉบับแรกคือการเดาให้ผู้ใช้ จึงบอกว่ากำกวมแทน
+    if intent.field in LIST_FIELDS and len(degree_levels_of(ids, titles)) > 1:
+        return FactsResult(NO_DATA, intent.field,
+                           note="ชื่อสาขานี้มีหลายระดับปริญญา (" + " และ ".join(sorted(titles[cid] for cid in ids))
+                                + ") ระบุระดับปริญญาที่ต้องการ")
 
     if intent.field in LIST_FIELDS:
         facts, publication_id = _list_facts(db, intent.field, ids, years)

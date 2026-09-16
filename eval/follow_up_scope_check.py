@@ -26,9 +26,9 @@ os.environ.setdefault("JWT_SECRET", "local-test-only")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import app.services.chat as chat  # noqa: E402
-from app.services.course_scope import _distinctive_name  # noqa: E402
+from app.services.course_scope import _distinctive_name, degree_levels_of  # noqa: E402
 from app.services.follow_up import explicit_programmes, rewrite_keeps_explicit, swap_follow_up  # noqa: E402
-from app.services.structured_intent import STRUCTURED, detect  # noqa: E402
+from app.services.structured_intent import RAG, STRUCTURED, detect  # noqa: E402
 
 
 def course(title):
@@ -279,9 +279,19 @@ class RealCatalogueChecks(unittest.TestCase):
     def test_every_ordered_pair_keeps_field_and_changes_programme(self):
         names = sorted({_distinctive_name(c.title) for c in self.courses})
         self.assertGreater(len(names), 10)
+        titles = {c.id: c.title for c in self.courses}
+        by_name = {}
+        for c in self.courses:
+            by_name.setdefault(_distinctive_name(c.title), []).append(c.id)
         for old, new in itertools.permutations(names, 2):
             with self.subTest(old=old, new=new):
                 asked = swap_follow_up(self.db, [user(f"หลักสูตร{old}เรียนกี่หน่วยกิต"), bot()], f"แล้ว{new}ล่ะ")
+                # คำถามที่เขียนใหม่ต้องเปลี่ยนไปถามสาขาใหม่เสมอ
+                self.assertIn(new, asked)
+                if len(degree_levels_of(by_name[new], titles)) > 1:
+                    # สาขาใหม่มีหลายระดับปริญญาและคำถามต่อเนื่องไม่ได้ระบุระดับ — กำกวม จึงไม่ตอบจากฐานข้อมูล
+                    self.assertEqual(meaning(self.db, asked)[:2], (RAG, "total_credits"))
+                    continue
                 self.assertEqual(meaning(self.db, asked)[:3], (STRUCTURED, "total_credits", new))
 
 

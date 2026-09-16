@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.db.session import SessionLocal  # noqa: E402
-from app.services.course_scope import _distinctive_name  # noqa: E402
+from app.services.course_scope import _distinctive_name, degree_levels_of, degree_of_title  # noqa: E402
 from app.services.curriculum_facts import ANSWERED, NO_DATA, lookup  # noqa: E402
 from app.services.structured_intent import STRUCTURED, StructuredIntent, detect  # noqa: E402
 
@@ -171,8 +171,12 @@ class PublishedFactsChecks(unittest.TestCase):
             if year_row is None:
                 continue
             name, year = self.name_of(v["course_id"]), year_row["value_int"]
+            titles = {c["id"]: c["title"] for c in self.courses}
+            # ชื่อสาขาที่มีหลายระดับปริญญา คำถามต้องระบุระดับด้วย ไม่งั้นกำกวมและระบบจะไม่เดาให้
+            asked_name = (f"{degree_of_title(v['course_title'])} สาขาวิชา{name}"
+                          if len(degree_levels_of(self.by_name[name], titles)) > 1 else name)
             with self.subTest(course=v["course_title"]):
-                found = detect(self.db, f"หลักสูตร{name} พ.ศ. {year} ต้องเรียนทั้งหมดกี่หน่วยกิต")
+                found = detect(self.db, f"หลักสูตร{asked_name} พ.ศ. {year} ต้องเรียนทั้งหมดกี่หน่วยกิต")
                 result = lookup(self.db, found)
                 self.assertEqual(result.status, ANSWERED)
                 self.assertTrue(all(f.edition_year == year for f in result.facts))
