@@ -145,6 +145,35 @@ def labels_of(field: str, values) -> list[str]:
     return [label_of(field, v) for v in (values or [])]
 
 
+# ลำดับมาตรฐานของตัวเลือกแต่ละข้อ = ลำดับที่เขียนไว้ใน OPTION_LABELS
+_LABEL_RANK: dict[str, dict[str, int]] = {
+    field: {label: rank for rank, label in enumerate(table.values())}
+    for field, table in OPTION_LABELS.items()
+}
+
+
+def canonical_labels(field: str, values) -> list[str]:
+    """
+    แปลคำตอบแบบเลือกได้หลายข้อเป็นข้อความ แล้วตัดตัวซ้ำและเรียงลำดับให้คงที่
+
+    ทำไมต้องเรียง
+    ------------
+    หน้าเว็บเก็บตัวเลือกตามลำดับที่ผู้ใช้กด แล้วลำดับนั้นกลายเป็นลำดับคำในข้อความที่ถูก
+    แปลงเป็นเวกเตอร์ เลือก "คณิตศาสตร์" ก่อน "คอมพิวเตอร์" กับกดสลับกันจึงได้ข้อความ
+    ต่างกัน เวกเตอร์ต่างกัน และเปอร์เซ็นต์ของทุกสาขาขยับพร้อมกัน ทั้งที่คำตอบชุดเดียวกัน
+
+    ลำดับที่ใช้
+    ---------
+    ตัวเลือกที่รู้จักเรียงตามลำดับใน OPTION_LABELS ตัวที่ไม่รู้จัก (เช่นชื่อวิชาซึ่งไม่มี
+    ตาราง หรือตัวเลือกที่หน้าเว็บเพิ่มใหม่) ต่อท้ายโดยเรียงตามตัวอักษร ไม่มีคำตอบใดถูกทิ้ง
+
+    ตัดตัวซ้ำหลังแปลแล้ว รหัสกับข้อความไทยของตัวเลือกเดียวกันจึงนับเป็นข้อเดียว
+    """
+    rank = _LABEL_RANK.get(field, {})
+    unique = dict.fromkeys(labels_of(field, values))
+    return sorted(unique, key=lambda v: (0, rank[v], "") if v in rank else (1, 0, str(v)))
+
+
 def _edition_year(title: str) -> int:
     import re
 

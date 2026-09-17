@@ -32,7 +32,7 @@ from app.services.chat import PriorTurn, stream_answer
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
 from app.services.program_names import program_about, program_facts
-from app.services.web_compat import label_of, labels_of, match_by_title, normalise_title, shared_user
+from app.services.web_compat import canonical_labels, label_of, match_by_title, normalise_title, shared_user
 
 from llm.connector import LLMConnectionError  # noqa: E402
 from llm.prompts import NO_EVIDENCE_MARKER  # noqa: E402
@@ -246,13 +246,16 @@ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_
     # แปลรหัสตัวเลือกเป็นข้อความไทยที่ผู้ใช้เห็นก่อนเสมอ — หน้าเว็บส่งรหัสอย่าง "tech"
     # หรือ "career-growth" มา ซึ่งแทบไม่มีความหมายให้เทียบกับเอกสารภาษาไทย
     # (ดูเหตุผลและตารางใน services/web_compat.py)
+    #
+    # ข้อที่เลือกได้หลายข้อต้องผ่าน canonical_labels เพื่อให้คำตอบชุดเดียวกันได้คะแนนเดียวกัน
+    # ไม่ว่าผู้ใช้จะกดเลือกลำดับไหน
     answers = {
         "study_track": label_of("track", a["track"]) if a.get("track") else None,
         # ข้อวิชาที่ชอบส่งเป็นชื่อวิชาภาษาไทยอยู่แล้ว label_of จึงคืนค่าเดิมไป
-        "favorite_subjects": labels_of("subjects", a.get("subjects")),
-        "interests": labels_of("interests", a.get("interests")),
-        "aptitudes": labels_of("skills", a.get("skills")),
-        "career_goal": labels_of("goals", a.get("goals")),
+        "favorite_subjects": canonical_labels("subjects", a.get("subjects")),
+        "interests": canonical_labels("interests", a.get("interests")),
+        "aptitudes": canonical_labels("skills", a.get("skills")),
+        "career_goal": canonical_labels("goals", a.get("goals")),
         "work_environment": [label_of("environment", a["environment"])] if a.get("environment") else [],
     }
 
