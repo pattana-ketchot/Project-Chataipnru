@@ -116,10 +116,23 @@ class RecommendationReplyChecks(_WithProgramNames):
         self.assertIn("วิทยาการคอมพิวเตอร์", reply)
         self.assertIn("ยังเขียนคำอธิบายประกอบให้ไม่ได้", reply)
 
-    def test_ไม่มีหลักฐานทุกรายการจึงปฏิเสธได้(self):
-        """ทุกรายการถูกตรวจแล้วและไม่มีหลักฐาน — เป็นคำตอบจริง ต้องยังปฏิเสธได้"""
+    def test_ไม่มีหลักฐานทุกรายการยังต้องคงรายชื่อที่จัดอันดับไว้(self):
+        """
+        เปลี่ยนความคาดหมายจากเดิมที่ตอบว่า "ยังไม่พบสาขา" เมื่อทุกรายการติดเครื่องหมายไม่มีหลักฐาน
+
+        เหตุผล: รายชื่อสาขามาจากการจัดอันดับด้วยเวกเตอร์ซึ่งให้ผลเดิมทุกครั้ง แต่ขั้นเขียนเหตุผล
+        ไม่นิ่ง การตัดสาขาออกตามผลของขั้นนั้นทำให้คำถามเดียวกันได้รายชื่อคนละชุด (วัดจาก log จริง
+        ของคำถาม "สาขาไหนเหมาะกับคนชอบทำงานกับคอมพิวเตอร์" ได้สี่แบบใน 5 ครั้ง) ดู
+        docs/CHAT_BROAD_RECOMMENDATION_RCA.md
+
+        ยังต้องไม่กล่าวอ้างเกินหลักฐาน จึงบอกตรงๆ ว่าเอกสารไม่ได้ระบุความเชื่อมโยงไว้
+        """
         reply = self.reply_for([FakeMatch(MATH, NO_EVIDENCE_MARKER), FakeMatch(ANIM, NO_EVIDENCE_MARKER)])
-        self.assertIn("ยังไม่พบสาขา", reply)
+        self.assertIn("คณิตศาสตร์", reply)
+        self.assertIn("คอมพิวเตอร์แอนิเมชันและมัลติมีเดีย", reply)
+        self.assertIn("ไม่ได้ระบุไว้ตรงๆ", reply)
+        self.assertNotIn(NO_EVIDENCE_MARKER, reply)
+        self.assertNotIn("ยังไม่พบสาขา", reply)
 
     def test_ไม่มีผลการจัดอันดับต้องคืนค่าว่าง(self):
         self.assertIsNone(self.reply_for([]))
@@ -170,8 +183,11 @@ class RecommendationReplyChecks(_WithProgramNames):
             [FakeMatch(CS, NO_EVIDENCE_MARKER), FakeMatch(IT, NO_EVIDENCE_MARKER)], refinement=True,
         )
         self.assertNotIn("ยังไม่พบสาขา", reply)
-        self.assertIn("ยังหาสาขาที่ตรงกว่าเดิมไม่ได้", reply)
-        self.assertIn("แนะนำไปก่อนหน้านี้", reply)
+        # เปลี่ยนความคาดหมาย: เดิมตอบด้วยประโยค "ยังหาสาขาที่ตรงกว่าเดิมไม่ได้" โดยไม่แสดงรายชื่อ
+        # ตอนนี้แสดงสาขาที่จัดอันดับได้ต่อ ซึ่งไม่ขัดกับคำแนะนำรอบก่อนเช่นกันและคงที่กว่า
+        self.assertIn("วิทยาการคอมพิวเตอร์", reply)
+        self.assertIn("เทคโนโลยีสารสนเทศ", reply)
+        self.assertNotIn(NO_EVIDENCE_MARKER, reply)
 
     def test_รอบต่อยอดส่งข้อความเต็มให้ขั้นเขียนเหตุผล(self):
         """
