@@ -485,7 +485,13 @@ def written_in_thai(text: str) -> bool:
     return any("฀" <= ch <= "๿" for ch in text)
 
 
-def _recommendation_intent(db: Session, connector, message: str) -> str | None:
+# ผลของการจำแนกเจตนาเมื่อ "ขอคำแนะนำ แต่ยังไม่ได้บอกความสนใจ"
+#
+# ต้องเป็นสถานะที่สามแยกจาก None (ไม่ใช่การขอคำแนะนำ) และจากข้อความความสนใจ เพราะสอง
+# กรณีนี้ต้องตอบคนละแบบ: อันหนึ่งไหลไปทางค้นเอกสาร อีกอันต้องถามกลับ ไม่ใช่ไปจับคู่สาขา
+NO_PREFERENCE = object()
+
+def _recommendation_intent(db: Session, connector, message: str) -> str | object | None:
     """
     ข้อความนี้ขอให้ช่วยเลือกสาขาจากความสนใจหรือไม่ คืน "ส่วนที่บอกความสนใจ" ถ้าใช่ มิฉะนั้น None
 
@@ -541,7 +547,22 @@ def _recommendation_intent(db: Session, connector, message: str) -> str | None:
     if not isinstance(data, dict) or data.get("recommendation") is not True:
         return None
     interest = str(data.get("interest") or "").strip()
-    if not interest or re.sub(r"\s+", "", interest) not in re.sub(r"\s+", "", message):
+    if not interest:
+        # ขอคำแนะนำจริง แต่ยังไม่ได้บอกว่าชอบอะไร — คนละเรื่องกับ "ไม่ใช่การขอคำแนะนำ"
+        #
+        # เดิมกรณีนี้ถูกแทนด้วยข้อความทั้งประโยคแล้วส่งไปจับคู่ต่อ ผลคือ "เรียนไรดี" ได้
+        # สามสาขาที่อธิบายไม่ได้ว่าเกี่ยวตรงไหน — ทั้งสามบรรทัดใต้ชื่อเขียนเองว่าเอกสาร
+        # ไม่ได้ระบุความเชื่อมโยงไว้ (log จริง 2026-09-17 19:57Z) การจับคู่จากข้อความที่
+        # ไม่มีความสนใจอยู่เลยให้อันดับที่ไม่มีความหมาย
+        #
+        # วัดกับพรอมต์และโมเดลของระบบจริง (docs/CHAT_RECOMMENDATION_CLARIFICATION_VALIDATION.md)
+        #     "เรียนไรดี"                    -> interest ""
+        #     "แนะนำสาขาหน่อย"                -> interest ""
+        #     "ชอบเขียนโปรแกรม เรียนอะไรดี"   -> interest "ชอบเขียนโปรแกรม"
+        # สัญญาณนี้จึงแยกสองกรณีออกจากกันได้เอง ไม่ต้องใช้รายการคำซึ่งไม่มีวันครบ
+        return NO_PREFERENCE
+    if re.sub(r"\s+", "", interest) not in re.sub(r"\s+", "", message):
+        # โมเดลเรียบเรียงใหม่หรือเติมคำที่ผู้ใช้ไม่ได้พูด ใช้ข้อความเดิมแทน ไม่เอาถ้อยคำที่แต่งขึ้นไปจับคู่
         return message
     # ความสนใจที่มีแค่ชื่อสาขา แปลว่าผู้ใช้เลือกสาขาไว้แล้ว ต้องการข้อมูลของสาขานั้น ไม่ใช่ให้ช่วยเลือก
     # วัดบนระบบจริง "อยากเรียน วิทคอม" ถูกตีเป็นขอคำแนะนำ 1 ใน 2 รอบ โดยคัดความสนใจมาได้แค่
@@ -753,6 +774,21 @@ _FOLLOW_UP_QUESTION = "บอกเพิ่มได้ไหมครับว
 # พลาดก็กลับไปเป็นอาการเดิม ส่วนการถามกับความสนใจที่ชัดอยู่แล้ว เช่น "ชอบคำนวณ" ได้คณิตศาสตร์
 # เสียแค่หนึ่งประโยค
 _FOLLOW_UP_QUESTION_SINGLE = "ถ้าสิ่งที่คุณสนใจกว้างกว่าสาขานี้ บอกเพิ่มได้ไหมครับว่าชอบงานแบบไหนหรือวิชาอะไรเป็นพิเศษ"
+
+
+# คำถามกลับเมื่อผู้ใช้ขอให้ช่วยเลือกสาขาแต่ยังไม่ได้บอกความสนใจใดเลย (ดู NO_PREFERENCE)
+#
+# ขึ้นต้นด้วย _FOLLOW_UP_LEAD ตัวเดียวกับคำถามต่อยอดหลังแนะนำสาขา เพื่อให้เทิร์นถัดไปที่ผู้ใช้ตอบว่า
+# "ชอบเขียนโปรแกรม" ถูกจับเป็นคำตอบต่อยอด (_refinement_of_recommendation) แล้วนำไปจับคู่ได้ทันที
+# ด้วยเส้นทางเดิม ไม่ต้องมีกลไกใหม่
+#
+# ถามสี่หัวข้อที่ระบบใช้จับคู่จริง (วิชาที่ชอบ ความสนใจ ความถนัด อาชีพ) และบอกทางออกให้คนที่ยัง
+# ตอบไม่ได้ว่าขอดูรายชื่อสาขาทั้งหมดก่อนก็ได้ ซึ่งระบบตอบได้อยู่แล้ว (asks_for_program_list)
+_NO_PREFERENCE_REPLY = (
+    f"{_FOLLOW_UP_LEAD} บอกผมเพิ่มได้ไหมครับว่าชอบวิชาอะไร สนใจด้านไหน ถนัดอะไร "
+    "หรืออยากทำงานแบบไหนในอนาคต แล้วผมจะช่วยดูให้ว่าสาขาไหนใกล้เคียงบ้าง "
+    "ถ้ายังไม่แน่ใจ จะขอดูรายชื่อสาขาทั้งหมดของคณะก่อนก็ได้ครับ"
+)
 
 
 def _recommendation_header(count: int, refinement: bool) -> str:
@@ -1119,9 +1155,24 @@ def prepare_answer(
 
     # --- 0.72 ขอคำแนะนำว่าควรเรียนสาขาไหนจากความสนใจ -> ใช้ระบบจับคู่สาขา ไม่ใช่ถาม-ตอบเอกสาร ---
     # ตัดสินจากความหมาย (ดู _recommendation_intent) ถ้าจัดอันดับไม่สำเร็จก็ปล่อยให้ไหลไปทางปกติ
-    if (interest := _recommendation_intent(db, connector, message)) and (
-        advice := _recommendation_reply(db, message, interest=interest)
-    ):
+    interest = _recommendation_intent(db, connector, message)
+
+    # --- 0.71 ขอคำแนะนำแต่ยังไม่ได้บอกความสนใจ -> ถามกลับ ไม่จับคู่สาขา ---
+    # ไม่เรียก match_programs เลย เพราะข้อความที่ไม่มีความสนใจอยู่ให้อันดับที่อธิบายไม่ได้
+    # และยังเปลืองการแปลงเวกเตอร์กับการเรียกโมเดลเขียนเหตุผลหนึ่งครั้งโดยเปล่าประโยชน์
+    if interest is NO_PREFERENCE:
+        return Prepared(
+            session_id=session.id,
+            status="answered",
+            search_query=message,
+            best_score=0.0,
+            citations=[],
+            canned=_NO_PREFERENCE_REPLY,
+            messages=[],
+            cacheable=False,  # เป็นคำถามกลับ ไม่ใช่ข้อเท็จจริงจากเอกสาร
+        )
+
+    if interest and (advice := _recommendation_reply(db, message, interest=interest)):
         return Prepared(
             session_id=session.id,
             status="answered",
