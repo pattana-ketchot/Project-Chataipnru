@@ -6,7 +6,7 @@
 สิ่งที่ต้องจริงเสมอ
     - STRUCTURED_ANSWERS=off (ค่าตั้งต้น) ไม่เปิด thread ไม่แตะฐานข้อมูล และคำตอบเหมือนก่อนมีโหมดนี้ทุกตัวอักษร
     - shadow ไม่เปลี่ยนคำตอบ ไม่เปลี่ยนลำดับเหตุการณ์ของสตรีม และข้อผิดพลาดใดๆ ไม่หลุดไปถึงผู้ใช้
-    - on ยังไม่เปิดใน Phase 2 ต้องทำงานเป็น shadow
+    - on เป็นโหมดจริง (เส้นทางตอบผู้ใช้ตรวจแยกใน eval/structured_on_path_check.py)
     - การเทียบคำตอบให้ผลตามกติกาที่เขียนไว้ใน services/structured_shadow.py
 ชุดสุดท้ายเขียนแถวลงฐานข้อมูล local ใน transaction แล้ว rollback
 """
@@ -88,8 +88,10 @@ class ModeChecks(unittest.TestCase):
         self.assertEqual(shadow.configured_mode(" Shadow "), shadow.SHADOW)
         self.assertEqual(shadow.configured_mode(""), shadow.OFF)
 
-    def test_on_is_held_at_shadow_in_phase2(self):
-        self.assertEqual(shadow.configured_mode("on"), shadow.SHADOW)
+    def test_on_is_a_real_mode(self):
+        # เดิม (ก่อนมีเส้นทางตอบผู้ใช้) on ถูกบังคับกลับเป็น shadow — ตอนนี้ on มีความหมายจริง ดู eval/structured_on_path_check.py
+        self.assertEqual(shadow.configured_mode("on"), shadow.ON)
+        self.assertEqual(shadow.configured_mode(" ON "), shadow.ON)
 
     def test_unknown_values_are_off(self):
         for raw in ("shaddow", "true", "1", "enabled"):

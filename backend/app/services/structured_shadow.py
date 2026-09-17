@@ -5,13 +5,16 @@ STRUCTURED_ANSWERS
     off     (ค่าตั้งต้น) ไม่ทำอะไรเลย ไม่เปิด thread ไม่แตะฐานข้อมูล
     shadow  หลังระบบเดิมได้คำตอบแล้ว คำนวณคำตอบจากฐานข้อมูลใน thread แยก เทียบกับคำตอบที่ผู้ใช้ได้รับจริง
             แล้วบันทึกลง mko.shadow_answers — คำตอบที่ผู้ใช้เห็นไม่เปลี่ยน
-    on      Phase 2 ยังไม่อนุญาตให้เปิด ระบบทำงานเป็น shadow และเตือนใน log
+    on      ใช้คำตอบจากฐานข้อมูลตอบผู้ใช้ เฉพาะเมื่อครบทุกข้อ (ดู structured_reply)
+              route = structured · ฐานข้อมูลตอบได้ (answered) · field อยู่ใน USER_FACING_FIELDS
+            กรณีอื่นทั้งหมดใช้คำตอบ RAG เดิม และยังบันทึกผลลง mko.shadow_answers เหมือนโหมด shadow
     ค่าอื่น   ถือเป็น off และเตือนใน log
 
 ข้อรับประกันต่อระบบเดิม
     - submit() ถูกเรียกหลังได้คำตอบครบแล้วเท่านั้น และคืนค่าที่ผู้เรียกไม่ได้ใช้
     - ทุกข้อผิดพลาดถูกจับไว้แล้วลง log ไม่โยนกลับไปที่ขั้นตอบ (รวมถึงกรณียังไม่มี schema mko)
     - ใช้ session ฐานข้อมูลของตัวเอง คิวมีเพดาน งานที่เกินเพดานถูกทิ้งทันทีไม่รอ
+    - structured_reply() ไม่โยน exception และไม่แตะ session ของคำขอ ถ้าพังหรือไม่แน่ใจ คืน None = ใช้คำตอบ RAG
 
 ผลการเทียบ (comparison)
     agree             คำตอบเดิมมีค่าเดียวกับฐานข้อมูลครบ
@@ -43,6 +46,13 @@ from app.services.structured_intent import STRUCTURED, detect
 logger = logging.getLogger(__name__)
 
 OFF, SHADOW, ON = "off", "shadow", "on"
+SERVED_STRUCTURED, SERVED_RAG = "structured", "rag"
+
+# field ที่คำตอบจากฐานข้อมูลตอบผู้ใช้ได้ในโหมด on — ระบุทีละ field โดยตั้งใจ ไม่ใช่ "ทุก field ยกเว้น"
+# field ที่ routing รองรับเพิ่มในอนาคตจึงยังตอบด้วย RAG จนกว่าจะเพิ่มชื่อไว้ที่นี่
+# admission ไม่อยู่ในรายการ: คำตอบแสดงเฉพาะหัวข้อคุณสมบัติผู้เข้าศึกษาใน มคอ.2 โดยไม่บอกขอบเขต ขณะที่เล่มเดียวกันมีเกณฑ์อื่น
+# (docs/MKO_PHASE2_FINAL_SHADOW_VALIDATION.md ข้อ B) จึงยังตอบด้วย RAG
+USER_FACING_FIELDS = frozenset({"total_credits", "edition_year", "careers", "objectives"})
 
 _MAX_PENDING = 32
 _SERVED_NO_ANSWER = ("not_found", "out_of_scope")
@@ -76,10 +86,7 @@ def _warn_once(key: str, message: str, *args) -> None:
 
 def configured_mode(raw: str | None = None) -> str:
     value = ((get_settings().structured_answers if raw is None else raw) or OFF).strip().lower()
-    if value == ON:
-        _warn_once("on", "STRUCTURED_ANSWERS=on ยังไม่เปิดใน Phase 2 — ทำงานเป็น shadow ไม่เปลี่ยนคำตอบที่ผู้ใช้เห็น")
-        return SHADOW
-    if value in (OFF, SHADOW):
+    if value in (OFF, SHADOW, ON):
         return value
     _warn_once(value, "STRUCTURED_ANSWERS=%r ไม่รู้จัก — ถือเป็น off", value)
     return OFF
@@ -160,6 +167,43 @@ def compare(result: FactsResult | None, served_status: str | None, served_reply:
     return ("unclear" if sum(coverage) / len(coverage) >= 0.3 else "disagree"), detail
 
 
+def servable_answer(db: Session, asked: str) -> str | None:
+    """
+    คำตอบจากฐานข้อมูลที่ใช้ตอบผู้ใช้ได้ หรือ None = ต้องตอบด้วย RAG
+
+    ใช้ detect / lookup ตัวเดียวกับโหมด shadow ไม่ได้ตีความคำถามหรือเรียบเรียงคำตอบใหม่
+    ตรวจ field ก่อน lookup เพื่อให้ field ที่ไม่อยู่ในรายการ (เช่น admission) ไม่ถูกดึงข้อมูลมาตอบเลย
+    """
+    intent = detect(db, asked)
+    if intent.route != STRUCTURED or intent.field not in USER_FACING_FIELDS:
+        return None
+    result = lookup(db, intent)
+    if result.status != ANSWERED or not (result.answer or "").strip():
+        return None
+    return result.answer
+
+
+def structured_reply(*, question: str, interpreted: str | None) -> str | None:
+    """
+    โหมด on: คำตอบจากฐานข้อมูลที่จะส่งให้ผู้ใช้แทนคำตอบ RAG · โหมดอื่นหรือตอบไม่ได้ คืน None
+
+    ไม่โยน exception — ฐานข้อมูลล่ม ยังไม่มี schema mko หรือบั๊กใดๆ ต้องได้คำตอบ RAG ตามเดิม
+    ใช้ session ของตัวเอง ถ้าใช้ session ของคำขอ query ที่ล้มจะทำให้ transaction ของคำขอเสีย
+    แล้วขั้นบันทึกบทสนทนาหลังจากนี้พังตาม
+    """
+    try:
+        if configured_mode() != ON:
+            return None
+        with SessionLocal() as db:
+            try:
+                return servable_answer(db, interpreted or question)
+            finally:
+                db.rollback()
+    except Exception:  # noqa: BLE001 — ข้อผิดพลาดของ structured ห้ามทำให้ตอบผู้ใช้ไม่ได้
+        logger.warning("หาคำตอบจากฐานข้อมูลไม่สำเร็จ — ใช้คำตอบ RAG แทน", exc_info=True)
+        return None
+
+
 def run_shadow(
     db: Session,
     *,
@@ -168,15 +212,26 @@ def run_shadow(
     has_history: bool = False,
     served_status: str | None = None,
     served_reply: str | None = None,
+    served_source: str = SERVED_RAG,
+    configured: str = SHADOW,
     mode: str = SHADOW,
     commit: bool = True,
 ) -> dict:
-    """คำนวณคำตอบจากฐานข้อมูล เทียบกับคำตอบที่ผู้ใช้ได้รับ แล้วบันทึกหนึ่งแถว คืนค่าที่บันทึก"""
+    """
+    คำนวณคำตอบจากฐานข้อมูล เทียบกับคำตอบที่ผู้ใช้ได้รับ แล้วบันทึกหนึ่งแถว คืนค่าที่บันทึก
+
+    served_source / configured บันทึกไว้ใน comparison_detail เพราะคอลัมน์ mode รับได้เฉพาะ shadow / replay
+    (ไม่เพิ่ม migration) — ผู้ใช้ได้คำตอบจากฐานข้อมูลเมื่อ served_source = structured ซึ่งไม่มีคำตอบ RAG ให้เทียบ
+    """
     started = time.perf_counter()
     asked = interpreted or question
     intent = detect(db, asked)
     result = lookup(db, intent) if intent.route == STRUCTURED else None
-    comparison, detail = compare(result, served_status, served_reply)
+    if served_source == SERVED_STRUCTURED:
+        comparison, detail = "not_compared", {}
+    else:
+        comparison, detail = compare(result, served_status, served_reply)
+    detail = {**detail, "served_source": served_source, "configured_mode": configured}
     facts = result.to_json() if result is not None else {}
     facts.pop("answer", None)
 
@@ -252,10 +307,12 @@ def submit(
     has_history: bool,
     served_status: str | None,
     served_reply: str | None,
+    served_source: str = SERVED_RAG,
 ) -> Future | None:
-    """ส่งงานโหมด shadow เข้าคิว คืน None เมื่อปิดอยู่ คิวเต็ม หรือมีข้อผิดพลาด ไม่โยน exception"""
+    """ส่งงานบันทึกผลเข้าคิว (โหมด shadow และ on) คืน None เมื่อปิดอยู่ คิวเต็ม หรือมีข้อผิดพลาด ไม่โยน exception"""
     try:
-        if configured_mode() != SHADOW:
+        configured = configured_mode()
+        if configured not in (SHADOW, ON):
             return None
         if not _pending.acquire(blocking=False):
             _warn_once("queue_full", "คิวโหมด shadow เต็ม — ทิ้งงานที่เกินจนกว่าคิวจะว่าง")
@@ -264,7 +321,8 @@ def submit(
             future = _get_executor().submit(
                 _run_logged,
                 {"question": question, "interpreted": interpreted, "has_history": has_history,
-                 "served_status": served_status, "served_reply": served_reply},
+                 "served_status": served_status, "served_reply": served_reply,
+                 "served_source": served_source, "configured": configured},
             )
         except Exception:
             _pending.release()
