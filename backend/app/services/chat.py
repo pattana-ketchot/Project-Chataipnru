@@ -18,7 +18,7 @@ import os
 import re
 import uuid
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -49,6 +49,7 @@ from app.services.program_list import asks_for_program_list, program_list_answer
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
 from app.services.small_talk import match_small_talk
+from app.services.structured_shadow import SERVED_RAG, SERVED_STRUCTURED, structured_reply
 from app.services.structured_shadow import submit as shadow_submit
 from app.services.tuition import answer as tuition_answer, find_program as find_tuition_program, is_tuition_question
 from app.services.vector_search import search_similar_chunks
@@ -462,6 +463,8 @@ class Prepared:
     # คำตอบสำเร็จรูปที่คืนก่อนถึงขั้นตีความจะเป็นค่าว่าง แล้วโหมด shadow ใช้ข้อความของผู้ใช้แทน
     interpreted: str = ""
     has_history: bool = False
+    # คำตอบนี้มาจากไหน: SERVED_RAG (ระบบเดิม) หรือ SERVED_STRUCTURED (ฐานข้อมูลหลักสูตร ในโหมด STRUCTURED_ANSWERS=on)
+    served_source: str = SERVED_RAG
 
 
 # คำที่บ่งชี้ว่าผู้ใช้ถามหาตัวเลขเจาะจง ไม่ใช่คำอธิบายกว้างๆ
@@ -989,6 +992,22 @@ def _asks_for_a_number(text: str) -> bool:
     return any(w in text for w in _NUMERIC_WORDS)
 
 
+def _with_structured(p: Prepared, message: str) -> Prepared:
+    """
+    โหมด STRUCTURED_ANSWERS=on: แทนคำตอบด้วยคำตอบจากฐานข้อมูลหลักสูตรเมื่อ structured_reply ให้มา
+    โหมดอื่น หรือไม่มีคำตอบที่ใช้ได้ (field ไม่อยู่ในรายการ, ไม่มีข้อมูล, route rag, ข้อผิดพลาด) คืน p เดิมทุกประการ
+
+    ตัดสินหลัง prepare_answer เพราะคำถามต่อเนื่องต้องใช้คำถามที่ตีความแล้ว (ตัวเดียวกับที่โหมด shadow ใช้)
+    คำตอบจากฐานข้อมูลเป็นคำตอบสำเร็จรูป จึงไม่เรียกโมเดลเขียนคำตอบ ไม่แนบรายการอ้างอิงจากการค้นเอกสาร (ที่มาอยู่ในตัวคำตอบ)
+    และไม่เก็บลงแคช — แคชไม่รู้โหมด ถ้าเก็บไว้ การย้อนกลับเป็น shadow จะยังตอบข้อความจากฐานข้อมูลจากแคชต่อไป
+    """
+    answer = structured_reply(question=message, interpreted=p.interpreted)
+    if answer is None:
+        return p
+    return replace(p, status="answered", citations=[], canned=answer, messages=[], allow_fallback=False,
+                   cacheable=False, served_source=SERVED_STRUCTURED)
+
+
 def _persist(db: Session, session_id: uuid.UUID, question: str, reply: str) -> None:
     db.add(ChatMessage(session_id=session_id, role="user", content=question))
     db.add(ChatMessage(session_id=session_id, role="assistant", content=reply))
@@ -1359,7 +1378,7 @@ def answer_question(
     prior: list[PriorTurn] | None = None,
 ) -> ChatReply:
     """ตอบแบบรอจนเขียนเสร็จแล้วส่งทีเดียว — ใช้โดยชุดประเมินและผู้เรียกที่ไม่ต้องการสตรีม"""
-    p = prepare_answer(db, user_id, session_id, message, prior)
+    p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
     if p.canned is not None:
         reply_text = p.canned
     else:
@@ -1379,10 +1398,10 @@ def answer_question(
             db, message, p.corpus_version, p.status, reply_text,
             [c.model_dump(mode="json") for c in p.citations],
         )
-    # โหมด shadow ของคำตอบจากข้อมูลที่มีโครงสร้าง ทำงานหลังได้คำตอบแล้วใน thread แยก ไม่เปลี่ยนคำตอบนี้
+    # บันทึกผลของคำตอบจากข้อมูลที่มีโครงสร้าง ทำงานหลังได้คำตอบแล้วใน thread แยก ไม่เปลี่ยนคำตอบนี้
     # STRUCTURED_ANSWERS=off (ค่าตั้งต้น) ไม่ทำอะไรเลย ดู services/structured_shadow.py
     shadow_submit(question=message, interpreted=p.interpreted, has_history=p.has_history,
-                  served_status=p.status, served_reply=reply_text)
+                  served_status=p.status, served_reply=reply_text, served_source=p.served_source)
 
     return ChatReply(
         session_id=p.session_id,
@@ -1412,7 +1431,7 @@ def stream_answer(
     FastAPI ปิด session ของ dependency ทิ้งตั้งแต่ตอนที่ route คืนค่า ซึ่งเกิดก่อน
     generator นี้ทำงานจบ ถ้าใช้ตัวเดิมจะได้ error เรื่อง session ถูกปิดไปแล้ว
     """
-    p = prepare_answer(db, user_id, session_id, message, prior)
+    p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
     yield _sse(
         "meta",
         {
@@ -1450,7 +1469,7 @@ def stream_answer(
             )
     # ดูหมายเหตุเดียวกันใน answer_question — ส่งหลังตัวอักษรสุดท้ายถึงผู้ใช้แล้ว ไม่หน่วงหรือเปลี่ยนคำตอบ
     shadow_submit(question=message, interpreted=p.interpreted, has_history=p.has_history,
-                  served_status=p.status, served_reply=reply_text)
+                  served_status=p.status, served_reply=reply_text, served_source=p.served_source)
     yield _sse("done", {})
 
 
