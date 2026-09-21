@@ -43,6 +43,9 @@ class Source:
     page_start: int
     page_end: int
     quote: str | None = None
+    # รหัสเอกสารต้นฉบับใน course_documents ใช้เปิดไฟล์ผ่าน /documents/{id}/pdf
+    # เก็บไว้เพื่อ "บอกที่มา" เท่านั้น ไม่ได้ใช้เลือกหรือตัดสินคำตอบ
+    document_id: str | None = None
 
     def label(self) -> str:
         pages = f"หน้า {self.page_start}" if self.page_start == self.page_end else f"หน้า {self.page_start}–{self.page_end}"
@@ -104,7 +107,7 @@ def _scalar_facts(db: Session, field_key: str, ids: list[uuid.UUID], years: dict
         text(
             """
             SELECT course_id, course_title, value_int, value_text, source_filename, page_start, page_end, quote,
-                   reviewed_by, publication_id
+                   reviewed_by, publication_id, document_id
               FROM mko.v_live_values WHERE field_key = :field AND course_id = ANY(:ids)
             """
         ),
@@ -114,7 +117,9 @@ def _scalar_facts(db: Session, field_key: str, ids: list[uuid.UUID], years: dict
         EditionFact(
             course_id=str(r["course_id"]), course_title=r["course_title"], edition_year=years.get(r["course_id"]),
             value_int=r["value_int"], value_text=r["value_text"],
-            source=Source(r["source_filename"], r["page_start"], r["page_end"], r["quote"]), reviewed_by=r["reviewed_by"],
+            source=Source(r["source_filename"], r["page_start"], r["page_end"], r["quote"],
+                          document_id=str(r["document_id"]) if r["document_id"] else None),
+            reviewed_by=r["reviewed_by"],
         )
         for r in rows
     ]
@@ -125,7 +130,8 @@ def _list_facts(db: Session, field_key: str, ids: list[uuid.UUID], years: dict) 
     rows = db.execute(
         text(
             """
-            SELECT course_id, course_title, seq, text, source_filename, page_start, page_end, reviewed_by, publication_id
+            SELECT course_id, course_title, seq, text, source_filename, page_start, page_end, reviewed_by,
+                   publication_id, document_id
               FROM mko.v_live_list_items WHERE item_type = :item_type AND course_id = ANY(:ids)
              ORDER BY course_id, seq
             """
@@ -142,7 +148,9 @@ def _list_facts(db: Session, field_key: str, ids: list[uuid.UUID], years: dict) 
             EditionFact(
                 course_id=str(course_id), course_title=first["course_title"], edition_year=years.get(course_id),
                 items=[i["text"] for i in items],
-                source=Source(first["source_filename"], min(i["page_start"] for i in items), max(i["page_end"] for i in items)),
+                source=Source(first["source_filename"], min(i["page_start"] for i in items),
+                              max(i["page_end"] for i in items),
+                              document_id=str(first["document_id"]) if first["document_id"] else None),
                 reviewed_by=first["reviewed_by"],
             )
         )

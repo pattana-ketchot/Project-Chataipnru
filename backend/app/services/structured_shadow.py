@@ -33,6 +33,7 @@ import re
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -167,6 +168,42 @@ def compare(result: FactsResult | None, served_status: str | None, served_reply:
     return ("unclear" if sum(coverage) / len(coverage) >= 0.3 else "disagree"), detail
 
 
+@dataclass(frozen=True)
+class ServedAnswer:
+    """คำตอบจากฐานข้อมูล พร้อมที่มาของเอกสารสำหรับปุ่มเปิดเอกสารต้นฉบับ"""
+
+    answer: str
+    document_id: str | None = None
+    page_start: int | None = None
+
+
+def _source_of(result) -> tuple[str | None, int | None]:
+    """
+    เอกสารต้นฉบับของคำตอบนี้ — บอกได้เมื่อคำตอบอ้างถึงฉบับเดียวเท่านั้น
+
+    คำตอบบางแบบครอบหลายฉบับ เช่น "มีหลักสูตรฉบับ พ.ศ. 2569 และ พ.ศ. 2564" ซึ่งมีที่มา
+    สองเล่ม การเลือกเล่มใดเล่มหนึ่งมาเป็นปุ่มเดียวจะชี้ผู้ใช้ไปผิดเล่มครึ่งหนึ่งของกรณี
+    จึงไม่บอกที่มาเลยดีกว่า (หน้าเว็บจะไม่แสดงปุ่ม)
+    """
+    if len(result.facts) != 1:
+        return None, None
+    source = result.facts[0].source
+    if source is None:
+        return None, None
+    return source.document_id, source.page_start
+
+
+def servable_result(db: Session, asked: str):
+    """ผลจากฐานข้อมูลที่ใช้ตอบผู้ใช้ได้ (FactsResult) หรือ None = ต้องใช้ RAG"""
+    intent = detect(db, asked)
+    if intent.route != STRUCTURED or intent.field not in USER_FACING_FIELDS:
+        return None
+    result = lookup(db, intent)
+    if result.status != ANSWERED or not (result.answer or "").strip():
+        return None
+    return result
+
+
 def servable_answer(db: Session, asked: str) -> str | None:
     """
     คำตอบจากฐานข้อมูลที่ใช้ตอบผู้ใช้ได้ หรือ None = ต้องตอบด้วย RAG
@@ -174,16 +211,11 @@ def servable_answer(db: Session, asked: str) -> str | None:
     ใช้ detect / lookup ตัวเดียวกับโหมด shadow ไม่ได้ตีความคำถามหรือเรียบเรียงคำตอบใหม่
     ตรวจ field ก่อน lookup เพื่อให้ field ที่ไม่อยู่ในรายการ (เช่น admission) ไม่ถูกดึงข้อมูลมาตอบเลย
     """
-    intent = detect(db, asked)
-    if intent.route != STRUCTURED or intent.field not in USER_FACING_FIELDS:
-        return None
-    result = lookup(db, intent)
-    if result.status != ANSWERED or not (result.answer or "").strip():
-        return None
-    return result.answer
+    result = servable_result(db, asked)
+    return result.answer if result is not None else None
 
 
-def structured_reply(*, question: str, interpreted: str | None) -> str | None:
+def structured_answer(*, question: str, interpreted: str | None) -> ServedAnswer | None:
     """
     โหมด on: คำตอบจากฐานข้อมูลที่จะส่งให้ผู้ใช้แทนคำตอบ RAG · โหมดอื่นหรือตอบไม่ได้ คืน None
 
@@ -196,12 +228,22 @@ def structured_reply(*, question: str, interpreted: str | None) -> str | None:
             return None
         with SessionLocal() as db:
             try:
-                return servable_answer(db, interpreted or question)
+                result = servable_result(db, interpreted or question)
+                if result is None:
+                    return None
+                document_id, page_start = _source_of(result)
+                return ServedAnswer(result.answer, document_id, page_start)
             finally:
                 db.rollback()
     except Exception:  # noqa: BLE001 — ข้อผิดพลาดของ structured ห้ามทำให้ตอบผู้ใช้ไม่ได้
         logger.warning("หาคำตอบจากฐานข้อมูลไม่สำเร็จ — ใช้คำตอบ RAG แทน", exc_info=True)
         return None
+
+
+def structured_reply(*, question: str, interpreted: str | None) -> str | None:
+    """ข้อความคำตอบอย่างเดียว — คงไว้ให้ผู้เรียกเดิมที่ไม่ต้องการที่มาของเอกสาร"""
+    served = structured_answer(question=question, interpreted=interpreted)
+    return served.answer if served is not None else None
 
 
 def run_shadow(

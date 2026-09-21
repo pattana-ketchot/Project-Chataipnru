@@ -87,6 +87,43 @@ class WebRecommendRequest(BaseModel):
     courses: list[WebCourse] = Field(min_length=1)
 
 
+def _parse_event(event: str) -> tuple[str | None, dict | None]:
+    """แกะเหตุการณ์ SSE หนึ่งก้อน — รูปแบบ: event: <ชื่อ> ขึ้นบรรทัดใหม่ data: <json>"""
+    kind = data = None
+    for line in event.split(chr(10)):
+        if line.startswith("event:"):
+            kind = line[6:].strip()
+        elif line.startswith("data:"):
+            data = line[5:].strip()
+    if not data:
+        return kind, None
+    try:
+        return kind, json.loads(data)
+    except json.JSONDecodeError:
+        return kind, None
+
+
+def _source_headers(source: dict | None) -> dict[str, str]:
+    """
+    header บอกที่มาของคำตอบ ให้หน้าเว็บทำปุ่ม "เปิดเอกสารต้นฉบับ" ได้
+
+    ส่งเฉพาะเมื่อรู้เอกสารจริงเท่านั้น ไม่มี document_id ก็ไม่ส่งอะไรเลย ห้ามเดาหรือส่งค่าว่าง
+    เพราะหน้าเว็บจะสร้างลิงก์ที่เปิดไม่ได้ให้ผู้ใช้กด (ดู docs/FRONTEND_PDF_LINK_INSPECTION.md)
+
+    เลขหน้าเป็นของเสริม ไม่มีก็ยังเปิดเอกสารที่หน้าแรกได้
+    """
+    if not isinstance(source, dict):
+        return {}
+    document_id = str(source.get("document_id") or "").strip()
+    if not document_id:
+        return {}
+    headers = {"X-Source-Document": document_id}
+    page = source.get("page_start")
+    if isinstance(page, int) and page > 0:
+        headers["X-Source-Page"] = str(page)
+    return headers
+
+
 @router.post("/chat-web", dependencies=[Depends(web_rate_limiter)])
 def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
     """
@@ -120,21 +157,36 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
 
     user_id = shared_user(db).id
 
+    # ดึงเหตุการณ์แรก (meta) ออกมาก่อน เพื่ออ่านที่มาของคำตอบไปใส่เป็น header
+    #
+    # ต้องทำก่อนสร้าง StreamingResponse เพราะ header ถูกส่งไปพร้อมสถานะ HTTP ตั้งแต่ไบต์แรก
+    # meta มาก่อน token เสมอ (ดู services/chat.py::stream_answer) การดึงหนึ่งเหตุการณ์จึงไม่ทำให้
+    # เสียตัวอักษรของคำตอบ เนื้อความที่ผู้ใช้เห็นเหมือนเดิมทุกตัว
+    #
+    # ข้อผิดพลาดระหว่างดึง meta ต้องยังตอบเป็นข้อความสถานะ 200 เหมือนเดิม ไม่ใช่ 500
+    # เพราะหน้าเว็บอ่านสตรีมเป็นข้อความล้วนแล้วแสดงให้ผู้ใช้ตรงๆ
+    source_headers: dict[str, str] = {}
+    prelude: str | None = None
+    stream = iter(())
+    try:
+        stream = stream_answer(db, user_id=user_id, session_id=None, message=message, prior=prior)
+        kind, parsed = _parse_event(next(stream, ""))
+        if kind == "meta" and parsed:
+            source_headers = _source_headers(parsed.get("source"))
+    except LLMConnectionError as e:
+        prelude = str(e).strip() or BUSY
+    except Exception:  # noqa: BLE001
+        logger.exception("chat-web ล้มตั้งแต่ก่อนเริ่มสตรีม")
+        prelude = BUSY
+
     def text_only():
+        if prelude is not None:
+            yield prelude
+            return
         try:
-            for event in stream_answer(db, user_id=user_id, session_id=None, message=message, prior=prior):
-                # รูปแบบหนึ่งเหตุการณ์: "event: <ชื่อ>\ndata: <json>\n\n"
-                kind = data = None
-                for line in event.split("\n"):
-                    if line.startswith("event:"):
-                        kind = line[6:].strip()
-                    elif line.startswith("data:"):
-                        data = line[5:].strip()
-                if not data:
-                    continue
-                try:
-                    parsed = json.loads(data)
-                except json.JSONDecodeError:
+            for event in stream:
+                kind, parsed = _parse_event(event)
+                if parsed is None:
                     continue
                 if kind == "token" and parsed.get("t"):
                     yield parsed["t"]
@@ -153,7 +205,7 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
     return StreamingResponse(
         text_only(),
         media_type="text/plain; charset=utf-8",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", **source_headers},
     )
 
 
