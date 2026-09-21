@@ -49,7 +49,7 @@ from app.services.program_list import asks_for_program_list, program_list_answer
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
 from app.services.small_talk import match_small_talk
-from app.services.structured_shadow import SERVED_RAG, SERVED_STRUCTURED, structured_reply
+from app.services.structured_shadow import SERVED_RAG, SERVED_STRUCTURED, structured_answer
 from app.services.structured_shadow import submit as shadow_submit
 from app.services.tuition import answer as tuition_answer, find_program as find_tuition_program, is_tuition_question
 from app.services.vector_search import search_similar_chunks
@@ -465,6 +465,9 @@ class Prepared:
     has_history: bool = False
     # คำตอบนี้มาจากไหน: SERVED_RAG (ระบบเดิม) หรือ SERVED_STRUCTURED (ฐานข้อมูลหลักสูตร ในโหมด STRUCTURED_ANSWERS=on)
     served_source: str = SERVED_RAG
+    # เอกสารต้นฉบับของคำตอบ {"document_id": ..., "page_start": ...} มีเฉพาะคำตอบจากฐานข้อมูล
+    # ที่อ้างถึงฉบับเดียว ใช้บอกที่มาให้หน้าเว็บทำปุ่มเปิดเอกสาร ไม่มีผลกับข้อความคำตอบ
+    source: dict | None = None
 
 
 # คำที่บ่งชี้ว่าผู้ใช้ถามหาตัวเลขเจาะจง ไม่ใช่คำอธิบายกว้างๆ
@@ -1012,11 +1015,14 @@ def _with_structured(p: Prepared, message: str) -> Prepared:
     คำตอบจากฐานข้อมูลเป็นคำตอบสำเร็จรูป จึงไม่เรียกโมเดลเขียนคำตอบ ไม่แนบรายการอ้างอิงจากการค้นเอกสาร (ที่มาอยู่ในตัวคำตอบ)
     และไม่เก็บลงแคช — แคชไม่รู้โหมด ถ้าเก็บไว้ การย้อนกลับเป็น shadow จะยังตอบข้อความจากฐานข้อมูลจากแคชต่อไป
     """
-    answer = structured_reply(question=message, interpreted=p.interpreted)
-    if answer is None:
+    served = structured_answer(question=message, interpreted=p.interpreted)
+    if served is None:
         return p
-    return replace(p, status="answered", citations=[], canned=answer, messages=[], allow_fallback=False,
-                   cacheable=False, served_source=SERVED_STRUCTURED)
+    # แนบที่มาเมื่อรู้เอกสารแน่นอนเท่านั้น ไม่รู้ก็ปล่อยเป็น None ห้ามเดา
+    source = ({"document_id": served.document_id, "page_start": served.page_start}
+              if served.document_id else None)
+    return replace(p, status="answered", citations=[], canned=served.answer, messages=[], allow_fallback=False,
+                   cacheable=False, served_source=SERVED_STRUCTURED, source=source)
 
 
 def _persist(db: Session, session_id: uuid.UUID, question: str, reply: str) -> None:
@@ -1467,6 +1473,9 @@ def stream_answer(
             "top_score": p.best_score,
             "in_scope": p.status in ("answered", "not_found"),
             "citations": [c.model_dump(mode="json") for c in p.citations],
+            # ที่มาของคำตอบจากฐานข้อมูลหลักสูตร (None สำหรับคำตอบอื่น) — เป็นคีย์ที่เพิ่มเข้ามา
+            # ผู้อ่านเดิมที่ไม่รู้จักคีย์นี้ทำงานได้เหมือนเดิมทุกประการ
+            "source": p.source,
         },
     )
 
