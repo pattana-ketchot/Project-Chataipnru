@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     # เก็บเป็นข้อความแทน Literal เพื่อให้ค่าที่พิมพ์ผิดกลายเป็น off แทนที่จะทำให้ backend เปิดไม่ขึ้น
     structured_answers: str = Field("off", alias="STRUCTURED_ANSWERS")
 
+    # --- เอกสารต้นฉบับที่เปิดให้ผู้ใช้ดู (ดู services/document_store.py) ---
+    # โฟลเดอร์ที่เก็บไฟล์ มคอ.2 บนเซิร์ฟเวอร์ mount แบบอ่านอย่างเดียว
+    # ค่าว่าง (ค่าตั้งต้น) = ปิดฟีเจอร์ เส้นทาง /documents/{id}/pdf จะตอบว่าไม่พบเสมอ
+    # ใช้เป็นสวิตช์ปิดได้ทันทีโดยไม่ต้อง deploy โค้ดใหม่
+    documents_dir: str = Field("", alias="DOCUMENTS_DIR")
+
 
 @lru_cache
 def get_settings() -> Settings:
