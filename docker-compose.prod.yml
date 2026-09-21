@@ -75,9 +75,15 @@ services:
       EMBED_DIM: ${EMBED_DIM:-1024}
       # คำตอบจากข้อมูลหลักสูตรที่มีโครงสร้าง: off (ค่าตั้งต้น) / shadow — on ยังไม่เปิดใน Phase 2
       STRUCTURED_ANSWERS: ${STRUCTURED_ANSWERS:-off}
+      # โฟลเดอร์เอกสารต้นฉบับที่เปิดให้ผู้ใช้ดู (ดู services/document_store.py)
+      # ค่าเริ่มต้นชี้ไปที่ mount ด้านล่าง · ตั้ง DOCUMENTS_DIR= (ว่าง) ใน .env เพื่อปิดฟีเจอร์
+      DOCUMENTS_DIR: ${DOCUMENTS_DIR:-/srv/documents}
       # หน้าเว็บเรียก API ผ่าน origin เดียวกันอยู่แล้ว จึงไม่ต้องตั้ง CORS
       # แต่ใส่ไว้เผื่อมีการเรียกตรงจากเครื่องมือทดสอบ
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-["http://localhost:3000"]}
+    volumes:
+      # เอกสาร มคอ.2 ต้นฉบับ อ่านอย่างเดียว — backend ไม่เขียนอะไรลงโฟลเดอร์นี้
+      - ./documents:/srv/documents:ro
 
   frontend:
     build:
