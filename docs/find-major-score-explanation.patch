@@ -1,0 +1,77 @@
+--- a/src/pages/FindMajorResult.jsx
++++ b/src/pages/FindMajorResult.jsx
+@@ -1,6 +1,6 @@
+ import { useState, useEffect, useCallback } from 'react'
+ import { useNavigate } from 'react-router-dom'
+-import { Sparkles, Loader2, RotateCcw, ArrowRight, AlertTriangle } from 'lucide-react'
++import { Sparkles, Loader2, RotateCcw, ArrowRight, AlertTriangle, Info, ChevronDown } from 'lucide-react'
+ import { supabase, isConfigured } from '../lib/supabase'
+ import { getFindMajorAnswers, clearFindMajorAnswers } from '../lib/findMajorAnswers'
+ 
+@@ -39,6 +39,58 @@
+   )
+ }
+ 
++/**
++ * คำอธิบายที่มาของเปอร์เซ็นต์ แบบกดเปิด/ปิด
++ *
++ * ผู้ใช้เห็น "65% เหมาะสม" แล้วเข้าใจได้ง่ายว่าเป็นโอกาสที่จะเหมาะหรือเรียนสำเร็จ ซึ่งไม่ใช่ —
++ * หลังบ้านวัดความใกล้เคียงระหว่างคำตอบกับเนื้อหาในเอกสารหลักสูตรและชื่อสาขา คิดแยกทีละสาขา
++ * ส่วน AI เขียนเฉพาะคำอธิบายเหตุผล ไม่ได้ให้คะแนน
++ *
++ * ข้อที่ใช้คำนวณคือวิชาที่ชอบ ความสนใจ ความถนัด และเป้าหมายอาชีพเท่านั้น สายการเรียนและ
++ * สภาพแวดล้อมการทำงานใช้แค่ตอนเขียนเหตุผล จึงเขียนว่า "ได้แก่" ไม่ใช่ "เช่น"
++ */
++const ScoreExplanation = () => {
++  const [open, setOpen] = useState(false)
++  const panelId = 'score-explanation-panel'
++
++  return (
++    <div className="mt-3 border-t border-gray-100 pt-3">
++      <button
++        type="button"
++        onClick={() => setOpen((v) => !v)}
++        aria-expanded={open}
++        aria-controls={panelId}
++        className="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-pnru hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-pnru/40"
++      >
++        <Info className="w-4 h-4 shrink-0" aria-hidden="true" />
++        เปอร์เซ็นต์คำนวณอย่างไร?
++        <ChevronDown
++          className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
++          aria-hidden="true"
++        />
++      </button>
++      <div
++        id={panelId}
++        role="region"
++        aria-label="เปอร์เซ็นต์คำนวณอย่างไร"
++        hidden={!open}
++        className="mt-3 rounded-lg bg-[#E8F5F1] p-4 text-sm text-gray-700 leading-relaxed space-y-2"
++      >
++        <p>
++          คะแนนความใกล้เคียงคำนวณจากคำตอบในแบบสอบถาม ได้แก่ วิชาที่ชอบ ความสนใจ ความถนัด
++          และเป้าหมายอาชีพ โดยนำไปเปรียบเทียบกับเนื้อหาจริงในเอกสารหลักสูตรและชื่อของแต่ละสาขา
++          ส่วน AI ทำหน้าที่เขียนคำอธิบายเหตุผลเท่านั้น ไม่ได้เป็นผู้ให้คะแนน
++        </p>
++        <p className="text-gray-600">
++          <span className="font-semibold text-gray-700">หมายเหตุ:</span>{' '}
++          เปอร์เซ็นต์นี้เป็นระดับความใกล้เคียงของข้อมูล ไม่ใช่ความน่าจะเป็นที่จะเรียนสำเร็จหรือเหมาะสมแบบตายตัว
++          และคะแนนของแต่ละสาขาคำนวณแยกกัน จึงไม่จำเป็นต้องรวมกันเป็น 100%
++        </p>
++      </div>
++    </div>
++  )
++}
++
+ const FindMajorResult = () => {
+   const navigate = useNavigate()
+   const [answers, setAnswers] = useState(null)
+@@ -211,6 +263,7 @@
+                     <h3 className="font-semibold text-gray-800">สรุปจาก AI</h3>
+                   </div>
+                   <p className="text-sm lg:text-base text-gray-700 leading-relaxed">{result.summary}</p>
++                  <ScoreExplanation />
+                 </div>
+ 
+                 <div>
