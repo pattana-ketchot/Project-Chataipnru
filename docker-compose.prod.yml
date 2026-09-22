@@ -103,6 +103,29 @@ services:
     expose:
       - "3000"
 
+  # ---------------------------------------------------------------------
+  # บริการเสริมของหน้าเว็บ — ข่าว Sci Connect และงานหลังบ้าน
+  #
+  # รับผิดชอบเพียง 5 เส้นทาง คือ /api/sci-connect-news, /api/sci-connect-news-detail
+  # และ /api/admin/* ทั้งสามเส้นทาง โดยคุยกับ Supabase เท่านั้น
+  #
+  # ไม่เกี่ยวข้องกับการตอบคำถามของระบบ — /api/chat, /api/compare-courses,
+  # /api/recommend-major, /api/course-facts และ /api/documents ยังเป็นของ backend
+  # (FastAPI) เหมือนเดิมทุกประการ บริการนี้ไม่ได้ต่อฐานข้อมูลของเราเลย
+  # ---------------------------------------------------------------------
+  webapi:
+    build:
+      context: ./webapi
+    restart: unless-stopped
+    environment:
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      # เว้นว่างไว้ตามที่ตกลง -> /api/admin/ingest จะตอบข้อผิดพลาดจนกว่าจะใส่คีย์
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+    # ไม่เปิดพอร์ตออกนอกเครื่อง เข้าถึงได้เฉพาะผ่าน Caddy เหมือนที่ backend ทำ
+    expose:
+      - "3001"
+
   # ตัวรับคำขอจากภายนอก ทำหน้าที่ขอและต่ออายุใบรับรอง HTTPS ให้อัตโนมัติ
   #
   # ต้องเปิดพอร์ต 443 ทั้งใน Security List ของ OCI และใน iptables ของเครื่องเอง
@@ -112,6 +135,7 @@ services:
     restart: unless-stopped
     depends_on:
       - frontend
+      - webapi
     environment:
       # ชื่อโดเมนที่ขอใบรับรอง ถ้ายังไม่มีโดเมนให้ปล่อยว่างไว้ ระบบยังเข้าทาง IP ได้ปกติ
       # ค่าตั้งต้นเป็น localhost โดยตั้งใจ ไม่ใช่ค่าว่าง — ค่าว่างทำให้ Caddyfile มีบล็อก

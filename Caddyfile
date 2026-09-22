@@ -22,6 +22,22 @@
 		reverse_proxy backend:8000
 	}
 
+	# ข่าว Sci Connect และงานหลังบ้านของหน้าเว็บ — สองกลุ่มนี้เป็นของบริการ webapi
+	#
+	# ต้องวางไว้ก่อน handle /api/* ด้านล่าง เพราะ Caddy เลือกบล็อกแรกที่ตรงกับเส้นทาง
+	# ถ้าวางทีหลัง คำขอจะถูก /api/* กลืนไปหา backend แล้วได้ 404 ทั้งหมด
+	#
+	# เส้นทางอื่นทุกเส้นทางยังเป็นของ backend (FastAPI) เหมือนเดิม — โดยเฉพาะ
+	# /api/chat, /api/compare-courses, /api/recommend-major, /api/course-facts
+	# และ /api/documents/{id}/pdf ซึ่งเป็นหัวใจของระบบตอบคำถาม
+	handle /api/sci-connect-news* {
+		reverse_proxy webapi:3001
+	}
+
+	handle /api/admin/* {
+		reverse_proxy webapi:3001
+	}
+
 	# เส้นทาง API ที่เหลือชื่อตรงกับหลังบ้านอยู่แล้ว ตัดคำนำหน้า /api ออกก็พอ
 	# ครอบคลุม /api/compare-courses, /api/recommend-major, /api/courses, /api/docs
 	handle /api/* {
