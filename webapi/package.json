@@ -1,0 +1,13 @@
+{
+  "name": "sci-advisor-webapi",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
+    "@ai-sdk/google": "^4.0.51",
+    "ai": "^7.0.79",
+    "mammoth": "^1.12.2",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.4.3"
+  }
+}
