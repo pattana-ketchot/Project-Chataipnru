@@ -1,0 +1,38 @@
+flowchart TB
+  P[["เอกสาร มคอ.2 (PDF)"]]
+  P1["อ่านข้อความรายหน้า + OCR<br/>4,129 หน้า"]
+  P2["หั่นหัวข้อ ข้ามสารบัญ"]
+  P3A["สกัดค่าและรายการ<br/>field_values · list_items"]
+  P3B["ตัดเป็นส่วนข้อความ + สร้างเวกเตอร์<br/>course_chunks 9,039"]
+  E["ผูกหลักฐานรายหน้า<br/>evidence 787 ชิ้น"]
+  R{"ตัดสินสถานะ<br/>เจอตรงกัน 2 ตำแหน่ง?"}
+  H["คนตรวจทาน<br/>review_decisions"]
+  V["เผยแพร่เป็นชุด<br/>publications"]
+  L[("v_live_values 103 ค่า<br/>v_live_list_items 156 รายการ")]
+  Q["คำถามของผู้ใช้"]
+  G{"เป็นข้อเท็จจริงตายตัว<br/>และมีข้อมูลที่เผยแพร่แล้ว?"}
+  A1["ตอบจากฐานข้อมูล<br/>พร้อมบอกไฟล์และเลขหน้า"]
+  A2["ค้นเอกสารด้วยเวกเตอร์<br/>แล้วให้โมเดลเรียบเรียง"]
+  ANS["คำตอบถึงผู้ใช้"]
+
+  P --> P1 --> P2 --> P3A --> E --> R
+  P2 --> P3B
+  R -->|"ใช่"| V
+  R -->|"ไม่ใช่"| H --> V
+  V --> L
+  Q --> G
+  G -->|"ใช่"| A1
+  G -->|"ไม่ใช่"| A2
+  L --> A1
+  P3B --> A2
+  A1 --> ANS
+  A2 --> ANS
+
+  classDef src fill:#FCE4D6,stroke:#C55A11,color:#000
+  classDef prc fill:#E2EFDA,stroke:#548235,color:#000
+  classDef dec fill:#FFF2CC,stroke:#BF8F00,color:#000
+  classDef db fill:#DDEBF7,stroke:#2E75B6,color:#000
+  class P src
+  class P1,P2,P3A,P3B,E,H,V,A1,A2 prc
+  class R,G dec
+  class L,ANS db

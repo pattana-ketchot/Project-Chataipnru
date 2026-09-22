@@ -1,0 +1,27 @@
+flowchart TB
+  U["ผู้ใช้ (เบราว์เซอร์)"]
+  FE["Frontend — React + Vite"]
+  SB[("Supabase<br/>courses · news · user_profiles<br/>ai_settings · rag_documents")]
+  API["FastAPI (Backend)<br/>chat · compare · recommend"]
+  GEM["Gemini 3.5-flash-lite<br/>(+ โมเดลสำรอง 3 ตัว)"]
+  OLL["Ollama bge-m3<br/>สร้างเวกเตอร์ 1024 มิติ"]
+  PG[("PostgreSQL + pgvector<br/>course_chunks 9,039<br/>schema mko 18 ตาราง")]
+  PDF[["เอกสาร มคอ.2<br/>30 ไฟล์"]]
+
+  U --> FE
+  FE -->|"ข้อมูลหลักสูตร ข่าว แอดมิน"| SB
+  FE -->|"ถามคำถาม · แนะนำสาขา · เปรียบเทียบ"| API
+  API --> GEM
+  API --> OLL
+  API --> PG
+  API --> PDF
+  OLL --> PG
+
+  classDef fe fill:#DDEBF7,stroke:#2E75B6,color:#000
+  classDef be fill:#E2EFDA,stroke:#548235,color:#000
+  classDef db fill:#FFF2CC,stroke:#BF8F00,color:#000
+  classDef ai fill:#FCE4D6,stroke:#C55A11,color:#000
+  class U,FE fe
+  class API be
+  class SB,PG,PDF db
+  class GEM,OLL ai
