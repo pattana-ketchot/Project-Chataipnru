@@ -17,6 +17,7 @@
 ทั้งสามเส้นทางไม่ต้องเข้าสู่ระบบ เพราะหน้าเว็บเปิดให้นักเรียนทั่วไปใช้โดยไม่ต้องสมัคร
 เบื้องหลังใช้บัญชีกลางบัญชีเดียว (ดูเหตุผลและข้อแลกเปลี่ยนใน services/web_compat.py)
 """
+import base64
 import json
 import logging
 from typing import Any
@@ -24,6 +25,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.deps import web_rate_limiter
@@ -103,7 +105,15 @@ def _parse_event(event: str) -> tuple[str | None, dict | None]:
         return kind, None
 
 
-def _source_headers(source: dict | None) -> dict[str, str]:
+def _b64(value: str) -> str:
+    """
+    ค่า header ถูกเข้ารหัสเป็น latin-1 ตอนส่งออก ข้อความไทยจึงใส่ตรงๆ ไม่ได้ (UnicodeEncodeError)
+    หุ้มด้วย base64 ของ UTF-8 ซึ่งเป็นวิธีเดียวกับที่หน้าเว็บถอด X-RAG-Sources อยู่แล้ว
+    """
+    return base64.b64encode(value.encode("utf-8")).decode("ascii")
+
+
+def _source_headers(db: Session, source: dict | None) -> dict[str, str]:
     """
     header บอกที่มาของคำตอบ ให้หน้าเว็บทำปุ่ม "เปิดเอกสารต้นฉบับ" ได้
 
@@ -111,6 +121,10 @@ def _source_headers(source: dict | None) -> dict[str, str]:
     เพราะหน้าเว็บจะสร้างลิงก์ที่เปิดไม่ได้ให้ผู้ใช้กด (ดู docs/FRONTEND_PDF_LINK_INSPECTION.md)
 
     เลขหน้าเป็นของเสริม ไม่มีก็ยังเปิดเอกสารที่หน้าแรกได้
+
+    ชื่อเอกสารและชื่อหลักสูตรอ่านจากฐานข้อมูลด้วย document_id ที่ได้มาเท่านั้น
+    ไม่ได้เดาจากข้อความที่ AI ตอบ ถ้าหาแถวไม่เจอก็ไม่ส่งสองค่านี้ แต่ยังส่ง
+    X-Source-Document/X-Source-Page ตามเดิม เพื่อไม่ให้พฤติกรรมที่มีอยู่เปลี่ยน
     """
     if not isinstance(source, dict):
         return {}
@@ -121,6 +135,32 @@ def _source_headers(source: dict | None) -> dict[str, str]:
     page = source.get("page_start")
     if isinstance(page, int) and page > 0:
         headers["X-Source-Page"] = str(page)
+
+    # ชื่อไฟล์เอกสาร + ชื่อหลักสูตรที่เอกสารนั้นสังกัด มาจาก FK course_documents.course_id
+    # จึงเป็นความจริงจากฐานข้อมูล ไม่ใช่การจับคู่จากข้อความ
+    #
+    # ล้มเหลวตรงนี้ต้องไม่ทำให้ทั้งคำตอบล้ม — คำตอบสำคัญกว่าปุ่มเสริม
+    try:
+        row = db.execute(
+            text(
+                "SELECT d.original_filename, c.title "
+                "FROM course_documents d JOIN courses c ON c.id = d.course_id "
+                "WHERE d.id = :id"
+            ),
+            {"id": document_id},
+        ).mappings().first()
+    except Exception:  # noqa: BLE001
+        logger.exception("อ่านชื่อเอกสาร/หลักสูตรของ %s ไม่สำเร็จ", document_id)
+        return headers
+
+    if row is None:
+        return headers
+    filename = (row["original_filename"] or "").strip()
+    programme = (row["title"] or "").strip()
+    if filename:
+        headers["X-Source-Title"] = _b64(filename)
+    if programme:
+        headers["X-Source-Programme"] = _b64(programme)
     return headers
 
 
@@ -172,7 +212,7 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
         stream = stream_answer(db, user_id=user_id, session_id=None, message=message, prior=prior)
         kind, parsed = _parse_event(next(stream, ""))
         if kind == "meta" and parsed:
-            source_headers = _source_headers(parsed.get("source"))
+            source_headers = _source_headers(db, parsed.get("source"))
     except LLMConnectionError as e:
         prelude = str(e).strip() or BUSY
     except Exception:  # noqa: BLE001
