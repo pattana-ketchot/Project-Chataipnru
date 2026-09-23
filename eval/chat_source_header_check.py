@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
@@ -47,11 +48,26 @@ def meta(source=None) -> str:
                         "top_score": 0.0, "in_scope": True, "citations": [], "source": source})
 
 
+class FakeDB:
+    """
+    db ปลอมที่คืนแถวเดียวจาก course_documents JOIN courses
+
+    row=None แปลว่าหา document_id นั้นไม่เจอ ซึ่งต้องไม่ทำให้ header เดิมหาย
+    """
+
+    def __init__(self, row: dict | None):
+        self._row = row
+
+    def execute(self, *_args, **_kwargs):
+        row = self._row
+        return SimpleNamespace(mappings=lambda: SimpleNamespace(first=lambda: row))
+
+
 class _Base(unittest.TestCase):
-    def client(self, events):
+    def client(self, events, db=None):
         app = FastAPI()
         app.include_router(route.router)
-        app.dependency_overrides[get_db] = lambda: SimpleNamespace()
+        app.dependency_overrides[get_db] = lambda: db if db is not None else SimpleNamespace()
         app.dependency_overrides[web_rate_limiter] = lambda: None
         patches = [
             mock.patch.object(route, "shared_user", return_value=SimpleNamespace(id=uuid.uuid4())),
@@ -62,8 +78,10 @@ class _Base(unittest.TestCase):
             self.addCleanup(p.stop)
         return TestClient(app)
 
-    def ask(self, events, message="หลักสูตรคณิตศาสตร์ พ.ศ. 2569 เรียนกี่หน่วยกิต"):
-        return self.client(events).post("/chat-web", json={"messages": [{"role": "user", "content": message}]})
+    def ask(self, events, message="หลักสูตรคณิตศาสตร์ พ.ศ. 2569 เรียนกี่หน่วยกิต", db=None):
+        return self.client(events, db=db).post(
+            "/chat-web", json={"messages": [{"role": "user", "content": message}]}
+        )
 
 
 STRUCTURED_EVENTS = [
@@ -120,6 +138,73 @@ class HeaderChecks(_Base):
                               sse("done", {})])
                 self.assertEqual(r.headers["X-Source-Document"], DOC_ID)
                 self.assertNotIn("x-source-page", {k.lower() for k in r.headers})
+
+
+PROGRAMME = "หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569)"
+FILENAME = "ma69.pdf"
+FOUND = FakeDB({"original_filename": FILENAME, "title": PROGRAMME})
+
+
+def unb64(value: str) -> str:
+    return base64.b64decode(value).decode("utf-8")
+
+
+class SourceMetadataChecks(_Base):
+    """
+    X-Source-Title / X-Source-Programme — ชื่อเอกสารและชื่อหลักสูตรที่อ่านจากฐานข้อมูล
+
+    ใช้ทำปุ่ม "ดูเอกสารหลักสูตร" และ "ดูรายละเอียดสาขา" ใต้คำตอบ AI
+    ข้อกำหนดที่ห้ามหลุด: ทั้งสองค่ามาจาก document_id เท่านั้น ห้ามเดาจากข้อความที่ AI ตอบ
+    """
+
+    def test_ส่งชื่อเอกสารและชื่อหลักสูตรเมื่อรู้จริง(self):
+        r = self.ask(STRUCTURED_EVENTS, db=FOUND)
+        self.assertEqual(unb64(r.headers["X-Source-Title"]), FILENAME)
+        self.assertEqual(unb64(r.headers["X-Source-Programme"]), PROGRAMME)
+
+    def test_ภาษาไทยผ่าน_header_แล้วถอดกลับได้ครบ(self):
+        # ค่า header ถูกเข้ารหัส latin-1 ตอนส่ง ถ้าไม่หุ้ม base64 จะ UnicodeEncodeError ทั้งคำตอบ
+        r = self.ask(STRUCTURED_EVENTS, db=FOUND)
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("à", r.headers["X-Source-Programme"])
+        self.assertEqual(unb64(r.headers["X-Source-Programme"]), PROGRAMME)
+
+    def test_หาเอกสารไม่เจอต้องไม่ส่งสองค่านี้_แต่ของเดิมยังอยู่(self):
+        r = self.ask(STRUCTURED_EVENTS, db=FakeDB(None))
+        self.assertEqual(r.headers["X-Source-Document"], DOC_ID)
+        self.assertEqual(r.headers["X-Source-Page"], "1")
+        lower = {k.lower() for k in r.headers}
+        self.assertNotIn("x-source-title", lower)
+        self.assertNotIn("x-source-programme", lower)
+
+    def test_ค่าว่างในฐานข้อมูลต้องไม่กลายเป็น_header_ว่าง(self):
+        for row in ({"original_filename": "", "title": ""},
+                    {"original_filename": None, "title": None},
+                    {"original_filename": "  ", "title": "  "}):
+            with self.subTest(row=row):
+                r = self.ask(STRUCTURED_EVENTS, db=FakeDB(row))
+                lower = {k.lower() for k in r.headers}
+                self.assertNotIn("x-source-title", lower)
+                self.assertNotIn("x-source-programme", lower)
+
+    def test_ไม่มีที่มาก็ไม่ต้องไปอ่านฐานข้อมูล(self):
+        r = self.ask(PLAIN_EVENTS, db=FOUND)
+        lower = {k.lower() for k in r.headers}
+        self.assertNotIn("x-source-title", lower)
+        self.assertNotIn("x-source-programme", lower)
+
+    def test_ฐานข้อมูลล้มต้องไม่ทำให้คำตอบล้ม(self):
+        class Broken:
+            def execute(self, *_a, **_k):
+                raise RuntimeError("db down")
+
+        r = self.ask(STRUCTURED_EVENTS, db=Broken())
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.text, ANSWER)
+        self.assertEqual(r.headers["X-Source-Document"], DOC_ID)
+
+    def test_เนื้อความคำตอบไม่เปลี่ยนเมื่อมี_header_เพิ่ม(self):
+        self.assertEqual(self.ask(STRUCTURED_EVENTS, db=FOUND).text, ANSWER)
 
 
 class BodyUnchangedChecks(_Base):
