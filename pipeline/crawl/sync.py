@@ -12,6 +12,7 @@ Phase 2 — ตรวจเว็บ บันทึกสถานะ และ
 ลำดับสถานะ
 ----------
     พบลิงก์
+      ├─ URL นอกขอบเขตที่อนุญาต ─────────────────────► error      (ไม่ยิงคำขอเลย)
       ├─ HEAD เหมือนเดิม + เคยรู้ sha แล้ว ──────────► unchanged   (ไม่โหลดไฟล์)
       └─ โหลดมาคำนวณ sha256
             ├─ sha เท่าของเดิมที่เคยบันทึก ──────────► unchanged
@@ -22,11 +23,20 @@ Phase 2 — ตรวจเว็บ บันทึกสถานะ และ
 
 ธง needs_review ตั้งแยกจากสถานะ เมื่อระบุหลักสูตรไม่ได้ ระบุได้ไม่ชัด
 หรือเมื่อเนื้อไฟล์เปลี่ยน — สามกรณีนี้คนต้องดูก่อนเสมอ
+
+ขอบเขตของการดาวน์โหลด
+---------------------
+การตรวจ scheme / โฮสต์ / พอร์ต / redirect / ขนาด / ลายเซ็น %PDF- อยู่ที่
+pipeline/crawl/http.py::PoliteClient.download() ทั้งชุด ไม่ได้ทำซ้ำที่นี่
+ที่นี่รับผิดชอบเพียงแปลเหตุผลที่ถูกปฏิเสธให้เป็นสถานะในฐานข้อมูล
+
+ไฟล์ที่ผ่านทุกด่านจะอยู่ในไฟล์ชั่วคราวชื่อ .part_* ในโฟลเดอร์ staging และถูก
+os.replace() เป็นชื่อจริงเมื่อตัดสินแล้วว่าต้องเก็บ — ไฟล์ครึ่ง ๆ จึงไม่มีทางกลายเป็น
+ไฟล์ที่คนตรวจเห็นในคิว ส่วนกรณีที่ตัดสินว่า unchanged จะลบไฟล์ชั่วคราวทิ้ง
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import logging
 import os
 import sys
@@ -39,7 +49,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from pipeline.crawl.discover import PdfLink, crawl  # noqa: E402
-from pipeline.crawl.http import PoliteClient  # noqa: E402
+from pipeline.crawl.http import MAX_PDF_BYTES, PoliteClient, url_rejection  # noqa: E402
 from pipeline.crawl.inventory import KnownDocument, match_course  # noqa: E402
 from pipeline.crawl.state import CONFIDENCE_DB, CrawlStore  # noqa: E402
 
@@ -99,6 +109,20 @@ def process_link(client: PoliteClient, store: CrawlStore, link: PdfLink,
         match_confidence=confidence, match_score=m.score, match_candidates=m.candidates,
     )
 
+    # ---- ขอบเขตของ URL --------------------------------------------------
+    #
+    # ตรวจก่อนยิงคำขอแรก เพราะ discover.crawl() กรองโฮสต์เฉพาะหน้าที่จะเดินต่อ
+    # ลิงก์ .pdf ที่เก็บมาจึงอาจชี้ออกนอกเว็บคณะได้ — ดู pipeline/crawl/http.py
+    # ตัวดึงกันซ้ำให้อยู่แล้ว แต่การกันที่นี่ทำให้ไม่เสียคำขอเปล่าและได้เหตุผลที่ชัดกว่า
+    out_of_scope = url_rejection(link.url)
+    if out_of_scope:
+        store.upsert(**common, needs_review=True, review_reason="ลิงก์อยู่นอกขอบเขตที่อนุญาต",
+                     status="error", last_error=out_of_scope, bump_error=True,
+                     http_etag=None, http_last_modified=None, content_length=None,
+                     file_sha256=None, previous_sha256=None, staging_path=None, document_id=None)
+        return SyncOutcome(link.url, link.filename, "error", True, out_of_scope,
+                           confidence=confidence)
+
     # ---- HEAD ------------------------------------------------------------
     etag = last_mod = None
     length = None
@@ -138,52 +162,61 @@ def process_link(client: PoliteClient, store: CrawlStore, link: PdfLink,
                            needs_review, "โหมดไม่โหลดไฟล์", confidence=confidence)
 
     # ---- โหลดมาคำนวณ sha256 ---------------------------------------------
-    resp = client.get(link.url)
-    if resp is None or resp.status_code != 200:
-        code = resp.status_code if resp is not None else "-"
+    #
+    # ไฟล์ที่ผ่านทุกด่านจะอยู่ใน dl.path ซึ่งเป็นไฟล์ชั่วคราวในโฟลเดอร์ staging
+    # ต้องย้ายหรือลบทุกเส้นทางที่ออกจากจุดนี้ ไม่งั้นจะเหลือ .part_* ค้าง
+    dl = client.download(link.url, staging, max_bytes=MAX_PDF_BYTES)
+    if not dl.ok:
         store.upsert(**common, needs_review=True, review_reason="ดึงไฟล์ไม่สำเร็จ",
-                     status="error", last_error=f"GET http {code}", bump_error=True,
+                     status="error", last_error=dl.reason[:500], bump_error=True,
                      http_etag=etag, http_last_modified=last_mod, content_length=length,
                      file_sha256=None, previous_sha256=None, staging_path=None, document_id=None)
-        return SyncOutcome(link.url, link.filename, "error", True, f"GET http {code}",
+        return SyncOutcome(link.url, link.filename, "error", True, dl.reason,
                            confidence=confidence)
 
-    body = resp.content
-    sha = hashlib.sha256(body).hexdigest()
-    size = len(body)
+    sha = dl.sha256
+    size = dl.size
+    staged = False
+    try:
+        # เหมือนของที่เคยบันทึกไว้เอง
+        if existing and existing.file_sha256 == sha:
+            store.upsert(**common, needs_review=needs_review, review_reason=reason or None,
+                         status="unchanged", last_error=None, bump_error=False,
+                         http_etag=etag, http_last_modified=last_mod, content_length=size,
+                         file_sha256=sha, previous_sha256=None, staging_path=None, document_id=None)
+            return SyncOutcome(link.url, link.filename, "unchanged", needs_review,
+                               "เนื้อไฟล์เหมือนรอบก่อน", sha256=sha,
+                               course_label=m.course_title, confidence=confidence)
 
-    # เหมือนของที่เคยบันทึกไว้เอง
-    if existing and existing.file_sha256 == sha:
-        store.upsert(**common, needs_review=needs_review, review_reason=reason or None,
-                     status="unchanged", last_error=None, bump_error=False,
-                     http_etag=etag, http_last_modified=last_mod, content_length=size,
-                     file_sha256=sha, previous_sha256=None, staging_path=None, document_id=None)
-        return SyncOutcome(link.url, link.filename, "unchanged", needs_review,
-                           "เนื้อไฟล์เหมือนรอบก่อน", sha256=sha,
-                           course_label=m.course_title, confidence=confidence)
+        # มีอยู่ในคลังความรู้แล้ว
+        if sha in known_by_sha:
+            doc = known_by_sha[sha]
+            store.upsert(**common, needs_review=needs_review, review_reason=reason or None,
+                         status="unchanged", last_error=None, bump_error=False,
+                         http_etag=etag, http_last_modified=last_mod, content_length=size,
+                         file_sha256=sha, previous_sha256=None, staging_path=None,
+                         document_id=str(doc["id"]))
+            return SyncOutcome(link.url, link.filename, "unchanged", needs_review,
+                               f"มีในคลังแล้ว ({doc['original_filename']})", sha256=sha,
+                               course_label=doc["course_title"], confidence=confidence)
 
-    # มีอยู่ในคลังความรู้แล้ว
-    if sha in known_by_sha:
-        doc = known_by_sha[sha]
-        store.upsert(**common, needs_review=needs_review, review_reason=reason or None,
-                     status="unchanged", last_error=None, bump_error=False,
-                     http_etag=etag, http_last_modified=last_mod, content_length=size,
-                     file_sha256=sha, previous_sha256=None, staging_path=None,
-                     document_id=str(doc["id"]))
-        return SyncOutcome(link.url, link.filename, "unchanged", needs_review,
-                           f"มีในคลังแล้ว ({doc['original_filename']})", sha256=sha,
-                           course_label=doc["course_title"], confidence=confidence)
-
-    # ---- ของใหม่หรือของที่เปลี่ยน — เก็บไว้ที่ staging --------------------
-    staging.mkdir(parents=True, exist_ok=True)
-    out = staging / _safe_name(link, sha)
-    out.write_bytes(body)
+        # ---- ของใหม่หรือของที่เปลี่ยน — เก็บไว้ที่ staging ----------------
+        # ย้ายแบบ atomic ไฟล์ชั่วคราวอยู่โฟลเดอร์เดียวกันจึงไม่ข้ามไฟล์ซิสเทม
+        out = staging / _safe_name(link, sha)
+        os.replace(dl.path, out)
+        staged = True
+    finally:
+        if not staged and dl.path is not None:
+            dl.path.unlink(missing_ok=True)
 
     changed = bool(existing and existing.file_sha256 and existing.file_sha256 != sha)
     status = "changed" if changed else "downloaded"
     why = "เนื้อไฟล์เปลี่ยนจากรอบก่อน" if changed else "ไฟล์ใหม่ ยังไม่มีในคลัง"
     if size < MIN_PLAUSIBLE_BYTES:
         why += f" · ไฟล์เล็กผิดปกติ ({size/1024:.0f} KB) อาจไม่ใช่เอกสารหลักสูตร"
+    # ลายเซ็นในไฟล์ถูกแต่เซิร์ฟเวอร์ประกาศ content-type เป็นอย่างอื่น — รับไว้แต่ต้องให้คนรู้
+    if dl.content_type_mismatch:
+        why += f" · เซิร์ฟเวอร์ประกาศ content-type เป็น {dl.content_type or 'ไม่ระบุ'}"
 
     store.upsert(**common,
                  needs_review=True,                 # ของใหม่และของที่เปลี่ยนต้องให้คนดูเสมอ

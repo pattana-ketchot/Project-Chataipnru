@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -33,6 +34,7 @@ if str(_ROOT) not in sys.path:
 import psycopg  # noqa: E402
 
 from pipeline.crawl.discover import PdfLink  # noqa: E402
+from pipeline.crawl.http import MAX_PDF_BYTES, PDF_SIGNATURE, Download, url_rejection  # noqa: E402
 from pipeline.crawl.inventory import KnownDocument  # noqa: E402
 from pipeline.crawl.state import CrawlStore  # noqa: E402
 from pipeline.crawl.sync import process_link  # noqa: E402
@@ -47,7 +49,13 @@ class FakeResponse:
 
 
 class StubClient:
-    """เลียนแบบ PoliteClient เท่าที่ process_link ใช้ — head() กับ get()"""
+    """
+    เลียนแบบ PoliteClient เท่าที่ process_link ใช้ — head() · get() · download()
+
+    download() ที่นี่ทำแค่พอให้สถานะในฐานข้อมูลถูกต้อง ไม่ใช่ตัวแทนของด่านตรวจจริง
+    ด่านตรวจจริง (ขอบเขต URL · redirect · เพดานขนาดแบบทยอยอ่าน · ลายเซ็น %PDF-)
+    ทดสอบกับเว็บเซิร์ฟเวอร์จริงใน eval/crawl_download_check.py
+    """
 
     def __init__(self, table: dict[str, FakeResponse]):
         self.table = table
@@ -64,6 +72,32 @@ class StubClient:
         self.requests_made += 1
         return self.table.get(url)
 
+    def download(self, url: str, dest_dir: Path, max_bytes: int = MAX_PDF_BYTES) -> Download:
+        reason = url_rejection(url)
+        if reason:
+            return Download(ok=False, reason=reason)
+        self.requests_made += 1
+        r = self.table.get(url)
+        if r is None or r.status_code != 200:
+            code = r.status_code if r is not None else "-"
+            return Download(ok=False, reason=f"GET http {code}",
+                            status_code=r.status_code if r is not None else None)
+        body = r.content
+        if len(body) > max_bytes:
+            return Download(ok=False, reason=f"ไฟล์ใหญ่เกินเพดาน ({len(body)} ไบต์)")
+        if not body.startswith(PDF_SIGNATURE):
+            return Download(ok=False, reason="ไม่ใช่ PDF")
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(prefix=".part_", suffix=".pdf", dir=dest_dir)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(body)
+        ctype = (r.headers.get("content-type") or "").split(";")[0].strip().lower() or None
+        return Download(ok=True, status_code=200, size=len(body),
+                        sha256=hashlib.sha256(body).hexdigest(),
+                        etag=r.headers.get("etag"),
+                        last_modified=r.headers.get("last-modified"),
+                        content_type=ctype, final_url=url, path=Path(name))
+
 
 def pdf_body(marker: str, size: int = 300 * 1024) -> bytes:
     """เนื้อไฟล์ปลอมขนาดสมจริง marker ต่างกัน = sha ต่างกัน"""
@@ -73,6 +107,7 @@ def pdf_body(marker: str, size: int = 300 * 1024) -> bytes:
 
 def make_resp(body: bytes, etag: str) -> FakeResponse:
     return FakeResponse(200, {"etag": etag, "content-length": str(len(body)),
+                              "content-type": "application/pdf",
                               "last-modified": "Mon, 01 Jun 2026 00:00:00 GMT"}, body)
 
 
@@ -141,6 +176,8 @@ class Checks:
         U_NEW = "https://sci.pnru.ac.th/uploads/programs/brandnew.pdf"
         U_CHG = "https://sci.pnru.ac.th/uploads/programs/willchange.pdf"
         U_ERR = "https://sci.pnru.ac.th/uploads/programs/broken.pdf"
+        # ลิงก์ .pdf บนหน้าของคณะที่ชี้ออกไปโฮสต์อื่น — เกิดขึ้นได้จริงและเคยดาวน์โหลดได้
+        U_OUT = "https://drive.example.com/uploads/programs/elsewhere.pdf"
 
         body_same = pdf_body("EXISTING")
         body_v1 = pdf_body("VERSION-ONE")
@@ -199,6 +236,22 @@ class Checks:
             self.check("4b. นับจำนวนครั้งที่ผิดพลาด", r["error_count"] == 1, f"ได้ {r['error_count']}")
             self.check("4c. ลิงก์อื่นในรอบเดียวกันยังทำงานต่อได้",
                        self.row(store, U_NEW)["status"] == "downloaded")
+
+            # 4e. ลิงก์ .pdf ที่ชี้ออกนอกเว็บคณะ — discover.crawl() เก็บลิงก์พวกนี้มาด้วย
+            # เพราะกรองโฮสต์เฉพาะหน้าที่จะเดินต่อ ตัวดึงต้องปฏิเสธโดยไม่ยิงคำขอเลย
+            # (ด่านตรวจเต็มชุดอยู่ใน eval/crawl_download_check.py)
+            before = client.requests_made
+            process_link(client, store, link(U_OUT, 3, "คณิตศาสตร์"),
+                         known_docs, by_sha, self.staging, download=True)
+            store.conn.commit()
+            r = self.row(store, U_OUT)
+            self.check("4e. ลิงก์นอกเว็บคณะได้สถานะ error", r["status"] == "error",
+                       f"ได้ {r['status']}")
+            self.check("4f. ไม่เก็บไฟล์ของลิงก์นอกเว็บคณะ", r["staging_path"] is None)
+            self.check("4g. ไม่ยิงคำขอไปหาโฮสต์นอกขอบเขตเลย",
+                       client.requests_made == before, f"ยิงไป {client.requests_made - before}")
+            self.check("4h. บันทึกเหตุผลว่าโฮสต์ไม่อนุญาต",
+                       "โฮสต์" in (r["last_error"] or ""), str(r["last_error"]))
 
             # 5. หลักสูตรกำกวม
             r = self.row(store, U_CHG)
