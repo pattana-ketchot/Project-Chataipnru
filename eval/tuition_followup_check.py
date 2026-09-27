@@ -40,14 +40,25 @@ class DirectQuestionChecks(unittest.TestCase):
                     self.assertIsNotNone(found, q)
                     self.assertEqual(found["name"], p["name"], q)
 
-    def test_คำย่อทุกตัวในตารางคำย่อหาสาขาเจอ(self):
+    def test_คำย่อทุกตัวหาสาขาเจอ_หรือขอให้ระบุเมื่อไม่มีในตารางค่าเทอม(self):
+        """ตารางคำย่อครอบสาขาที่มีเอกสารหลักสูตร ซึ่งกว้างกว่าประกาศค่าเทอม
+
+        เดิมข้อนี้บังคับว่าคำย่อทุกตัวต้องมีแถวค่าเทอม แต่มีสาขาที่มีเอกสารหลักสูตร
+        จริงและประกาศค่าเทอมไม่ครอบ (การประกอบอาหารและการบริการอาหาร
+        สาธารณสุขศาสตร์ การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน)
+        สิ่งที่ต้องรับประกันคือกรณีนั้นต้องหาไม่เจอแล้วขอให้ผู้ใช้ระบุสาขา
+        ห้ามไปโดนค่าเทอมของสาขาอื่นที่ชื่อคล้ายกัน
+        """
         for alias, full in ALIASES.items():
             expected = programmes_in(full)
-            self.assertTrue(expected, f"คำย่อ {alias!r} ชี้ไป {full!r} ซึ่งไม่มีในตารางค่าเทอม")
             for q in (f"ค่าเทอม{alias}เท่าไหร่", f"ค่าเทอมของ {alias} เท่าไหร่"):
                 found = tuition.find_program(q)
-                self.assertIsNotNone(found, q)
-                self.assertIn(found["name"], expected, q)
+                if expected:
+                    self.assertIsNotNone(found, q)
+                    self.assertIn(found["name"], expected, q)
+                else:
+                    self.assertIsNone(found, f"{q} -> {found and found['name']!r} ซึ่งเป็นสาขาอื่น")
+                    self.assertIn("ระบุชื่อสาขา", tuition.answer(q), q)
 
     def test_ชื่อย่อที่สะกดตามคำเต็ม(self):
         """ผู้ใช้จริงพิมพ์ "วิทย์คอม" แล้วได้ช่วงค่าเทอมรวม"""
