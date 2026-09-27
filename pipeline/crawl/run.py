@@ -25,9 +25,9 @@ Phase 1 — สำรวจอย่างเดียว ไม่นำเข�
 from __future__ import annotations
 
 import argparse
-import hashlib
 import logging
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,7 +37,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from pipeline.crawl.discover import PdfLink, crawl  # noqa: E402
-from pipeline.crawl.http import PoliteClient  # noqa: E402
+from pipeline.crawl.http import PoliteClient, url_rejection  # noqa: E402
 from pipeline.crawl.inventory import KnownDocument, MatchResult, load_inventory, match_course  # noqa: E402
 from pipeline.crawl.report import write_report  # noqa: E402
 
@@ -68,9 +68,17 @@ class Finding:
     note: str = ""
 
 
-def probe(client: PoliteClient, link: PdfLink, known: list[KnownDocument], do_hash: bool) -> Finding:
+def probe(client: PoliteClient, link: PdfLink, known: list[KnownDocument], do_hash: bool,
+          scratch: Path) -> Finding:
     m = match_course(link.page_title, known)
     f = Finding(link=link, status="ระบุไม่ได้", match=m)
+
+    # ลิงก์นอกขอบเขต — รายงานไว้แต่ไม่ยิงคำขอ (ดู pipeline/crawl/http.py)
+    out_of_scope = url_rejection(link.url)
+    if out_of_scope:
+        f.status = "ดึงไม่สำเร็จ"
+        f.note = f"นอกขอบเขตที่อนุญาต — {out_of_scope}"
+        return f
 
     head = client.head(link.url)
     if head is not None and head.status_code == 200:
@@ -85,16 +93,22 @@ def probe(client: PoliteClient, link: PdfLink, known: list[KnownDocument], do_ha
         f.note = "ข้ามการคำนวณ sha256 (--no-hash)"
         return f
 
-    resp = client.get(link.url)
-    if resp is None or resp.status_code != 200:
+    # ใช้ตัวดาวน์โหลดตัวเดียวกับ Phase 2 เพื่อให้ได้ด่านตรวจชุดเดียวกัน (โฮสต์ปลายทางหลัง
+    # redirect · เพดานขนาด · ลายเซ็น %PDF-) เดิมที่นี่ใช้ resp.content ซึ่งอ่านทั้งไฟล์เข้า
+    # หน่วยความจำก่อนแล้วจึงรู้ขนาด และไม่ได้ตรวจว่าไฟล์เป็น PDF จริงหรือไม่
+    dl = client.download(link.url, scratch)
+    if not dl.ok:
         f.status = "ดึงไม่สำเร็จ"
-        f.note = f"http {resp.status_code if resp is not None else '-'}"
+        f.note = dl.reason
         return f
 
-    body = resp.content
-    f.byte_size = len(body)
-    f.sha256 = hashlib.sha256(body).hexdigest()
-    del body  # ไม่เก็บเนื้อไฟล์ไว้ Phase 1 ตรวจอย่างเดียว
+    f.byte_size = dl.size
+    f.sha256 = dl.sha256
+    if dl.content_type_mismatch:
+        f.note = f"เซิร์ฟเวอร์ประกาศ content-type เป็น {dl.content_type or 'ไม่ระบุ'}"
+    # Phase 1 ตรวจอย่างเดียว ไม่เก็บไฟล์ไว้
+    if dl.path is not None:
+        dl.path.unlink(missing_ok=True)
 
     by_sha = {k.sha256: k for k in known if k.sha256}
     if f.sha256 in by_sha:
@@ -133,14 +147,19 @@ def main() -> None:
     logger.info("คลังที่ระบบมี: %d เอกสาร", len(known))
 
     started = datetime.now(timezone.utc)
-    with PoliteClient(delay=args.delay) as client:
+    # โฟลเดอร์ชั่วคราวสำหรับไฟล์ที่โหลดมาคำนวณ sha256 — Phase 1 ไม่เก็บไฟล์ไว้
+    # ตัวดาวน์โหลดต้องมีที่เขียนไฟล์เพราะทยอยอ่านทีละก้อนแทนการถือทั้งไฟล์ในหน่วยความจำ
+    with PoliteClient(delay=args.delay) as client, tempfile.TemporaryDirectory(
+            prefix="crawl_probe_") as tmp:
+        scratch = Path(tmp)
         pages, links, errors = crawl(client, SEEDS, FACULTY_HOST, FOLLOW, args.max_pages)
         logger.info("เดินเว็บ %d หน้า พบลิงก์ PDF ไม่ซ้ำ %d รายการ", len(pages), len(links))
 
         findings = []
         for i, link in enumerate(links, 1):
             logger.info("[%d/%d] ตรวจ %s", i, len(links), link.filename)
-            findings.append(probe(client, link, known, do_hash=not args.no_hash))
+            findings.append(probe(client, link, known, do_hash=not args.no_hash,
+                                  scratch=scratch))
 
         requests_made = client.requests_made
 
