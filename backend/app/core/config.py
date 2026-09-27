@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     # ใช้เป็นสวิตช์ปิดได้ทันทีโดยไม่ต้อง deploy โค้ดใหม่
     documents_dir: str = Field("", alias="DOCUMENTS_DIR")
 
+    # --- ไฟล์ที่ crawler โหลดมารออนุมัติ (ดู services/staging_store.py) ---
+    # โฟลเดอร์ staging ของ pipeline/crawl/sync.py mount แบบอ่านอย่างเดียว
+    # ค่าว่าง (ค่าตั้งต้น) = ปิดการเปิดดูไฟล์ในคิว เส้นทาง /crawl-review/{id}/pdf จะ
+    # ตอบว่าไม่พบเสมอ ส่วนคิวและการอนุมัติยังทำงานได้ — สวิตช์เดียวกับ documents_dir
+    crawl_staging_dir: str = Field("", alias="CRAWL_STAGING_DIR")
+
 
 @lru_cache
 def get_settings() -> Settings:
