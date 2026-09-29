@@ -1,0 +1,52 @@
+# ตัวนำเข้าเอกสารที่อนุมัติแล้ว — overlay ที่ต้องสั่งรันเองทุกครั้ง (Phase 3C/3D)
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.worker.yml \
+#     run --rm ingest-worker
+#
+# ทำไมเป็นไฟล์แยก ไม่ใส่ลง docker-compose.prod.yml
+# ------------------------------------------------
+# ไฟล์ prod ถูกใช้กับ `up -d` เป็นปกติ ถ้าใส่ service นี้ลงไปตรง ๆ วันหนึ่งจะมีคนสั่ง
+# up แล้วได้ ingestion ทำงานโดยไม่ได้ตั้งใจ — ซึ่งขัดกับข้อกำหนดของ Phase 3 ที่ให้การ
+# นำเข้าเกิดจากการอนุมัติของคนเท่านั้น แยกไฟล์ทำให้ต้องพิมพ์ -f เพิ่มจึงจะเห็น service นี้
+# และยังใส่ profiles ทับอีกชั้น เผื่อมีใครรวมไฟล์นี้เข้าไปในคำสั่ง up
+#
+# ทำไมไม่มี restart policy แบบ unless-stopped
+# -------------------------------------------
+# worker ทำงานจำนวนจำกัดแล้วออก (pipeline/crawl/approve.py::work) ออกด้วยรหัส 1 เมื่อมี
+# งานที่ล้มเหลว ถ้าตั้งให้รีสตาร์ตอัตโนมัติ งานที่ล้มจะถูกลองใหม่วนไปโดยไม่มีคนเห็น
+#
+# ข้อควรรู้เรื่องการเห็นไฟล์ใหม่
+# -----------------------------
+# backend สร้างดัชนีเอกสารครั้งเดียวต่อโปรเซสแบบ lazy และไม่มีทางล้างดัชนี
+# (backend/app/services/document_store.py:104-109) PDF ที่ worker เพิ่งวางลง documents/
+# จึงยังเปิดผ่าน /documents/{id}/pdf ไม่ได้จนกว่า backend จะเริ่มโปรเซสใหม่
+# คำตอบของระบบไม่ได้รับผลกระทบ เพราะอ่านจาก course_chunks ในฐานข้อมูล
+
+services:
+  ingest-worker:
+    # ผูกกับ revision ที่ตรวจย้อนกลับได้ ไม่ใช้ :latest เพื่อให้ rollback ชี้อิมเมจเดิมได้
+    # build ด้วย: docker build -f pipeline/Dockerfile \
+    #   --build-arg GIT_REVISION=<commit> -t course-advisor-system-ingest-worker:<tag> .
+    image: course-advisor-system-ingest-worker:617110e
+    # ต้องระบุ --profile worker หรือใช้ `run` จึงจะถูกสร้าง — `up -d` เฉย ๆ จะข้ามไป
+    profiles: ["worker"]
+    restart: "no"
+    # uid/gid ของผู้ใช้ ubuntu บนเซิร์ฟเวอร์ ซึ่งเป็นเจ้าของ documents/ และ staging/
+    # ไฟล์ที่เขียนออกมาจึงเป็น 1001:1001 mode 644 ซึ่ง backend (uid 1000) อ่านได้
+    user: "1001:1001"
+    environment:
+      # DSN ของ role advisor_ingest — อ่านจาก .env ของโปรเจกต์ ไม่ประกอบขึ้นใหม่ที่นี่
+      INGEST_DATABASE_URL: ${INGEST_DATABASE_URL:?ต้องตั้งค่าใน .env}
+      OLLAMA_BASE_URL: http://ollama:11434
+      # ต้องตรงกับสัญญาที่ approve.py ตรวจก่อนเริ่มงาน (bge-m3 / 1024)
+      EMBED_MODEL: ${EMBED_MODEL:-bge-m3}
+      EMBED_DIM: ${EMBED_DIM:-1024}
+      # ต้องเป็น path เดียวกับที่ backend เห็น เพราะค่าใน mko.crawl_sources.staging_path
+      # เป็น path ในมุมของคอนเทนเนอร์ ไม่ใช่ของ host
+      CRAWL_STAGING_DIR: /srv/staging
+      DOCUMENTS_DIR: /srv/documents
+    volumes:
+      # ไฟล์ที่รออนุมัติ — worker อ่านอย่างเดียว การลบ/ย้ายไฟล์ใน staging ไม่ใช่งานของ worker
+      - ./staging/crawl:/srv/staging:ro
+      # คลังเอกสารต้นฉบับ — worker เป็นตัวเดียวที่ได้สิทธิ์เขียนโฟลเดอร์นี้
+      - ./documents:/srv/documents:rw
