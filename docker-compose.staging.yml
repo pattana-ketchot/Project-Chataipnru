@@ -1,0 +1,34 @@
+# เปิดให้ backend เห็นไฟล์ที่รออนุมัติ — overlay ที่ยังไม่ได้ใช้บนเครื่องจริง (Phase 3D)
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d backend
+#
+# ต้องมีไฟล์นี้เพราะอะไร
+# ---------------------
+# หน้า /crawl-review มีปุ่มเปิด PDF ของไฟล์ที่ crawler โหลดมา ปลายทางคือ
+# GET /crawl-review/{id}/pdf ซึ่งอ่านไฟล์ผ่าน services/staging_store.py และ
+# staging_store ปิดตัวเองเมื่อ CRAWL_STAGING_DIR เป็นค่าว่าง (ค่าเริ่มต้น) จึงตอบ 404
+# ทุกคำขอ ตราบใดที่ backend ยังไม่ได้ทั้ง mount และ env สองอย่างนี้
+#
+# คิว การอนุมัติ และการไม่สนใจ ทำงานได้อยู่แล้วโดยไม่ต้องมีไฟล์นี้ — ขาดเฉพาะการเปิดดู
+# ไฟล์ก่อนอนุมัติ ซึ่งเป็นขั้นตอนที่คนควรทำก่อนกดอนุมัติ จึงต้องเปิดก่อนใช้งานจริง
+#
+# ทำไมยังไม่ใช้
+# -------------
+# การเพิ่ม mount ให้ container ที่รันอยู่ทำไม่ได้ ต้อง recreate backend ซึ่งกระทบระบบที่
+# กำลังให้บริการ จึงแยกเป็นไฟล์ไว้รออนุมัติของเจ้าของโปรเจกต์ (Phase 3D Step 2 = เตรียม
+# config เท่านั้น)
+#
+# อ่านอย่างเดียวเสมอ
+# ------------------
+# backend ไม่เคยเขียนอะไรลง staging เลย — ทั้งการอนุมัติและการไม่สนใจเขียนลงฐานข้อมูล
+# ส่วนการคัดลอกไฟล์เข้าคลังเอกสารเป็นงานของ worker จึงต้องเป็น :ro ตลอดไป
+# เหตุผลเดียวกับที่ ./documents ของ backend เป็น :ro มาตั้งแต่ต้น
+
+services:
+  backend:
+    environment:
+      # path ในมุมของคอนเทนเนอร์ ต้องตรงกับที่ crawler บันทึกไว้ใน
+      # mko.crawl_sources.staging_path และตรงกับ CRAWL_STAGING_DIR ของ ingest-worker
+      CRAWL_STAGING_DIR: /srv/staging
+    volumes:
+      - ./staging/crawl:/srv/staging:ro
