@@ -1,0 +1,139 @@
+# สภาพแวดล้อมทดสอบ E2E ที่แยกอิสระจาก production โดยสมบูรณ์
+#
+#   docker compose -p sci-advisor-e2e -f eval/e2e/docker-compose.e2e.yml up -d
+#
+# ทุกอย่างในไฟล์นี้เป็นของการทดสอบล้วน — ห้ามนำไปใช้กับ production
+#
+# การแยกที่ไฟล์นี้รับประกัน
+# ------------------------
+# 1. เครือข่ายของตัวเอง (sci-advisor-e2e_default) ไม่ได้ผูกกับเครือข่ายของ production
+# 2. ไม่ publish พอร์ตใดออกสู่ host เลย — ตัวทดสอบรันอยู่ใน e2e-runner จึงเรียก
+#    บริการอื่นด้วยชื่อ service ได้โดยตรง ไม่ต้องเปิดพอร์ต
+# 3. volume ของตัวเองทั้งหมด ไม่มี bind mount ไปยังโฟลเดอร์ของ production
+# 4. ไม่อ่าน .env ของโปรเจกต์ ค่าทุกตัวกำหนดในไฟล์นี้และเป็นค่าทดสอบล้วน
+# 5. ชื่อ sci.pnru.ac.th ถูก alias ให้ชี้เว็บจำลองเฉพาะภายในเครือข่ายนี้
+#    ทำให้ crawler ตัวจริงผ่านด่าน ALLOWED_HOSTS ได้โดยไม่ต้องแก้ source แม้บรรทัดเดียว
+#
+# ค่าลับในไฟล์นี้เป็นค่าทดสอบที่ใช้ครั้งเดียวแล้วทิ้งไปกับ volume
+# รหัสผ่านของผู้ใช้ทดสอบไม่ได้อยู่ที่นี่ — run_e2e.py สุ่มขึ้นในหน่วยความจำตอนรัน
+
+services:
+  e2e-postgres:
+    image: pgvector/pgvector:pg16
+    restart: "no"
+    environment:
+      POSTGRES_DB: e2e_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: e2e-throwaway-postgres
+      ADVISOR_API_PASSWORD: e2e-throwaway-api
+      ADVISOR_INGEST_PASSWORD: e2e-throwaway-ingest
+    volumes:
+      - e2e_pgdata:/var/lib/postgresql/data
+      # schema และ role ชุดเดียวกับ production ทุกไบต์ (อ่านอย่างเดียว)
+      - ../../db/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ../../db/20-roles.sh:/docker-entrypoint-initdb.d/20-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d e2e_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  e2e-ollama:
+    image: ollama/ollama:latest
+    restart: "no"
+    environment:
+      OLLAMA_KEEP_ALIVE: "30m"
+    volumes:
+      - e2e_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+
+  # เว็บจำลองของคณะ — หัวใจของการทดสอบ crawler
+  # network alias ทำให้ชื่อ sci.pnru.ac.th ชี้มาที่นี่ "เฉพาะในเครือข่ายทดสอบ"
+  e2e-fakesite:
+    image: python:3.11-slim
+    restart: "no"
+    working_dir: /srv
+    command: ["python", "/srv/server.py"]
+    volumes:
+      - ../../eval/e2e/fakesite/server.py:/srv/server.py:ro
+      - e2e_site:/srv/site:ro
+    networks:
+      default:
+        aliases:
+          - sci.pnru.ac.th
+
+  # backend ตัวจริง build จาก Dockerfile ชุดเดียวกับ production
+  e2e-backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    restart: "no"
+    depends_on:
+      e2e-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://advisor_api:e2e-throwaway-api@e2e-postgres:5432/e2e_test
+      JWT_SECRET: e2e-isolated-test-only-jwt-secret-not-used-anywhere-else
+      OLLAMA_BASE_URL: http://e2e-ollama:11434
+      EMBED_MODEL: bge-m3
+      EMBED_DIM: "1024"
+      CRAWL_STAGING_DIR: /srv/staging
+      DOCUMENTS_DIR: /srv/documents
+      # ปิด warmup เพื่อไม่ให้มี embedding ที่ไม่ได้ตั้งใจปนในผลทดสอบ
+      WARMUP_INTERVAL_MINUTES: "0"
+      LLM_PROVIDER: ollama
+    volumes:
+      # backend อ่านอย่างเดียวทั้งสองโฟลเดอร์ เหมือน production ทุกประการ
+      - e2e_staging:/srv/staging:ro
+      - e2e_documents:/srv/documents:ro
+
+  # ตัวรันการทดสอบ — ใช้อิมเมจของ ingest worker เพราะมี PyMuPDF/psycopg/pgvector/httpx ครบ
+  #
+  # mount repo แบบอ่านอย่างเดียวที่ /repo และตั้ง PYTHONPATH=/repo เพื่อให้ import
+  # pipeline/, llm/, backend/, db/, eval/ จาก source เดียวกับที่ตรวจไว้
+  # (อิมเมจ worker มีแต่ pipeline/ กับ llm/ จึงต้อง mount เพิ่ม — บันทึกเป็น deviation)
+  e2e-runner:
+    build:
+      context: ../..
+      dockerfile: pipeline/Dockerfile
+    restart: "no"
+    depends_on:
+      e2e-postgres:
+        condition: service_healthy
+    working_dir: /repo
+    environment:
+      PYTHONPATH: /repo
+      PYTHONUNBUFFERED: "1"
+      E2E_DSN: postgresql://postgres:e2e-throwaway-postgres@e2e-postgres:5432/e2e_test
+      INGEST_DATABASE_URL: postgresql://advisor_ingest:e2e-throwaway-ingest@e2e-postgres:5432/e2e_test
+      OLLAMA_BASE_URL: http://e2e-ollama:11434
+      EMBED_MODEL: bge-m3
+      EMBED_DIM: "1024"
+      CRAWL_STAGING_DIR: /srv/staging
+      DOCUMENTS_DIR: /srv/documents
+      E2E_BACKEND_URL: http://e2e-backend:8000
+      E2E_SITE_DIR: /srv/site
+      E2E_OUT_DIR: /out
+    volumes:
+      - ../..:/repo:ro
+      # crawler เขียน staging · worker อ่าน staging และเขียน documents
+      # (ใน production เป็นคนละคอนเทนเนอร์ ที่นี่รวมเป็นตัวเดียวจึงต้องเป็น rw)
+      - e2e_staging:/srv/staging:rw
+      - e2e_documents:/srv/documents:rw
+      - e2e_site:/srv/site:rw
+      - e2e_out:/out:rw
+    command: ["sleep", "infinity"]
+
+volumes:
+  e2e_pgdata:
+  e2e_ollama:
+  e2e_site:
+  e2e_staging:
+  e2e_documents:
+  e2e_out:
