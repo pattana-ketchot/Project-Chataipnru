@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import hashlib
 import http.server
+import os
 import socket
+import stat
 import sys
 import tempfile
 import threading
@@ -42,9 +44,15 @@ if str(_ROOT) not in sys.path:
 
 from pipeline.crawl import http as http_mod  # noqa: E402
 from pipeline.crawl.discover import PdfLink  # noqa: E402
-from pipeline.crawl.http import PoliteClient, url_rejection  # noqa: E402
+from pipeline.crawl.http import STAGED_FILE_MODE, PoliteClient, url_rejection  # noqa: E402
 from pipeline.crawl.inventory import KnownDocument  # noqa: E402
 from pipeline.crawl.sync import process_link  # noqa: E402
+
+# uid/gid ที่อีกสองฝ่ายรันอยู่จริง ใช้พิสูจน์ว่าไฟล์ใน staging อ่านข้าม uid ได้จริง
+#   backend/Dockerfile:29   useradd --create-home --uid 1000 appuser
+#   pipeline/Dockerfile:54  groupadd --gid 1001 worker && useradd --uid 1001 --gid 1001 worker
+BACKEND_UID = BACKEND_GID = 1000
+WORKER_UID = WORKER_GID = 1001
 
 
 def pdf_bytes(marker: str, size: int) -> bytes:
@@ -219,11 +227,62 @@ KNOWN = [KnownDocument(sha256="0" * 64, filename="cs66.pdf", page_count=120,
                        course_title="หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566)")]
 
 
+# ---- อ่านไฟล์ในนามของ uid อื่นจริง ๆ ------------------------------------
+def read_as_uid(path: Path, uid: int, gid: int) -> tuple[bool, str]:
+    """fork แล้วลดสิทธิ์ในลูก เพื่อพิสูจน์ว่า uid อื่นเปิดไฟล์นี้ได้จริง
+
+    ทำไมต้อง fork + setuid ไม่ใช่ดูแค่บิตโหมด
+    ----------------------------------------
+    บิตโหมดคือกลไก แต่สิ่งที่ต้องพิสูจน์คือผลลัพธ์ — ว่า backend ซึ่งรันคนละ uid
+    เปิดไฟล์นี้ได้จริง การอ่านในนาม uid จริงพิสูจน์บิตโหมด เจ้าของไฟล์ และการ
+    traverse โฟลเดอร์เหนือขึ้นไปพร้อมกันในข้อเดียว
+
+    ต้องเป็น root จึงจะลดสิทธิ์ได้ ผู้เรียกต้องตรวจก่อนเรียก
+    คืน (อ่านได้, รายละเอียด)
+    """
+    r, w = os.pipe()
+    pid = os.fork()
+    if pid == 0:                                    # ---- โปรเซสลูก ----
+        os.close(r)
+        try:
+            os.setgroups([])
+            os.setgid(gid)
+            os.setuid(uid)
+            with open(path, "rb") as fh:
+                head = fh.read(len(http_mod.PDF_SIGNATURE))
+            os.write(w, b"ok:" + head)
+        except BaseException as e:                  # noqa: BLE001 — ต้องรายงานทุกชนิด
+            try:
+                os.write(w, f"err:{type(e).__name__}".encode())
+            except Exception:
+                pass
+        finally:
+            os._exit(0)                             # ห้ามให้ลูกรันชุดทดสอบต่อ
+    os.close(w)                                     # ---- โปรเซสพ่อ ----
+    buf = b""
+    while True:
+        part = os.read(r, 4096)
+        if not part:
+            break
+        buf += part
+    os.close(r)
+    os.waitpid(pid, 0)
+    if buf.startswith(b"ok:"):
+        return True, repr(buf[3:])
+    return False, buf.decode("utf-8", "replace") or "ไม่ได้คำตอบจากโปรเซสลูก"
+
+
 # ---- ชุดทดสอบ -----------------------------------------------------------
 class Checks:
     def __init__(self) -> None:
         self.passed: list[str] = []
         self.failed: list[tuple[str, str]] = []
+        self.skipped: list[tuple[str, str]] = []
+
+    def skip(self, name: str, why: str) -> None:
+        """ข้อที่เครื่องนี้พิสูจน์ไม่ได้ — ต้องเห็นว่าข้าม ไม่ใช่ถูกนับเป็นผ่าน"""
+        self.skipped.append((name, why))
+        print(f"  ข้าม   {name}  — {why}")
 
     def check(self, name: str, ok: bool, detail: str = "") -> None:
         (self.passed.append(name) if ok else self.failed.append((name, detail)))
@@ -497,6 +556,123 @@ class Checks:
         self.check("โหมดไม่โหลดไฟล์: เหตุผลบอกโหมด", "ไม่โหลด" in o.reason, o.reason)
 
     # ---- Phase 2 regression — เล่นสถานการณ์เดิมซ้ำโดยไม่ต้องมีฐานข้อมูล ----
+    # ---- F1: สิทธิ์ของไฟล์ที่ส่งมอบให้ staging ---------------------------
+    def staged_permissions(self, base: str, staging: Path) -> None:
+        """พิสูจน์ว่าไฟล์ที่ crawler เก็บไว้ที่ staging ถูกอ่านได้จากอีก uid
+
+        ข้อบกพร่อง F1 ที่ชุดนี้กันไม่ให้กลับมา
+        -------------------------------------
+        tempfile.mkstemp() สร้างไฟล์เป็น 0600 โดยไม่สนใจ umask และ os.replace()
+        ไม่แตะโหมด ไฟล์ใน staging จึงเคยเป็น 0600 ของ uid ที่รัน crawler ทำให้
+        backend (uid 1000) อ่านไม่ได้ และ GET /crawl-review/{id}/pdf ตอบ 404 ทุกครั้ง
+        แม้ไฟล์จะครบถ้วนและ sha256 ถูกต้อง คนตรวจจึงเปิดดูก่อนอนุมัติไม่ได้เลย
+
+        ทำไมชุดเดิมไม่จับได้
+        -------------------
+        ข้อตรวจเดิมถามแค่ "มีไฟล์ไหม เนื้อตรงไหม ไม่มี .part_ ค้างใช่ไหม" ไม่มีข้อใด
+        แตะบิตโหมดเลย และ staging บน production ว่างมาตลอดจึงไม่มีใครเห็นอาการ
+        """
+        print("\n[5] สิทธิ์ของไฟล์ใน staging — กันข้อบกพร่อง F1 กลับมา")
+
+        if os.name != "posix":
+            self.skip("F1: ทั้งชุด",
+                      f"ระบบนี้ไม่ใช่ POSIX (os.name={os.name!r}) บิตโหมดไม่มีความหมาย "
+                      "ต้องรันในคอนเทนเนอร์ Linux")
+            return
+
+        sha_expected = hashlib.sha256(SMALL_PDF).hexdigest()
+
+        # โฟลเดอร์ต้องให้ uid อื่น traverse ได้ก่อน ไม่งั้นข้อตรวจจะล้มเพราะโฟลเดอร์
+        # ไม่ใช่เพราะไฟล์ — 0755 ตรงกับ staging/crawl บน production
+        # แตะเฉพาะโฟลเดอร์ ไม่แตะไฟล์ PDF ที่กำลังทดสอบแม้ไฟล์เดียว
+        for d in (staging.parent, staging):
+            try:
+                os.chmod(d, 0o755)
+            except OSError:
+                pass
+
+        with PoliteClient(delay=0.0, timeout=5.0) as c:
+            dl = c.download(f"{base}/ok.pdf", staging)
+        self.check("F1: ดาวน์โหลดสำเร็จ", dl.ok, dl.reason)
+        if not dl.ok or dl.path is None:
+            return
+
+        tmp = dl.path
+        mode = stat.S_IMODE(tmp.stat().st_mode)
+
+        # --- บิตโหมดของไฟล์ที่ download() ส่งมอบให้ผู้เรียก ---
+        self.check("F1: ไฟล์ที่ส่งมอบมีโหมดตามที่ประกาศไว้",
+                   mode == STAGED_FILE_MODE, f"{mode:04o} != {STAGED_FILE_MODE:04o}")
+        self.check("F1: ไม่ใช่ 0600 อย่างที่ mkstemp ตั้งไว้",
+                   mode != 0o600, f"{mode:04o} — ข้อบกพร่อง F1 กลับมาแล้ว")
+        self.check("F1: other อ่านได้", bool(mode & 0o004), f"{mode:04o}")
+        self.check("F1: group อ่านได้", bool(mode & 0o040), f"{mode:04o}")
+        self.check("F1: other เขียนไม่ได้", mode & 0o002 == 0, f"{mode:04o}")
+        self.check("F1: group เขียนไม่ได้", mode & 0o020 == 0, f"{mode:04o}")
+        self.check("F1: ไม่มี execute bit", mode & 0o111 == 0, f"{mode:04o}")
+        self.check("F1: ไม่มี setuid/setgid/sticky", mode & 0o7000 == 0, f"{mode:04o}")
+
+        # --- การตั้งสิทธิ์ต้องไม่แตะเนื้อไฟล์ ---
+        on_disk = tmp.read_bytes()
+        self.check("F1: sha256 ของไฟล์บนดิสก์ตรงกับที่ crawler รายงาน",
+                   hashlib.sha256(on_disk).hexdigest() == dl.sha256, str(dl.sha256))
+        self.check("F1: sha256 ตรงกับเนื้อที่เซิร์ฟเวอร์ส่งมา",
+                   dl.sha256 == sha_expected, f"{dl.sha256} != {sha_expected}")
+        self.check("F1: ขนาดไฟล์ไม่เปลี่ยน", len(on_disk) == len(SMALL_PDF),
+                   f"{len(on_disk)} != {len(SMALL_PDF)}")
+        self.check("F1: ลายเซ็น %PDF- ยังอยู่",
+                   on_disk.startswith(http_mod.PDF_SIGNATURE), repr(on_disk[:8]))
+
+        # --- os.replace() ต้องรักษาโหมดไว้ — เหตุผลที่ต้องตั้งก่อน replace ---
+        final = staging / f"{dl.sha256[:12]}_perm_check.pdf"
+        os.replace(tmp, final)
+        mode_after = stat.S_IMODE(final.stat().st_mode)
+        self.check("F1: โหมดคงเดิมหลัง os.replace()",
+                   mode_after == mode, f"{mode_after:04o} != {mode:04o}")
+        self.check("F1: sha256 คงเดิมหลัง os.replace()",
+                   hashlib.sha256(final.read_bytes()).hexdigest() == dl.sha256)
+
+        # --- พิสูจน์ด้วยการอ่านในนาม uid จริง ---
+        if os.geteuid() == 0:
+            for label, uid, gid in (("backend", BACKEND_UID, BACKEND_GID),
+                                    ("worker", WORKER_UID, WORKER_GID)):
+                ok, detail = read_as_uid(final, uid, gid)
+                self.check(f"F1: uid {uid} ({label}) เปิดไฟล์ได้จริง", ok, detail)
+                self.check(f"F1: uid {uid} ({label}) อ่านได้ลายเซ็น %PDF-",
+                           ok and repr(http_mod.PDF_SIGNATURE) in detail, detail)
+        else:
+            self.skip(f"F1: อ่านในนาม uid {BACKEND_UID}/{WORKER_UID}",
+                      f"ต้องรันเป็น root จึงจะลดสิทธิ์ได้ (euid={os.geteuid()}) "
+                      "— พิสูจน์จริงใน isolated E2E ด้วย backend ตัวจริง")
+        final.unlink()
+
+        # --- เส้นทางจริงทั้งเส้น: process_link ต้องได้ไฟล์โหมดเดียวกัน ---
+        store = StubStore(None)
+        with PoliteClient(delay=0.0, timeout=5.0) as c:
+            o = process_link(c, store, make_link(f"{base}/ok.pdf"), KNOWN, {},
+                             staging, download=True)
+        self.check("F1: process_link เก็บไฟล์ไว้จริง", o.staging_path is not None, str(o.status))
+        if o.staging_path:
+            staged = Path(o.staging_path)
+            m = stat.S_IMODE(staged.stat().st_mode)
+            self.check("F1: ไฟล์จาก process_link มีโหมดตามที่ประกาศไว้",
+                       m == STAGED_FILE_MODE, f"{m:04o} != {STAGED_FILE_MODE:04o}")
+            self.check("F1: ไฟล์จาก process_link ไม่ world-writable", m & 0o002 == 0, f"{m:04o}")
+            if os.geteuid() == 0:
+                ok, detail = read_as_uid(staged, BACKEND_UID, BACKEND_GID)
+                self.check("F1: backend uid เปิดไฟล์จาก process_link ได้", ok, detail)
+            staged.unlink()
+
+        # --- ทางที่ล้มต้องไม่ทิ้งอะไรไว้ เหมือนเดิม ---
+        with PoliteClient(delay=0.0, timeout=5.0) as c:
+            bad = c.download(f"{base}/html.pdf", staging)
+        leftovers = [q.name for q in staging.glob(".part_*")]
+        self.check("F1: ดาวน์โหลดที่ถูกปฏิเสธไม่ทิ้งไฟล์ค้าง",
+                   not bad.ok and not leftovers and bad.path is None,
+                   f"ok={bad.ok} leftovers={leftovers}")
+        rest = [q.name for q in staging.iterdir() if q.is_file()]
+        self.check("F1: จบชุดนี้ staging ว่าง", not rest, str(rest))
+
     def phase2_regression(self, staging: Path) -> None:
         """
         เล่นสถานการณ์สองรอบของ eval/crawl_state_check.py ซ้ำด้วย StubClient ตัวเดียวกัน
@@ -506,7 +682,7 @@ class Checks:
         ส่วนที่พิสูจน์แทนไม่ได้คือ CHECK constraint กับ UNIQUE ในฐานข้อมูลจริง
         ซึ่งงานรอบนี้ไม่ได้แตะ schema เลย
         """
-        print("\n[5] Phase 2 regression — ลำดับสถานะเดิมสองรอบ (ไม่ใช้ฐานข้อมูล)")
+        print("\n[6] Phase 2 regression — ลำดับสถานะเดิมสองรอบ (ไม่ใช้ฐานข้อมูล)")
         sys.path.insert(0, str(_ROOT / "eval"))
         import crawl_state_check as csc  # noqa: E402
 
@@ -600,9 +776,11 @@ class Checks:
                 p.unlink()
 
     def report(self) -> bool:
-        print(f"\n---- สรุป ----\n  ผ่าน {len(self.passed)} · ไม่ผ่าน {len(self.failed)}")
+        print(f"\n---- สรุป ----\n  ผ่าน {len(self.passed)} · ไม่ผ่าน {len(self.failed)} · ข้าม {len(self.skipped)}")
         for name, detail in self.failed:
             print(f"  ไม่ผ่าน: {name} — {detail}")
+        for name, why in self.skipped:
+            print(f"  ข้าม: {name} — {why}")
         return not self.failed
 
 
@@ -626,6 +804,7 @@ def main() -> None:
             checks.downloads(base, staging)
             checks.page_requests(base)
             checks.sync_behaviour(base, staging)
+            checks.staged_permissions(base, staging)
             # ชุดนี้ใช้ URL ของคณะจริงกับ StubClient จึงต้องคืนรายการจริงก่อน
             http_mod.ALLOWED_HOSTS, http_mod.ALLOWED_PORTS = real_hosts, real_ports
             checks.phase2_regression(staging)
