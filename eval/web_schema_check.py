@@ -11,9 +11,13 @@
 
 สิ่งที่ต้องพิสูจน์ที่นี่
 ----------------------
-schema นี้มีเหตุผลหลักคือ "ของเดิมไม่มี constraint เลย" (0 FK · 0 CHECK · 1 UNIQUE
-ทั้งฐาน) ชุดนี้จึงไม่ได้ตรวจแค่ว่าตารางถูกสร้าง แต่ตรวจว่า constraint **ทำงานจริง**
-คือปฏิเสธข้อมูลที่ผิดรูปได้ ไม่ใช่แค่ประกาศไว้เฉย ๆ
+ชุดนี้ไม่ได้ตรวจแค่ว่าตารางถูกสร้าง แต่ตรวจว่า constraint **ทำงานจริง** คือปฏิเสธ
+ข้อมูลที่ผิดรูปได้ ไม่ใช่แค่ประกาศไว้เฉย ๆ เพราะ constraint ที่ประกาศผิดด้าน
+(เช่นบังคับคอลัมน์ที่ต้นทางปล่อยว่างได้) จะทำให้นำข้อมูลจริงเข้าไม่ได้ทั้งก้อน
+
+หมายเหตุประวัติ: ชุดนี้รุ่นแรกอ้างว่าต้นทางมี "0 FK · 0 CHECK · 1 UNIQUE" ซึ่งผิด
+ของจริงคือ 7 FK · 2 CHECK · 4 UNIQUE (ที่มา: supabase_schema.sql ในรีโปของหน้าเว็บ)
+ดูรายละเอียดใน docs/SUPABASE_PRE_MIGRATION_AUDIT.md ข้อ 12
 
 และต้องพิสูจน์ว่า migration นี้ **ไม่แตะ public กับ mko** ซึ่งเป็นสัญญาหลักที่ทำให้
 การรวมฐานข้อมูลครั้งนี้ถอนกลับได้และไม่กระทบ RAG, crawler, chat
@@ -137,9 +141,9 @@ def structure(c: Checks, conn) -> None:
             "SELECT count(*) FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid "
             "JOIN pg_namespace n ON n.oid=c.relnamespace "
             "WHERE n.nspname='web' AND i.indisunique").fetchone()[0]
-    # ของเดิมมี FK 0 · CHECK 0 · UNIQUE 1 ทั้งฐาน — ที่นี่ต้องมากกว่านั้นชัดเจน
-    c.check("มี check constraint มากกว่าศูนย์ (ของเดิมมี 0)", n_chk >= 3, f"{n_chk} ตัว")
-    c.check("มี unique index มากกว่าหนึ่ง (ของเดิมมี 1 ทั้งฐาน)", n_uq >= 6, f"{n_uq} ตัว")
+    # ต้นทางมี CHECK 2 · UNIQUE 4 — ปลายทางต้องไม่น้อยกว่านั้นในสัดส่วนที่เทียบได้
+    c.check("มี check constraint อย่างน้อย 3 ตัว", n_chk >= 3, f"{n_chk} ตัว")
+    c.check("มี unique index อย่างน้อย 7 ตัว", n_uq >= 7, f"{n_uq} ตัว")
 
     with conn.cursor() as cur:
         bad_ts = cur.execute("""
@@ -149,7 +153,9 @@ def structure(c: Checks, conn) -> None:
             WHERE n.nspname='web' AND c.relkind='r' AND a.attnum>0 AND NOT a.attisdropped
               AND t.typname = 'timestamp'
         """).fetchone()[0]
-    c.check("ไม่มีคอลัมน์เวลาที่ไม่มีเขตเวลาหลงเหลือ", bad_ts == 0, f"พบ {bad_ts} คอลัมน์")
+    # ต้นทางใช้ TIMESTAMP WITH TIME ZONE อยู่แล้ว ปลายทางต้องเป็น timestamptz เหมือนกัน
+    # จึงย้ายได้โดยไม่ต้องตีความเขตเวลา ข้อนี้กันไม่ให้มีคอลัมน์ไร้เขตเวลาหลุดเข้ามา
+    c.check("ทุกคอลัมน์เวลาเป็น timestamptz", bad_ts == 0, f"พบคอลัมน์ไร้เขตเวลา {bad_ts}")
 
 
 # ---- [2] constraint ต้องทำงานจริง ไม่ใช่แค่ประกาศไว้ ------------------
@@ -163,10 +169,28 @@ def enforcement(c: Checks, conn) -> None:
     c.rejects(conn, "news: title เป็น NULL ถูกปฏิเสธ",
               "INSERT INTO web.news (title) VALUES (NULL)")
 
-    c.rejects(conn, "external_news: slug ซ้ำถูกปฏิเสธ",
-              "INSERT INTO web.external_news (slug, title) VALUES ('s1','a'),('s1','b')")
-    c.accepts(conn, "external_news: slug ต่างกันผ่าน",
-              "INSERT INTO web.external_news (slug, title) VALUES ('s1','a'),('s2','b')")
+    # กุญแจธรรมชาติของต้นทางคือ detail_url ไม่ใช่ slug
+    c.rejects(conn, "external_news: detail_url ซ้ำถูกปฏิเสธ",
+              "INSERT INTO web.external_news (detail_url, title, source) "
+              "VALUES ('u1','a','s'),('u1','b','s')")
+    c.rejects(conn, "external_news: detail_url เป็น NULL ถูกปฏิเสธ",
+              "INSERT INTO web.external_news (detail_url, title, source) VALUES (NULL,'a','s')")
+    c.rejects(conn, "external_news: source เป็น NULL ถูกปฏิเสธ",
+              "INSERT INTO web.external_news (detail_url, title, source) VALUES ('u1','a',NULL)")
+    c.accepts(conn, "external_news: detail_url ต่างกันผ่าน",
+              "INSERT INTO web.external_news (detail_url, title, source) "
+              "VALUES ('u1','a','s'),('u2','b','s')")
+
+    # slug ต้นทางเป็น NULL ได้ และ unique เฉพาะแถวที่มีค่า (partial unique)
+    c.accepts(conn, "external_news: หลายแถวที่ slug เป็น NULL อยู่ร่วมกันได้",
+              "INSERT INTO web.external_news (detail_url, title, source, slug) "
+              "VALUES ('u1','a','s',NULL),('u2','b','s',NULL),('u3','c','s',NULL)")
+    c.rejects(conn, "external_news: slug ที่มีค่าซ้ำกันถูกปฏิเสธ",
+              "INSERT INTO web.external_news (detail_url, title, source, slug) "
+              "VALUES ('u1','a','s','x'),('u2','b','s','x')")
+    c.accepts(conn, "external_news: slug ที่มีค่าต่างกันผ่าน",
+              "INSERT INTO web.external_news (detail_url, title, source, slug) "
+              "VALUES ('u1','a','s','x'),('u2','b','s','y')")
 
     c.rejects(conn, "ai_settings: แถวที่สอง (id=2) ถูกปฏิเสธ",
               "INSERT INTO web.ai_settings (id, model) VALUES (2, 'x')")
