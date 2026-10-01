@@ -50,13 +50,13 @@
     ║  courses · news · external_news ║ ตรวจ   ║  public-web@stpnru.local   ║
     ║  knowledge_articles             ║ สิทธิ์  ╚════════════════════════════╝
     ║  ai_settings                    ║                     │
-    ║  rag_documents  vector(768)     ║                     ▼
+    ║  rag_documents  vector (ไม่ล็อกมิติ)║                    ▼
     ║    gemini-embedding-001         ║        ┌────────────────────────────┐
     ║  RPC match_rag_documents        ║        │ PostgreSQL 16 + pgvector   │
     ║  Edge Function sync-sci-news    ║        │                            │
     ║  Storage  (bucket ยังไม่ยืนยัน)   ║        │  schema public — 10 ตาราง  │
     ║                                 ║        │  schema mko    — 20 ตาราง  │
-    ║  0 FK · 0 CHECK · 1 UNIQUE      ║        │                 + 8 view   │
+    ║  7 FK · 2 CHECK · 4 UNIQUE      ║        │                 + 8 view   │
     ╚═════════════════════════════════╝        │  56 FK · 68 CHECK          │
                                                │  course_chunks             │
          ไม่มีเส้นใดลากข้ามสองฝั่ง                  │   vector(1024) 9,039 แถว  │
@@ -197,9 +197,9 @@
 | | Supabase | PostgreSQL ของเรา |
 |---|---:|---:|
 | ตาราง | 7 | 30 |
-| **Foreign key** | **0** | **56** |
-| **CHECK constraint** | **0** | **68** |
-| UNIQUE | **1** (เฉพาะ `rag_documents`) | 7 เฉพาะตารางหลัก |
+| **Foreign key** | **7** | **56** |
+| **CHECK constraint** | **2** | **68** |
+| UNIQUE | **4** | 7 เฉพาะตารางหลัก |
 
 ```
 user_profiles.user_id   UUID                       ← ไม่มี FK ไป auth.users
@@ -255,7 +255,7 @@ rag_documents.source_id UUID                       ← ไม่มี FK
 | ตัวดำเนินการ cosine `<=>` | `backend/app/services/vector_search.py:24,27` |
 | สัญญา bge-m3 / 1024 | `pipeline/crawl/approve.py:75-76` |
 | Supabase: ตาราง, คอลัมน์, 768 มิติ, RPC, Edge Function | source ใน `webapi/api/**` + bundle ของ SPA + `docs/database/schema.json` |
-| Supabase: 0 FK / 0 CHECK / 1 UNIQUE | `docs/database/schema.json` (source `supabase_schema.sql`) |
+| Supabase: 7 FK / 2 CHECK / 4 UNIQUE | `supabase_schema.sql` ในรีโป `FoMake/Univercity` |
 | ผู้ให้บริการ · shape · ภูมิภาค | cloud-init `cloud-id=oracle` · OCI instance metadata · RDAP ของ IP สาธารณะ |
 | FastAPI ไม่มี reset/verify/email/lockout | `grep` ใน `backend/app` — 0 ไฟล์ทั้งสี่เรื่อง |
 

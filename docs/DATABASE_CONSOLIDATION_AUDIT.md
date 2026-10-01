@@ -28,7 +28,7 @@
 
 ```
 ของเรา   course_chunks   vector(1024)  bge-m3 (Ollama ในเครื่อง)       ivfflat vector_cosine_ops
-ของเพื่อน rag_documents   vector(768)   gemini-embedding-001 (Google)   RPC match_rag_documents
+ของเพื่อน rag_documents   vector (ไม่ล็อกมิติ · แอปตั้ง 768)   gemini-embedding-001   RPC match_rag_documents
 ```
 
 มิติต่างกัน โมเดลต่างกัน จึง **ย้าย vector ตรง ๆ ไม่ได้เลย** ต้อง embed เนื้อหาทั้งหมด
@@ -273,6 +273,11 @@ const EMBEDDING_MODEL = 'gemini-embedding-001';
 const EMBEDDING_DIMENSIONS = 768;
 ```
 
+> **หมายเหตุ 2026-10-01** — คอมเมนต์ข้างบนเป็นข้อความในโค้ดของทีมออกแบบตามจริง
+> แต่ `supabase_schema.sql` ประกาศคอลัมน์เป็น `vector` **ไม่ระบุมิติ**
+> เลข 768 จึงเป็นค่าของแอปพลิเคชัน ไม่ใช่ข้อบังคับของฐานข้อมูล
+> **มิติจริงของข้อมูลที่เก็บอยู่ยัง UNKNOWN**
+
 | รายการ | ค่า |
 |---|---|
 | โมเดล | `gemini-embedding-001` (Google · ผ่าน `@ai-sdk/google`) |
@@ -447,7 +452,7 @@ crawler / worker (สั่งด้วยมือ) ──> mko.crawl_sources �
 | ผู้ใช้ | `auth.users` + `user_profiles(role,status)` | `public.users(is_admin)` + `public.user_profiles(การศึกษา)` | **PARTIALLY OVERLAPPING** | ทั้งสองเก็บตัวตนผู้ใช้และสิทธิ์ แต่ชุดผู้ใช้ไม่เหมือนกัน (`<OWNER_EMAIL>` อยู่ใน Supabase หาไม่เจอใน `public.users` — เหตุที่ Step 3.5 เคยหยุด) · `id` เป็น uuid ทั้งคู่แต่ **ค่าไม่เกี่ยวกัน** |
 | ชื่อตาราง `user_profiles` | `user_id, full_name, email, role, status` | `user_id, education_level, field_of_study, career_goal, skills, interests` | **DIFFERENT PURPOSE** | ชื่อเดียวกันแต่ไม่มีคอลัมน์ร่วมนอกจาก `user_id` · **ห้ามถือว่าเป็นตารางเดียวกัน** |
 | หลักสูตร | `courses(id,title,title_en,description,logo,careers)` | `courses(code,title,provider,summary,mode,duration_weeks,price,currency,tags)` | **PARTIALLY OVERLAPPING** | ทับกันที่ `id`, `title` เท่านั้น · ฝั่ง Supabase เน้นการแสดงผลบนเว็บ (โลโก้ อาชีพ คำบรรยาย) ฝั่งเราเน้นข้อมูลหลักสูตรเชิงข้อเท็จจริง · **ยังไม่ยืนยันว่าแถวตรงกันหรือไม่** |
-| RAG / embedding | `rag_documents` vector(768) gemini | `course_chunks` vector(1024) bge-m3 | **DIFFERENT PURPOSE** (และเข้ากันไม่ได้) | ขอบเขตเนื้อหาต่างกัน (ของเพื่อนครอบ major/news/article/knowledge · ของเราครอบเฉพาะเอกสารหลักสูตร) และ **vector เทียบกันไม่ได้เลย** |
+| RAG / embedding | `rag_documents` `vector` ไม่ล็อกมิติ (แอปตั้ง 768) gemini | `course_chunks` `vector(1024)` bge-m3 | **DIFFERENT PURPOSE** (และเข้ากันไม่ได้) | ขอบเขตเนื้อหาต่างกัน (ของเพื่อนครอบ major/news/article/knowledge · ของเราครอบเฉพาะเอกสารหลักสูตร) และ **vector เทียบกันไม่ได้เลย** |
 | ข่าว | `news` (SPA) และ `external_news` (webapi) | ไม่มี | **UNKNOWN** | สองตารางในฝั่ง Supabase เอง ความสัมพันธ์ยังไม่ยืนยัน · ฝั่งเราไม่มีข่าวเลย |
 | บทความ | `knowledge_articles` | ไม่มี | **DIFFERENT PURPOSE** | ฝั่งเราไม่มี |
 | ตั้งค่า AI | `ai_settings(id=1, model)` | ค่าอยู่ใน env + `llm/connector.py` | **PARTIALLY OVERLAPPING** | ทำเรื่องเดียวกัน (เลือกโมเดล) ด้วยกลไกต่างกัน |

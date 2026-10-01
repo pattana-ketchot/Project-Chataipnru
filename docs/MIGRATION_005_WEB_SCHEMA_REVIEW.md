@@ -44,11 +44,14 @@ eval/web_schema_check.py             ชุดตรวจ 47 ข้อ
 
 **เทียบกับ schema เดิมฝั่งหน้าเว็บ**
 
-| | เดิม | ที่จะสร้าง |
+| | ต้นทาง | ที่จะสร้าง |
 |---|---:|---:|
-| foreign key | **0** | **8** |
-| check constraint | **0** | **3** |
-| unique index | **1** (ทั้งฐาน) | **7** |
+| foreign key | **7** | **8** |
+| check constraint | **2** | **3** |
+| unique index | **4** | **8** |
+
+ที่มาของตัวเลขต้นทาง: `supabase_schema.sql` ในรีโปของหน้าเว็บ
+(`github.com/FoMake/Univercity`) ซึ่งเป็น snapshot ที่ดึงจากโปรเจกต์จริงแบบ read-only
 
 ### 2.2 `web.site_courses` — หลักสูตรในมุมของหน้าเว็บ
 
@@ -105,23 +108,30 @@ INDEX idx_news_published ON (published_on DESC NULLS LAST) WHERE status = 'publi
 
 ```sql
 id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
-slug            VARCHAR(255) NOT NULL UNIQUE
+slug            VARCHAR(255)                      -- NULL ได้ ตามต้นทาง
 title           VARCHAR(255) NOT NULL
 description     TEXT
 image_url       TEXT
-detail_url      TEXT
+detail_url      TEXT         NOT NULL UNIQUE      -- กุญแจธรรมชาติจริงของต้นทาง
 facebook_url    TEXT
-source          VARCHAR(100)
+source          VARCHAR(100) NOT NULL
 published_at    TIMESTAMPTZ
 published_text  VARCHAR(255)
 synced_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 
+UNIQUE INDEX uq_external_news_slug ON (slug) WHERE slug IS NOT NULL
 INDEX idx_external_news_published ON (published_at DESC NULLS LAST)
 ```
 
-`slug` เป็น UNIQUE เพราะหน้ารายละเอียดค้นด้วย `.eq('slug', slug).maybeSingle()`
-ถ้ามีสองแถว slug เดียวกัน ผลลัพธ์จะไม่แน่นอน — ของเดิมไม่มี unique ตัวนี้
+กุญแจของตารางนี้ยึดตามต้นทาง — `detail_url` คือกุญแจธรรมชาติที่ `NOT NULL UNIQUE`
+ส่วน `slug` ต้นทางให้เป็น NULL ได้และมี **partial unique** เฉพาะแถวที่มีค่า
+ซึ่งรักษาเจตนาไว้ครบ (หน้ารายละเอียดค้นด้วย `.eq('slug', slug).maybeSingle()`
+ซึ่งถ้า slug ซ้ำจะได้ผลไม่แน่นอน) แต่แถวที่ยังไม่มี slug ก็ยังเก็บได้
+
+> **แก้แล้ว 2026-10-01** — รุ่นแรกตั้ง `slug` เป็น `NOT NULL UNIQUE` และปล่อย
+> `detail_url` กับ `source` ให้ว่างได้ ซึ่งกลับด้านกับต้นทาง ถ้าปล่อยไว้แล้วข้อมูลจริง
+> มีแถวที่ `slug` เป็น NULL **การนำเข้าจะล้มทั้งก้อน**
 
 `published_text` เก็บข้อความวันที่ตามที่เว็บต้นทางแสดงไว้ดิบ ๆ เพราะบางรายการ
 ไม่ใช่วันที่ที่แปลงเป็น date ได้
@@ -183,14 +193,15 @@ schema ไหนคืออันไหน
 
 ### 3.3 ทำไมใส่ FK ทั้งที่ของเดิมไม่มี
 
-schema เดิมฝั่งหน้าเว็บมี **FK 0 ตัว · CHECK 0 ตัว · UNIQUE 1 ตัวทั้งฐาน**
-(ที่มา: `docs/database/schema.json` · source `supabase_schema.sql`)
+schema เดิมต้นทางมี **FK 7 เส้น · CHECK 2 ตัว · UNIQUE 4 ตัว** (ที่มา: `supabase_schema.sql`)
 
-ความสัมพันธ์มีอยู่จริงในการออกแบบ (`user_id`, `created_by`, `source_id`) แต่
-**ฐานข้อมูลไม่รู้จักมัน** เครื่องมือจึงวาด ER ให้อัตโนมัติไม่ได้ ต้องเดาจากชื่อคอลัมน์ —
-ซึ่งเป็นสิ่งที่ `docs/database/er_supabase.svg` ที่มีอยู่ทำ
+ของเดิม `created_by` / `updated_by` ชี้ไป `auth.users` และ `user_profiles` ของระบบนั้น
+ที่นี่ชี้ไป `public.users` แทน เพราะเป็นตารางผู้ใช้ของฐานข้อมูลปลายทาง
+และเพิ่ม `site_courses.course_id` ซึ่งไม่เคยมีในทั้งสองฝั่ง
 
-ที่นี่ประกาศให้ครบตั้งแต่ต้น **ER จึงวาดเองได้และข้อมูลเสียรูปไม่ได้**
+> **แก้แล้ว 2026-10-01** — เอกสารรุ่นก่อนระบุว่าต้นทางมี "FK 0 · CHECK 0 · UNIQUE 1"
+> ซึ่งผิด ตัวเลขนั้นมาจาก `docs/database/schema.json` ที่ parse constraint ระดับคอลัมน์
+> ไม่ได้ · ดู [`SUPABASE_PRE_MIGRATION_AUDIT.md`](SUPABASE_PRE_MIGRATION_AUDIT.md) ข้อ 12
 
 ### 3.4 ทำไม `created_by` / `updated_by` เป็น NULL ได้
 
@@ -201,13 +212,13 @@ schema เดิมฝั่งหน้าเว็บมี **FK 0 ตัว �
 
 ทุก FK เป็น `ON DELETE SET NULL` เพราะ **การลบบัญชีผู้ใช้ไม่ควรลบข่าวที่เขาเคยเขียน**
 
-### 3.5 ทำไม `timestamptz` ไม่ใช่ `timestamp`
+### 3.5 เรื่องเวลา — `timestamptz` ทั้งสองฝั่ง
 
-ของเดิมเป็น `TIMESTAMP` ไม่มีเขตเวลา ส่วนฐานข้อมูลนี้ใช้ `timestamptz` ทุกตาราง
-การเก็บแบบไม่มีเขตเวลาต่อไปจะทำให้ข้อมูลสองชุดในฐานเดียวกันเทียบเวลากันไม่ได้
+ต้นทางใช้ `TIMESTAMP WITH TIME ZONE` ทุกคอลัมน์เวลา และที่นี่ใช้ `timestamptz`
+ซึ่งเป็นชนิดเดียวกัน **การย้ายจึงไม่ต้องตีความหรือระบุเขตเวลาเพิ่ม**
 
-> **ตอนนำเข้าต้องระบุให้ชัดว่าค่าที่เก็บไว้เดิมเป็นเวลาอะไร** (UTC หรือเวลาไทย)
-> ถ้าเดาผิดเวลาจะคลาดไป 7 ชั่วโมงทั้งก้อน
+> **แก้แล้ว 2026-10-01** — เอกสารรุ่นก่อนระบุว่าต้นทางเป็น `TIMESTAMP` ไม่มีเขตเวลา
+> และเตือนว่าเวลาอาจคลาด 7 ชั่วโมงถ้าเดาผิด **ข้อนั้นผิด ไม่มีความเสี่ยงดังกล่าว**
 
 ---
 
@@ -216,7 +227,7 @@ schema เดิมฝั่งหน้าเว็บมี **FK 0 ตัว �
 | ไม่สร้าง | เหตุผล |
 |---|---|
 | ตาราง role / สิทธิ์ของผู้ใช้หน้าเว็บ | ต้องตัดสินใจเรื่อง auth ก่อนว่าตัวตนผู้ใช้จะอยู่ที่ใด ถ้าสร้างตอนนี้จะกลายเป็น **"ที่บอกสิทธิ์สองแห่ง"** ซ้ำกับ `public.users.is_admin` ที่มีอยู่แล้ว — เป็นปัญหาเดิมในรูปแบบใหม่ |
-| ตาราง chunk / embedding ของหน้าเว็บ | ของเดิมเป็น `vector(768)` จาก `gemini-embedding-001` ส่วนระบบนี้ใช้ `bge-m3` **1024 มิติ** · **ย้ายค่าเวกเตอร์ตรง ๆ ไม่ได้** ต้องสร้าง embedding ใหม่ทั้งหมด ซึ่งทำให้คำตอบของระบบเปลี่ยนและต้องวัดคุณภาพใหม่ — เป็นการตัดสินใจแยก |
+| ตาราง chunk / embedding ของหน้าเว็บ | ต้นทางประกาศคอลัมน์เป็น `vector` **ไม่ล็อกมิติ** · แอปตั้ง `EMBEDDING_DIMENSIONS = 768` กับ `gemini-embedding-001` · **มิติจริงของข้อมูลยัง UNKNOWN** ส่วนระบบนี้ใช้ `bge-m3` **1024 มิติ** · **ย้ายค่าเวกเตอร์ตรง ๆ ไม่ได้ไม่ว่ามิติเดิมจะเป็นเท่าใด** ต้องสร้าง embedding ใหม่ทั้งหมด ซึ่งทำให้คำตอบของระบบเปลี่ยนและต้องวัดคุณภาพใหม่ — เป็นการตัดสินใจแยก |
 
 ผลคือ migration นี้ **เป็นกลางต่อการตัดสินใจเรื่อง auth** จะเลือกเก็บ auth ไว้ที่เดิม
 หรือย้ายมาทั้งหมด ก็ใช้ไฟล์นี้ได้เหมือนกัน
@@ -299,7 +310,7 @@ containers : 0        volumes : 0        images : 0        (ของ sci-adviso
 | 1 | **สิทธิ์เข้าฐานข้อมูลเดิมของหน้าเว็บ** | ต้อง export ข้อมูลออกมา · ขอเป็น member ด้วยบัญชีตัวเอง ไม่ใช่ยืมบัญชีคนอื่น |
 | 2 | **ค่าที่ `news.status` ใช้จริง** | ยืนยันว่า CHECK ครอบครบ ถ้าพบค่าอื่นต้องแก้รายการก่อน ไม่ใช่ถอด CHECK |
 | 3 | **การแมปผู้ใช้สองชุด** | `created_by`/`updated_by` อ้างผู้ใช้คนละชุดกับ `public.users` ต้องตัดสินว่าแมปอย่างไร แถวที่แมปไม่ได้จะเป็น NULL ตามที่ออกแบบ |
-| 4 | **เขตเวลาของ `TIMESTAMP` เดิม** | ถ้าเดาผิดเวลาจะคลาด 7 ชั่วโมงทั้งก้อน |
+| 4 | ~~เขตเวลาของ `TIMESTAMP` เดิม~~ | **ไม่ต้องการแล้ว** — ต้นทางเป็น `TIMESTAMP WITH TIME ZONE` อยู่แล้ว ชนิดเดียวกับปลายทาง |
 | 5 | **ไฟล์แนบของ `knowledge_articles` จะไปอยู่ที่ใด** | ฐานข้อมูลเก็บแค่ชื่อกับขนาด ไฟล์จริงอยู่ที่เก็บไฟล์เดิม |
 
 ---
