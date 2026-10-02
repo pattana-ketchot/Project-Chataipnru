@@ -158,6 +158,68 @@ def structure(c: Checks, conn) -> None:
     c.check("ทุกคอลัมน์เวลาเป็น timestamptz", bad_ts == 0, f"พบคอลัมน์ไร้เขตเวลา {bad_ts}")
 
 
+# ---- [1b] ความกว้างคอลัมน์ต้องไม่แคบกว่าต้นทาง -----------------------
+# ตัวเลขทุกตัวมาจาก information_schema.columns ของ Supabase production
+# (SUPABASE_LIVE_VERIFICATION ข้อ 5.1) ไม่ใช่จากไฟล์ snapshot
+LIVE_WIDTHS = {
+    ("site_courses", "title"): 255,
+    ("site_courses", "title_en"): 255,
+    ("news", "title"): 500,
+    ("news", "category"): 100,
+    ("news", "status"): 20,
+    ("external_news", "title"): 500,
+    ("external_news", "slug"): 255,
+    ("external_news", "published_text"): 100,
+    ("external_news", "source"): 100,
+    ("knowledge_articles", "title"): 500,
+    ("ai_settings", "model"): 255,
+}
+
+
+def column_widths(c: Checks, conn) -> None:
+    """คอลัมน์ข้อความที่แคบกว่าต้นทางจะพังตอน sync ไม่ใช่ตอน migrate
+
+    ถ้าปลายทางรับได้น้อยกว่าต้นทาง ข้อมูลชุดแรกอาจผ่านทั้งหมด แล้วไปล้ม
+    ตอนที่มีแถวยาวเกินเข้ามาภายหลัง ซึ่งหาสาเหตุยากกว่ามาก
+    """
+    print("\n[1b] ความกว้างคอลัมน์เทียบกับต้นทาง")
+
+    with conn.cursor() as cur:
+        got = dict(((r[0], r[1]), r[2]) for r in cur.execute("""
+            SELECT c.relname, a.attname, a.atttypmod - 4
+            FROM pg_attribute a
+            JOIN pg_class c ON c.oid = a.attrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_type t ON t.oid = a.atttypid
+            WHERE n.nspname = 'web' AND c.relkind = 'r'
+              AND a.attnum > 0 AND NOT a.attisdropped
+              AND t.typname = 'varchar' AND a.atttypmod > 0
+        """).fetchall())
+
+    for (table, col), src in sorted(LIVE_WIDTHS.items()):
+        tgt = got.get((table, col))
+        c.check(f"{table}.{col} กว้างพอสำหรับต้นทาง varchar({src})",
+                tgt is not None and tgt >= src,
+                f"ปลายทาง {tgt}" if tgt is not None else "ไม่พบคอลัมน์")
+
+    narrower = sorted(f"{t}.{col} {got[(t, col)]}<{w}"
+                      for (t, col), w in LIVE_WIDTHS.items()
+                      if (t, col) in got and got[(t, col)] < w)
+    c.check("ไม่มีคอลัมน์ใดแคบกว่าต้นทางเลย", not narrower, ", ".join(narrower))
+
+    # พิสูจน์เชิงพฤติกรรม ไม่ใช่แค่อ่าน catalog
+    long500 = "ก" * 500
+    c.accepts(conn, "news รับ title ยาว 500 ตัวอักษรได้",
+              "INSERT INTO web.news (title) VALUES (%s)", (long500,))
+    c.accepts(conn, "external_news รับ title ยาว 500 ตัวอักษรได้",
+              "INSERT INTO web.external_news (title, detail_url, source) "
+              "VALUES (%s, 'https://example.invalid/a', 'test')", (long500,))
+    c.accepts(conn, "knowledge_articles รับ title ยาว 500 ตัวอักษรได้",
+              "INSERT INTO web.knowledge_articles (title) VALUES (%s)", (long500,))
+    c.rejects(conn, "news ปฏิเสธ title ที่ยาวเกิน 500",
+              "INSERT INTO web.news (title) VALUES (%s)", ("ก" * 501,))
+
+
 # ---- [2] constraint ต้องทำงานจริง ไม่ใช่แค่ประกาศไว้ ------------------
 def enforcement(c: Checks, conn) -> None:
     print("\n[2] constraint ปฏิเสธข้อมูลผิดรูปได้จริง")
@@ -205,6 +267,15 @@ def enforcement(c: Checks, conn) -> None:
               "INSERT INTO web.knowledge_articles (title, file_size) VALUES ('t', NULL)")
 
     ghost = str(uuid.uuid4())
+    # ต้นทางปล่อยให้ careers และ detail เป็น NULL ได้ (supabase_schema.sql:50,56)
+    # ถ้าปลายทางบังคับ NOT NULL ข้อมูลจริงที่ยังไม่ได้กรอกจะนำเข้าไม่ได้ทั้งก้อน
+    c.accepts(conn, "site_courses: careers และ detail เป็น NULL ได้ตามต้นทาง",
+              "INSERT INTO web.site_courses (title, careers, detail) "
+              "VALUES ('t', NULL, NULL)")
+    c.accepts(conn, "site_courses: title_en กับ description เป็น NULL ได้",
+              "INSERT INTO web.site_courses (title, title_en, description) "
+              "VALUES ('t', NULL, NULL)")
+
     c.rejects(conn, "site_courses: course_id ที่ไม่มีอยู่จริงถูกปฏิเสธ",
               "INSERT INTO web.site_courses (title, course_id) VALUES ('t', %s)", (ghost,))
     c.rejects(conn, "news: created_by ที่ไม่มีอยู่จริงถูกปฏิเสธ",
@@ -247,6 +318,60 @@ def partial_unique(c: Checks, conn) -> None:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM courses WHERE code = 'WEBCHK1'")
         conn.commit()
+
+
+# ---- [3b] trigger รักษา updated_at -----------------------------------
+def updated_at_trigger(c: Checks, conn) -> None:
+    """updated_at ต้องขยับเองตอน UPDATE แต่ต้องไม่แตะค่าที่ใส่มาตอน INSERT
+
+    ข้อที่สองสำคัญต่อการนำเข้าข้อมูล — ถ้า trigger ทำงานตอน INSERT ด้วย
+    ค่าเวลาเดิมของทุกแถวจะถูกเขียนทับด้วยเวลาที่นำเข้า ประวัติว่าแถวไหน
+    แก้ล่าสุดเมื่อไหร่จะหายทั้งตาราง
+    """
+    print("\n[3b] trigger รักษา updated_at")
+
+    with conn.cursor() as cur:
+        n = cur.execute("""
+            SELECT count(*) FROM pg_trigger t
+            JOIN pg_class c ON c.oid = t.tgrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'web' AND NOT t.tgisinternal
+        """).fetchone()[0]
+    c.check("มี trigger ครบ 4 ตัวใน schema web", n == 4, f"{n} ตัว")
+
+    with conn.cursor() as cur:
+        only_update = cur.execute("""
+            SELECT bool_and(t.tgtype & 4 = 0 AND t.tgtype & 16 <> 0)
+            FROM pg_trigger t
+            JOIN pg_class c ON c.oid = t.tgrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'web' AND NOT t.tgisinternal
+        """).fetchone()[0]
+    c.check("ทุก trigger ทำงานเฉพาะ UPDATE ไม่ทำงานตอน INSERT",
+            only_update is True, str(only_update))
+
+    old = "2020-01-02 03:04:05+00"
+    try:
+        # นำเข้าแถวที่มีเวลาเดิมติดมา — trigger ต้องไม่แตะ
+        with conn.cursor() as cur:
+            row = cur.execute(
+                "INSERT INTO web.news (title, created_at, updated_at) "
+                "VALUES ('import', %s, %s) RETURNING created_at, updated_at",
+                (old, old)).fetchone()
+        c.check("นำเข้าแถวแล้ว created_at เดิมไม่ถูกเขียนทับ",
+                row[0].year == 2020, str(row[0]))
+        c.check("นำเข้าแถวแล้ว updated_at เดิมไม่ถูกเขียนทับ",
+                row[1].year == 2020, str(row[1]))
+
+        # แก้แถวนั้น — updated_at ต้องขยับ แต่ created_at ต้องไม่ขยับ
+        with conn.cursor() as cur:
+            row2 = cur.execute(
+                "UPDATE web.news SET title = 'changed' WHERE title = 'import' "
+                "RETURNING created_at, updated_at").fetchone()
+        c.check("แก้แถวแล้ว updated_at ขยับเอง", row2[1].year > 2020, str(row2[1]))
+        c.check("แก้แถวแล้ว created_at ไม่ขยับ", row2[0].year == 2020, str(row2[0]))
+    finally:
+        conn.rollback()
 
 
 # ---- [4] สัญญาหลัก: ไม่แตะ public และ mko ----------------------------
@@ -332,8 +457,10 @@ def main() -> None:
         print(f"ฐานข้อมูลที่ใช้ทดสอบ: {db}")
         checks = Checks()
         structure(checks, conn)
+        column_widths(checks, conn)
         enforcement(checks, conn)
         partial_unique(checks, conn)
+        updated_at_trigger(checks, conn)
         untouched(checks, conn)
         privileges(checks, conn)
         conn.rollback()
