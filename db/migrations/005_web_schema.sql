@@ -86,6 +86,39 @@ COMMENT ON SCHEMA web IS
 -- ---------------------------------------------------------------------
 -- หลักสูตรในมุมของหน้าเว็บ
 --
+-- careers กับ detail เป็น NULL ได้ตามต้นทาง
+-- -------------------------------------
+-- ตรวจ production จริงแล้ว (SUPABASE_LIVE_VERIFICATION ข้อ 10 / M2) จาก 12 แถว:
+--
+--   detail IS NULL            = 11   <- NOT NULL จะทำให้ import ล้ม 11 แถว
+--   careers IS NULL           = 0
+--   careers = '{}' (ว่าง)      = 12
+--
+-- สองคอลัมน์นี้จึงเป็น nullable ด้วยเหตุผลต่างกัน และต้องไม่สับสน
+--
+--   detail   ข้อมูลจริงบังคับ — เป็น NULL 11 ใน 12 แถว ถ้าคง NOT NULL ไว้
+--            การ INSERT ... SELECT จากต้นทางตรง ๆ จะล้ม (DEFAULT ไม่ช่วย
+--            เพราะค่า NULL ถูกส่งเข้ามาจริง ไม่ใช่การละคอลัมน์)
+--
+--   careers  ข้อมูลจริง "ไม่" บังคับ — ไม่มีแถวใดเป็น NULL เลย ที่ทำเป็น nullable
+--            เพราะต้นทางประกาศ `careers TEXT[]` แบบ nullable และไม่มี DEFAULT
+--            ปลายทางจึงสะท้อนต้นทางให้ตรง ไม่ใช่เพราะข้อมูลชุดนี้ต้องการ
+--
+-- ไม่ใส่ DEFAULT '{}' ให้ careers เพราะต้นทางก็ไม่มี — แถว 12 แถวที่เป็น '{}'
+-- เกิดจากแอปเขียนค่านั้นลงไปเอง ไม่ใช่ค่าเริ่มต้นของฐานข้อมูล
+--
+-- ค่าว่างกับ NULL มีความหมายต่างกันด้วย — NULL คือ "ยังไม่ได้กรอก"
+-- ส่วน '{}' คือ "กรอกแล้วว่าไม่มี" การแปลง NULL เป็น '{}' ตอนนำเข้าจะทำให้
+-- แยกสองอย่างนี้ไม่ออกอีกต่อไป จึงห้ามใช้ COALESCE(detail, '{}') ตอน import
+--
+-- is_published ไม่มีคอลัมน์ต้นทาง
+-- ----------------------------
+-- public.courses ไม่มี is_published / published / status / visible (M3)
+-- และ RLS ของต้นทางเปิดให้ทุกคนอ่าน courses แบบไร้เงื่อนไข (USING true)
+-- ต่างจาก news ที่กรองด้วย status = 'published' — แปลว่าของจริงหลักสูตร
+-- เผยแพร่หมดทุกอัน DEFAULT TRUE จึงให้ผลตรงกับของจริง แต่ต้องรู้ว่า
+-- คอลัมน์นี้เป็นของใหม่ที่ไฟล์นี้เพิ่มเข้ามา ไม่มีข้อมูลต้นทางจะย้ายลงไป
+--
 -- course_id เป็น UNIQUE แบบยอมให้ NULL ซ้ำได้ (partial unique index ด้านล่าง)
 -- เพราะหลักสูตรที่ยังจับคู่กับ public.courses ไม่ได้ต้องเก็บไว้ได้ และหนึ่งหลักสูตร
 -- จริงต้องผูกกับแถวแสดงผลได้ไม่เกินหนึ่งแถว
@@ -97,8 +130,8 @@ CREATE TABLE IF NOT EXISTS web.site_courses (
     title_en      VARCHAR(255),
     description   TEXT,
     logo_url      TEXT,
-    careers       TEXT[]       NOT NULL DEFAULT '{}',
-    detail        JSONB        NOT NULL DEFAULT '{}',
+    careers       TEXT[],
+    detail        JSONB,
     is_published  BOOLEAN      NOT NULL DEFAULT TRUE,
     created_by    UUID REFERENCES public.users(id) ON DELETE SET NULL,
     updated_by    UUID REFERENCES public.users(id) ON DELETE SET NULL,
@@ -118,26 +151,53 @@ COMMENT ON COLUMN web.site_courses.course_id IS
 -- ---------------------------------------------------------------------
 -- ข่าวที่ทีมเขียนเอง
 --
+-- ความกว้างของ title ตามต้นทาง: VARCHAR(500)
+-- -----------------------------------------
+-- ตรวจ production แล้ว (ข้อ 5.1 / M5) ต้นทางเป็น varchar(500) สามคอลัมน์
+-- คือ news.title, external_news.title, knowledge_articles.title
+-- รุ่นก่อนของไฟล์นี้ตั้งทั้งสามเป็น VARCHAR(255) ซึ่ง "แคบกว่าต้นทางครึ่งหนึ่ง"
+--
+-- ข้อมูลชุดปัจจุบันยังไม่ชน (ยาวสุด news 74 · external_news 120 ·
+-- knowledge_articles ไม่มีแถว) จึง import ผ่านทุกแถว แต่เป็นหนี้ที่ยังไม่ถึง
+-- กำหนดชำระ: วันที่มีข่าวชื่อยาวเกิน 255 ต้นทางจะรับได้แต่ปลายทางจะไม่รับ
+-- และจะพังตอน sync ไม่ใช่ตอน migrate ซึ่งหายากกว่ามาก
+--
+-- หมายเหตุ: courses.title และ courses.title_en ต้นทางเป็น varchar(255) อยู่แล้ว
+-- site_courses จึงคง 255 ไว้ตามเดิม ไม่ได้ขยายทั้งไฟล์แบบเหมารวม
+--
 -- status มี CHECK เพราะโค้ดฝั่งหน้าเว็บกรองด้วยค่านี้ ถ้าพิมพ์ผิดแม้ตัวเดียว
 -- ข่าวจะหายไปจากหน้าเว็บโดยไม่มีอะไรฟ้อง — ให้ฐานข้อมูลฟ้องตั้งแต่ตอนเขียน
 --
--- PENDING DECISION — รายการค่ายังไม่ยืนยัน ห้าม import จนกว่าจะตรวจ
--- -------------------------------------------------------------
--- ต้นทาง "ไม่มี" CHECK บนคอลัมน์นี้เลย ฐานข้อมูลจึงไม่เคยบังคับค่า
--- คอมเมนต์ใน supabase_schema.sql ระบุไว้เพียง  published | draft
+-- ตรวจต้นทางแล้ว — รายการค่าไม่ต้องแก้ (เคยเป็น PENDING DECISION)
+-- -----------------------------------------------------------
+-- รันบน production จริงแล้ว (SUPABASE_LIVE_VERIFICATION ข้อ 2 / M1):
 --
--- ค่า 'archived' ในรายการข้างล่าง "ยังไม่มีหลักฐานว่ามีอยู่จริง" — ใส่ไว้เพราะเป็น
--- ค่าที่พบบ่อยในระบบลักษณะนี้ ไม่ได้มาจากการตรวจข้อมูล
+--   SELECT status, count(*) FROM public.news GROUP BY status
+--   -> published  3     ไม่พบ draft  ไม่พบ archived
 --
--- ยังไม่แก้รายการนี้ในรอบนี้โดยเจตนา เพราะทั้งสองทางมีความเสี่ยง
---   ตัดเหลือสองค่า  -> เสี่ยงกว่าเดิม ถ้าข้อมูลจริงมีค่าที่สาม import จะล้มทั้งก้อน
---   เพิ่มค่าเดาไปอีก -> เป็นการเดาซ้อนเดา
--- ทางที่ถูกคือรัน  SELECT DISTINCT status FROM public.news  บนต้นทางก่อน
--- แล้วจึงปรับรายการให้ตรงกับของจริง — ต้องมีสิทธิ์ member ของโปรเจกต์ต้นทางก่อน
+-- และต้นทาง "ไม่มี" CHECK บนคอลัมน์นี้เลย (ฐานทั้งหมดมี CHECK แค่ 2 ตัว คือ
+-- ai_settings_singleton และ rag_documents_source_type_check) ชนิดต้นทางเป็น
+-- VARCHAR(20) NOT NULL DEFAULT 'published'
+--
+-- ผลต่อไฟล์นี้: CHECK สามค่าข้างล่าง "ไม่บล็อก" ข้อมูลชุดนี้ ทุกแถวผ่าน
+-- และ VARCHAR(50) ที่นี่กว้างกว่า VARCHAR(20) ของต้นทาง จึงไม่ตัดค่า
+--
+-- ทำไมคง CHECK ไว้ทั้งที่ต้นทางไม่มี
+-- ---------------------------------
+-- ที่ต้นทาง คอลัมน์นี้ไม่ใช่แค่ธงแสดงผล มันเป็น "ขอบเขตความปลอดภัย" —
+-- RLS policy ที่ให้คนทั่วไปอ่าน news ใช้เงื่อนไข USING (status = 'published')
+-- ตรง ๆ ถ้าค่าพิมพ์ผิดแม้ตัวเดียว แถวนั้นจะหายจากสายตาคนทั่วไปทันที
+-- และเมื่อย้ายมาปลายทาง การกรองนี้จะไปอยู่ที่โค้ดแอป ซึ่งพลาดได้ง่ายกว่า
+-- การให้ฐานข้อมูลปฏิเสธค่าที่ไม่รู้จักตั้งแต่ตอนเขียนจึงยังคุ้ม
+--
+-- 'archived' ยังไม่มีหลักฐานว่ามีอยู่จริง (UNVERIFIED — ดู U2 ของรายงาน)
+-- ข้อมูลไม่ได้พิสูจน์ว่ามี และไม่ได้พิสูจน์ว่าไม่มี มันแค่ยังไม่ถูกใช้
+-- คงไว้เป็นค่าเผื่ออนาคต ความเสี่ยงต่อข้อมูลชุดนี้เป็นศูนย์
+-- ถ้าภายหลังยืนยันได้ว่าแอปไม่เคยเขียนค่านี้ จะตัดออกก็ได้ แต่ไม่ด่วน
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS web.news (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title         VARCHAR(255) NOT NULL,
+    title         VARCHAR(500) NOT NULL,
     description   TEXT,
     category      VARCHAR(100),
     published_on  DATE,
@@ -163,8 +223,12 @@ CREATE INDEX IF NOT EXISTS idx_news_published
 --   source      NOT NULL                  <- ต้นทางบังคับ
 --
 -- รุ่นแรกของไฟล์นี้ตั้ง slug เป็น NOT NULL UNIQUE และปล่อย detail_url กับ source
--- ให้ว่างได้ ซึ่งกลับด้านกับต้นทาง ถ้าปล่อยไว้แล้วข้อมูลจริงมีแถวที่ slug เป็น NULL
--- การนำเข้าจะล้มทั้งก้อน — ที่นี่แก้ให้ตรงกับต้นทางแล้ว
+-- ให้ว่างได้ ซึ่งกลับด้านกับต้นทาง — ที่นี่แก้ให้ตรงกับต้นทางแล้ว
+--
+-- ข้อควรระวังเวลาอ่านย้อนหลัง: ตรวจ production แล้ว (ข้อ 3 / M8) ข้อมูลจริง
+-- 15 แถว "ไม่มีแถวใด slug เป็น NULL เลย" และ detail_url ไม่ซ้ำ 15/15
+-- การแก้ครั้งนั้นจึงถูกเพราะตรงกับ "ชนิดที่ต้นทางประกาศ" ไม่ใช่เพราะข้อมูล
+-- บังคับ — อย่าอ่านคอมเมนต์เดิมแล้วเข้าใจว่าเคยมีแถว slug NULL อยู่จริง
 --
 -- partial unique บน slug รักษาเจตนาเดิมไว้ครบ คือ slug ที่ "มีค่า" ต้องไม่ซ้ำ
 -- เพราะหน้ารายละเอียดค้นด้วย .eq('slug', slug).maybeSingle() ซึ่งถ้าซ้ำจะได้ผล
@@ -173,7 +237,7 @@ CREATE INDEX IF NOT EXISTS idx_news_published
 CREATE TABLE IF NOT EXISTS web.external_news (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     slug            VARCHAR(255),
-    title           VARCHAR(255) NOT NULL,
+    title           VARCHAR(500) NOT NULL,
     description     TEXT,
     image_url       TEXT,
     detail_url      TEXT         NOT NULL UNIQUE,
@@ -203,7 +267,7 @@ COMMENT ON COLUMN web.external_news.published_text IS
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS web.knowledge_articles (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title       VARCHAR(255) NOT NULL,
+    title       VARCHAR(500) NOT NULL,
     content     TEXT,
     file_path   TEXT,
     file_name   TEXT,
@@ -232,6 +296,52 @@ CREATE TABLE IF NOT EXISTS web.ai_settings (
 );
 
 -- ---------------------------------------------------------------------
+-- การรักษา updated_at
+--
+-- ต้นทางมี trigger ทำงานนี้ให้ 4 ตัว (update_courses_updated_at,
+-- update_news_updated_at, update_knowledge_articles_updated_at,
+-- update_user_profiles_updated_at) รุ่นแรกของไฟล์นี้ประกาศคอลัมน์ updated_at ไว้
+-- แต่ไม่มีอะไรรักษาค่าเลย ค่าจึงค้างอยู่ที่เวลาที่แถวถูกสร้างตลอดไป
+-- ซึ่งเป็นการถอยหลังจากพฤติกรรมเดิมโดยไม่มีอะไรฟ้อง
+--
+-- ทำไมเป็น BEFORE UPDATE เท่านั้น ไม่ใช่ BEFORE INSERT OR UPDATE
+-- ------------------------------------------------------------
+-- ตอนนำข้อมูลเข้าต้องคง created_at และ updated_at เดิมของแต่ละแถวไว้
+-- ถ้า trigger ทำงานตอน INSERT ด้วย ค่าเวลาเดิมทั้งหมดจะถูกเขียนทับด้วยเวลาที่นำเข้า
+-- ประวัติว่าแถวไหนแก้ล่าสุดเมื่อไหร่จะหายทั้งตาราง
+--
+-- ai_settings ได้ trigger ด้วยทั้งที่ต้นทางไม่มี เพราะต้นทางปล่อยให้แอปเป็นคนตั้งค่า
+-- ซึ่งพึ่งพาว่าทุกคนที่เขียนโค้ดต่อจากนี้จะจำได้ การให้ฐานข้อมูลทำเองเชื่อถือได้กว่า
+-- และเพิ่มที่ UPDATE อย่างเดียวจึงไม่กระทบการนำเข้า
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION web.touch_updated_at() RETURNS trigger
+LANGUAGE plpgsql AS $fn$
+BEGIN
+    NEW.updated_at := now();
+    RETURN NEW;
+END;
+$fn$;
+
+COMMENT ON FUNCTION web.touch_updated_at() IS
+    'ตั้ง updated_at = now() ก่อนการ UPDATE ทุกครั้ง — ไม่ทำงานตอน INSERT เพื่อให้นำเข้าข้อมูลเก่าได้โดยคงเวลาเดิม';
+
+CREATE OR REPLACE TRIGGER trg_site_courses_updated_at
+    BEFORE UPDATE ON web.site_courses
+    FOR EACH ROW EXECUTE FUNCTION web.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER trg_news_updated_at
+    BEFORE UPDATE ON web.news
+    FOR EACH ROW EXECUTE FUNCTION web.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER trg_knowledge_articles_updated_at
+    BEFORE UPDATE ON web.knowledge_articles
+    FOR EACH ROW EXECUTE FUNCTION web.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER trg_ai_settings_updated_at
+    BEFORE UPDATE ON web.ai_settings
+    FOR EACH ROW EXECUTE FUNCTION web.touch_updated_at();
+
+-- ---------------------------------------------------------------------
 -- สิทธิ์
 --
 -- backend อ่านได้ทุกตาราง และเขียนได้เฉพาะตารางที่หน้าผู้ดูแลแก้ไขจริง
@@ -247,6 +357,7 @@ BEGIN
         GRANT SELECT ON ALL TABLES IN SCHEMA web TO advisor_api;
         GRANT INSERT, UPDATE ON web.site_courses, web.news,
                                 web.knowledge_articles, web.ai_settings TO advisor_api;
+        GRANT EXECUTE ON FUNCTION web.touch_updated_at() TO advisor_api;
         GRANT SELECT ON web.external_news TO advisor_api;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'advisor_ingest') THEN
@@ -254,6 +365,7 @@ BEGIN
         GRANT SELECT ON ALL TABLES IN SCHEMA web TO advisor_ingest;
         -- ตัวดึงข่าวจากภายนอกเขียนตารางนี้ตารางเดียว
         GRANT INSERT, UPDATE ON web.external_news TO advisor_ingest;
+        GRANT EXECUTE ON FUNCTION web.touch_updated_at() TO advisor_ingest;
     END IF;
 END;
 $$;
