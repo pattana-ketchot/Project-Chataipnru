@@ -61,10 +61,38 @@ class Checks:
     def __init__(self) -> None:
         self.passed: list[str] = []
         self.failed: list[tuple[str, str]] = []
+        self.pendings: list[tuple[str, str]] = []
 
     def check(self, name: str, ok: bool, detail: str = "") -> None:
         (self.passed.append(name) if ok else self.failed.append((name, detail)))
         print(f"  {'ผ่าน  ' if ok else 'ไม่ผ่าน'} {name}" + (f"  — {detail}" if detail and not ok else ""))
+
+    def returns(self, conn, name: str, sql: str, params=(), ok=lambda row: row is not None):
+        """รัน SQL ที่ต้องคืนแถว แล้วตรวจแถวนั้น — error ของฐานข้อมูลนับเป็นไม่ผ่านข้อเดียว
+
+        ต่างจากการใช้ cursor ตรง ๆ ซึ่งถ้าชนข้อจำกัดจะโยน exception ออกไปทั้งกลุ่ม
+        แล้วข้อที่เหลือในกลุ่มนั้นไม่ได้รันเลย ตอนมีคนทำ regression จริง รายงานจะบอกแค่
+        "กลุ่มนี้พัง" ซึ่งบอกน้อยกว่า "สามข้อนี้ไม่ผ่านเพราะอะไร" มาก
+        """
+        try:
+            with conn.cursor() as cur:
+                row = cur.execute(sql, params).fetchone()
+        except psycopg.Error as e:
+            conn.rollback()
+            self.check(name, False, f"{type(e).__name__}: {str(e).splitlines()[0][:80]}")
+            return None
+        self.check(name, ok(row), str(row))
+        return row
+
+    def pending(self, name: str, why: str) -> None:
+        """ข้อที่ยังพิสูจน์ที่นี่ไม่ได้ — ต้องเห็นว่าค้าง ไม่ใช่ถูกนับว่าผ่าน
+
+        ชุดนี้ตรวจ schema ของฐานข้อมูล ข้อที่ด่านจริงอยู่ชั้น API จึงพิสูจน์ที่นี่ไม่ได้
+        การนับข้อเหล่านั้นว่าผ่านจะทำให้อ่านรายงานแล้วเข้าใจว่าฐานข้อมูลกันให้แล้ว
+        ซึ่งไม่จริง และเป็นความเข้าใจผิดที่อันตรายกว่าการไม่มีข้อตรวจเลย
+        """
+        self.pendings.append((name, why))
+        print(f"  ค้าง   {name}  — {why}")
 
     def rejects(self, conn, name: str, sql: str, params=()) -> None:
         """ข้อมูลที่ผิดรูปต้องถูกฐานข้อมูลปฏิเสธ ไม่ใช่รับไว้เงียบ ๆ"""
@@ -89,9 +117,14 @@ class Checks:
             self.check(name, False, f"{type(e).__name__}: {str(e)[:90]}")
 
     def report(self) -> bool:
-        print(f"\n---- สรุป ----\n  ผ่าน {len(self.passed)} · ไม่ผ่าน {len(self.failed)}")
+        line = f"  ผ่าน {len(self.passed)} · ไม่ผ่าน {len(self.failed)}"
+        if self.pendings:
+            line += f" · ค้าง {len(self.pendings)}"
+        print(f"\n---- สรุป ----\n{line}")
         for name, detail in self.failed:
             print(f"  ไม่ผ่าน: {name} — {detail}")
+        for name, why in self.pendings:
+            print(f"  ค้าง: {name} — {why}")
         return not self.failed
 
 
@@ -447,6 +480,224 @@ def privileges(c: Checks, conn) -> None:
                 not granted("advisor_ingest", "news", "INSERT"))
 
 
+# ---- [6] G1 · คอลัมน์ผู้เขียนต้องเป็น NULL ได้ทั้ง 4 ตัว ----------------
+#
+# การตัดสินใจ RESOLVED_WITH_NULL_LEGACY_AUTHOR (docs/B2_LEGACY_AUTHOR_RESOLUTION.md)
+# ทำให้ NULL เป็น "สภาพปกติ" ของแถว legacy 15 แถว (site_courses 12 + news 3)
+# ไม่ใช่กรณียกเว้น ถ้าใครเติม NOT NULL ให้คอลัมน์เหล่านี้ในอนาคต การนำเข้าจะล้มทั้งก้อน
+#
+# ชุดเดิมมีข้อตรวจคุ้มแค่ news.created_by หนึ่งตัวจากสี่ตัว
+AUTHOR_COLUMNS = (
+    ("site_courses", "created_by"),
+    ("site_courses", "updated_by"),
+    ("news", "created_by"),
+    ("news", "updated_by"),
+)
+
+
+def legacy_author_nullability(c: Checks, conn) -> None:
+    """G1_SCHEMA_NULLABILITY"""
+    print("\n[6] G1 · คอลัมน์ผู้เขียนเป็น NULL ได้ และไม่มีค่าแทนให้เงียบ ๆ")
+
+    with conn.cursor() as cur:
+        meta = {(r[0], r[1]): (r[2], r[3]) for r in cur.execute("""
+            SELECT c.relname, a.attname, a.attnotnull, a.atthasdef
+            FROM pg_attribute a
+            JOIN pg_class c ON c.oid = a.attrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'web' AND c.relkind = 'r'
+              AND a.attname IN ('created_by', 'updated_by')
+              AND a.attnum > 0 AND NOT a.attisdropped
+        """).fetchall()}
+
+    for table, col in AUTHOR_COLUMNS:
+        got = meta.get((table, col))
+        c.check(f"G1 {table}.{col} เป็น NULL ได้",
+                got is not None and got[0] is False,
+                "ไม่พบคอลัมน์" if got is None else f"attnotnull={got[0]}")
+
+    # ต้นทาง Supabase ตั้ง courses.created_by DEFAULT auth.uid() — ถ้าปลายทางมี DEFAULT
+    # ทำนองเดียวกัน การ INSERT ที่ละคอลัมน์นี้จะได้ "ใครก็ตามที่กำลังรันคำสั่งนำเข้า"
+    # ยัดเข้ามาเงียบ ๆ ซึ่งคือการยัดเจ้าของผิดคนที่การตัดสินใจนี้สั่งห้ามโดยตรง
+    for table, col in AUTHOR_COLUMNS:
+        got = meta.get((table, col))
+        c.check(f"G1 {table}.{col} ไม่มี DEFAULT (ละคอลัมน์แล้วต้องได้ NULL ไม่ใช่ค่าแทน)",
+                got is not None and got[1] is False,
+                "ไม่พบคอลัมน์" if got is None else f"atthasdef={got[1]}")
+
+    # เชิงพฤติกรรม: ต้องได้แถวจริงที่ author เป็น NULL ไม่ใช่แค่ "ไม่ error"
+    def both_null(row):
+        return row is not None and row[-2] is None and row[-1] is None
+
+    for table in ("site_courses", "news"):
+        c.returns(conn, f"G1 {table}: ใส่ author เป็น NULL ตรง ๆ แล้วได้แถวจริง",
+                  f"INSERT INTO web.{table} (title, created_by, updated_by) "
+                  "VALUES ('G1 ใส่ NULL ตรง ๆ', NULL, NULL) "
+                  "RETURNING id, created_by, updated_by", ok=both_null)
+        conn.rollback()
+        # รูปแบบที่การนำเข้า legacy จะใช้จริง — ละคอลัมน์ไปเลย
+        c.returns(conn, f"G1 {table}: ละคอลัมน์ผู้เขียนแล้วได้ NULL ทั้งคู่",
+                  f"INSERT INTO web.{table} (title) VALUES ('G1 ละคอลัมน์ผู้เขียน') "
+                  "RETURNING created_by, updated_by", ok=both_null)
+        conn.rollback()
+
+
+# ---- [7] G2 · ลบผู้ใช้แล้วเนื้อหาต้องไม่หาย ----------------------------
+#
+# ชุดเดิมตรวจ ON DELETE SET NULL ด้วยการอ่าน pg_constraint (confdeltype = 'n')
+# ซึ่งเป็นการอ่าน "ประกาศ" ไม่ใช่การพิสูจน์ "ผล" — ข้อนี้ลบผู้ใช้จริงแล้วดูว่าเกิดอะไรขึ้น
+def author_fk_delete_behaviour(c: Checks, conn) -> None:
+    """G2_FK_DELETE_BEHAVIOR"""
+    print("\n[7] G2 · ลบผู้ใช้แล้วเนื้อหายังอยู่ และ author กลายเป็น NULL")
+
+    # fixture ขั้นต่ำ: users บังคับแค่ email กับ password_hash
+    # ต้อง commit ก่อน เพราะข้อตรวจอื่นในชุดนี้ย้อน transaction ทุกครั้ง
+    with conn.cursor() as cur:
+        uid = cur.execute(
+            "INSERT INTO users (email, password_hash) "
+            "VALUES ('webchk-g2@test.invalid', 'ไม่ใช่ hash จริง ใช้ทดสอบ') "
+            "RETURNING id").fetchone()[0]
+    conn.commit()
+
+    try:
+        after_steps = ("ผู้ใช้ถูกลบจริง (ไม่ใช่ลบไม่สำเร็จแล้วผ่านไปเฉย ๆ)",
+                       "ลบผู้ใช้แล้วแถวเนื้อหายังอยู่",
+                       "created_by กลายเป็น NULL",
+                       "updated_by กลายเป็น NULL")
+
+        for table in ("site_courses", "news"):
+            # ข้อนี้กันการผ่านแบบว่างเปล่า — ถ้า author ไม่ได้ถูกตั้งตั้งแต่ต้น
+            # ข้อที่เหลือจะผ่านโดยไม่ได้พิสูจน์อะไรเลย
+            before = c.returns(
+                conn, f"G2 {table}: ก่อนลบ author ถูกตั้งเป็นผู้ใช้จริงทั้งสองคอลัมน์",
+                f"INSERT INTO web.{table} (title, created_by, updated_by) "
+                "VALUES ('G2 เนื้อหาที่ต้องรอด', %s, %s) RETURNING created_by, updated_by",
+                (uid, uid), ok=lambda r: r is not None and r[0] == uid and r[1] == uid)
+
+            if before is None:
+                # ตั้ง author ตั้งต้นไม่ได้ จึงไม่มีอะไรให้พิสูจน์ต่อ
+                # ต้องรายงานว่าไม่ผ่าน ไม่ใช่ข้ามไปเงียบ ๆ ให้ดูเหมือนไม่มีปัญหา
+                for step in after_steps:
+                    c.check(f"G2 {table}: {step}", False, "ตั้ง author ตั้งต้นไม่ได้")
+                conn.rollback()
+                continue
+
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM users WHERE id = %s", (uid,))
+                    gone = cur.execute(
+                        "SELECT count(*) FROM users WHERE id = %s", (uid,)).fetchone()[0]
+                    after = cur.execute(
+                        f"SELECT title, created_by, updated_by FROM web.{table} "
+                        "WHERE title = 'G2 เนื้อหาที่ต้องรอด'").fetchone()
+            except psycopg.Error as e:
+                conn.rollback()
+                detail = f"{type(e).__name__}: {str(e).splitlines()[0][:80]}"
+                for step in after_steps:
+                    c.check(f"G2 {table}: {step}", False, detail)
+                continue
+
+            c.check(f"G2 {table}: {after_steps[0]}", gone == 0, f"ยังเหลือ {gone} แถว")
+            c.check(f"G2 {table}: {after_steps[1]}", after is not None, str(after))
+            c.check(f"G2 {table}: {after_steps[2]}",
+                    after is not None and after[1] is None, str(after))
+            c.check(f"G2 {table}: {after_steps[3]}",
+                    after is not None and after[2] is None, str(after))
+            # ย้อนทั้งการลบผู้ใช้และแถวเนื้อหา เพื่อให้ตารางถัดไปเริ่มจากผู้ใช้เดิม
+            conn.rollback()
+    finally:
+        conn.rollback()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM users WHERE email = 'webchk-g2@test.invalid'")
+        conn.commit()
+
+
+# ---- [8] G3 · created_by ห้ามเปลี่ยนตอน UPDATE -------------------------
+#
+# ด่านของข้อนี้ "ไม่ได้" อยู่ที่ฐานข้อมูล
+# ----------------------------------------------
+# Migration 005 ไม่มี trigger หรือ rule ที่ห้ามแก้ created_by และไม่ควรมี —
+# การบังคับ authorization เป็นหน้าที่ของชั้น API ไม่ใช่ของ schema
+#
+# ข้อตรวจกลุ่มนี้จึงทำสองอย่าง
+#   1. บันทึกไว้ว่าฐานข้อมูล "ยอมให้แก้" เพื่อไม่ให้ใครอ่าน G1/G2 แล้วเข้าใจผิดว่า
+#      ฐานข้อมูลกันเรื่องนี้ให้แล้ว
+#   2. ตรวจว่าสัญญาในเอกสารยังอยู่ครบ
+# ส่วนการบังคับจริงยังค้างรอ B1 — รายงานเป็น "ค้าง" ไม่ใช่ "ผ่าน"
+G3_PENDING_TAG = "G3_API_ENFORCEMENT_PENDING_B1"
+
+_DESIGN_DOC = _ROOT / "docs" / "AUTHORIZATION_USER_MAPPING_DESIGN.md"
+
+
+def author_immutability_contract(c: Checks, conn) -> None:
+    """G3_API_AUTHOR_IMMUTABILITY"""
+    print("\n[8] G3 · created_by ห้ามเปลี่ยนตอน UPDATE — ด่านอยู่ที่ API")
+
+    # ไม่มี trigger บนสองตารางนี้นอกจากตัวที่ดูแล updated_at
+    with conn.cursor() as cur:
+        names = sorted(r[0] for r in cur.execute("""
+            SELECT t.tgname FROM pg_trigger t
+            JOIN pg_class c ON c.oid = t.tgrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'web' AND NOT t.tgisinternal
+              AND c.relname IN ('site_courses', 'news')
+        """).fetchall())
+    c.check("G3 ฐานข้อมูลไม่มี trigger ที่ตั้งใจกัน created_by (มีแต่ตัวดูแล updated_at)",
+            names == ["trg_news_updated_at", "trg_site_courses_updated_at"], str(names))
+
+    # ยืนยันเชิงพฤติกรรมว่าฐานข้อมูลยอมให้ UPDATE เปลี่ยน created_by ได้
+    # นี่คือ "สภาพที่เป็นจริง" ไม่ใช่สิ่งที่ต้องการ — บันทึกไว้ให้ชัดว่าด่านอยู่ที่อื่น
+    with conn.cursor() as cur:
+        uid = cur.execute(
+            "INSERT INTO users (email, password_hash) "
+            "VALUES ('webchk-g3@test.invalid', 'ไม่ใช่ hash จริง ใช้ทดสอบ') "
+            "RETURNING id").fetchone()[0]
+    conn.commit()
+    name = ("G3 ฐานข้อมูลยอมให้ UPDATE เปลี่ยน created_by จาก NULL เป็นค่าอื่นได้ "
+            "(จึงต้องกันที่ API ไม่ใช่ที่ schema)")
+    try:
+        # ต้องเป็นสองคำสั่งแยกกัน — แถวที่ INSERT ใน CTE ที่เขียนข้อมูลจะไม่อยู่ใน
+        # snapshot ของ UPDATE ในคำสั่งเดียวกัน UPDATE จะไม่เจอแถวนั้นและแก้ 0 แถว
+        with conn.cursor() as cur:
+            rid = cur.execute(
+                "INSERT INTO web.news (title, created_by) "
+                "VALUES ('G3 แถว legacy', NULL) RETURNING id").fetchone()[0]
+            after = cur.execute(
+                "UPDATE web.news SET created_by = %s WHERE id = %s RETURNING created_by",
+                (uid, rid)).fetchone()
+    except psycopg.Error as e:
+        conn.rollback()
+        c.check(name, False, f"{type(e).__name__}: {str(e).splitlines()[0][:80]}")
+    else:
+        c.check(name, after is not None and after[0] == uid, str(after))
+    finally:
+        conn.rollback()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM users WHERE email = 'webchk-g3@test.invalid'")
+        conn.commit()
+
+    # สัญญาที่เอกสารออกแบบเขียนไว้ ต้องยังอยู่ ถ้าใครลบทิ้งต้องมีอะไรฟ้อง
+    try:
+        doc = _DESIGN_DOC.read_text(encoding="utf-8")
+    except OSError as e:
+        doc = ""
+        c.check("G3 อ่านเอกสารสัญญา authorization ได้", False, f"{type(e).__name__}: {e}")
+    if doc:
+        c.check("G3 เอกสารระบุว่า CREATE ตั้งทั้ง created_by และ updated_by จากผู้เรียก",
+                "1a. CREATE" in doc and "created_by และ updated_by" in doc, "ไม่พบกฎ 1a")
+        c.check("G3 เอกสารระบุว่า UPDATE ห้ามแตะ created_by",
+                "1b. UPDATE" in doc and "ห้ามแตะ created_by" in doc, "ไม่พบกฎ 1b")
+        c.check("G3 เอกสารระบุว่าห้ามเชื่อ created_by/updated_by จาก request body",
+                "ห้ามรับจาก request body" in doc, "ไม่พบกฎข้อ 1")
+
+    # ด่านจริงยังไม่มี — ไม่มีโค้ดบริการใดอ้างถึง web.site_courses หรือ web.news เลย
+    c.pending(f"G3 API บังคับ created_by immutability — {G3_PENDING_TAG}",
+              "ยังไม่มี endpoint POST/PATCH ของ web.site_courses / web.news "
+              "จึงยังไม่มีอะไรให้ทดสอบ ต้องรอ B1 เฟส 1")
+    c.pending(f"G3 PATCH ที่ส่ง created_by ปลอมมาใน body ต้องไม่มีผล — {G3_PENDING_TAG}",
+              "ต้องเขียนพร้อม endpoint ในรอบ B1 ห้ามสร้าง API เพียงเพื่อให้ข้อนี้ผ่าน")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="ทดสอบ schema web ของ migration 005")
     ap.add_argument("--database-url", required=True, help="ฐานข้อมูลทดสอบเท่านั้น")
@@ -463,6 +714,9 @@ def main() -> None:
         updated_at_trigger(checks, conn)
         untouched(checks, conn)
         privileges(checks, conn)
+        legacy_author_nullability(checks, conn)
+        author_fk_delete_behaviour(checks, conn)
+        author_immutability_contract(checks, conn)
         conn.rollback()
         sys.exit(0 if checks.report() else 1)
 
