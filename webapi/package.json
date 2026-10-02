@@ -2,6 +2,9 @@
   "name": "sci-advisor-webapi",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
     "@ai-sdk/google": "^4.0.51",

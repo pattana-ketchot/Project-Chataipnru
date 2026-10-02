@@ -6,23 +6,70 @@
  * ฟังก์ชันเดิมโดยไม่แก้ตัวฟังก์ชันเลยแม้แต่บรรทัดเดียว — ของเพื่อนยังเป็นของเพื่อนทุกอย่าง
  *
  * เส้นทางที่บริการนี้รับผิดชอบมีเพียง 5 เส้นทาง นอกนั้น Caddy ส่งไป FastAPI เหมือนเดิม
+ *
+ * ด่านตรวจสิทธิ์กลาง
+ * -----------------
+ * ทุกเส้นทางต้องประกาศระดับสิทธิ์ไว้ในตาราง ROUTES และไฟล์นี้บังคับให้ "ก่อน" เรียก
+ * ฟังก์ชันของหน้าเว็บ เส้นทางที่ไม่ประกาศระดับจะทำให้บริการไม่ยอมเริ่มทำงานเลย
+ *
+ * ทำไมต้องบังคับที่นี่ ไม่ใช่ปล่อยให้แต่ละฟังก์ชันเรียก requireAdminUser เอง
+ * ----------------------------------------------------------------------
+ * ของเดิมพึ่งพาว่าคนเขียนฟังก์ชันใหม่จะจำได้ว่าต้องเรียก ลืมที่เดียวคือเส้นทางนั้น
+ * เปิดโล่งเงียบ ๆ โดยไม่มีอะไรฟ้อง — รูปแบบเดียวกับที่ FastAPI ฝั่งเราเลือกใช้
+ * `require_admin` คลุมทั้ง router แทนการใส่ทีละเส้นทาง (ดู routes/crawl_review.py)
+ *
+ * ด่านนี้เป็นการ "เพิ่มชั้นนอก" ไม่ได้แทนที่ requireAdminUser ที่ฟังก์ชันหลังบ้าน
+ * เรียกอยู่ ผู้เรียกที่มีสิทธิ์ถูกต้องจึงได้ผลลัพธ์เหมือนเดิมทุกอย่าง
  */
 import http from "node:http";
 import { Readable } from "node:stream";
 
+import {
+  EDITOR,
+  PUBLIC,
+  authorize,
+  createRuntimeDeps,
+  describeForLog,
+  needsAuthContext,
+  resolveAuthContext,
+  supabaseEnv,
+  validateRouteTable,
+} from "./auth.mjs";
+
 const PORT = Number(process.env.PORT || 3001);
 
-// เส้นทาง -> ไฟล์ฟังก์ชันของเพื่อน (พาธเทียบกับโฟลเดอร์นี้)
+// เส้นทาง -> ไฟล์ฟังก์ชันของเพื่อน -> ระดับสิทธิ์ที่ต้องมี (พาธเทียบกับโฟลเดอร์นี้)
+//
+// ระดับที่ตั้งไว้ตรงกับพฤติกรรมที่ระบบมีอยู่จริงวันนี้ ไม่ได้เข้มขึ้นหรือหลวมลง
+//   ข่าว Sci Connect สองเส้นทาง  เปิดสาธารณะอยู่แล้ว (หน้าเว็บเรียกโดยไม่ล็อกอิน)
+//   /api/admin/* สามเส้นทาง      ของเดิมเรียก requireAdminUser ซึ่งยอม admin+editor
+//                                 ที่ status = approved -> ตรงกับระดับ EDITOR ที่นี่
 const ROUTES = [
-  ["/api/sci-connect-news-detail", "./api/sci-connect-news-detail.js"],
-  ["/api/sci-connect-news", "./api/sci-connect-news.js"],
-  ["/api/admin/extract-file", "./api/admin/extract-file.js"],
-  ["/api/admin/ingest", "./api/admin/ingest.js"],
-  ["/api/admin/sync-sci-news", "./api/admin/sync-sci-news.js"],
+  ["/api/sci-connect-news-detail", "./api/sci-connect-news-detail.js", PUBLIC],
+  ["/api/sci-connect-news", "./api/sci-connect-news.js", PUBLIC],
+  ["/api/admin/extract-file", "./api/admin/extract-file.js", EDITOR],
+  ["/api/admin/ingest", "./api/admin/ingest.js", EDITOR],
+  ["/api/admin/sync-sci-news", "./api/admin/sync-sci-news.js", EDITOR],
 ];
 
+// ---------------------------------------------------------------------
+// ตรวจตาราง ROUTES ก่อนเริ่มรับคำขอ
+//
+// ปฏิเสธตอนเริ่มทำงาน ไม่ใช่ตอนมีคนเรียก — เส้นทางที่ลืมประกาศระดับสิทธิ์ต้องทำให้
+// บริการไม่ขึ้นเลย ถ้าปล่อยให้ขึ้นแล้วค่อยพังตอนมีคนเรียก คนที่เจอก่อนอาจเป็นผู้ใช้
+// ที่ไม่ควรเข้าถึงเส้นทางนั้น
+// ---------------------------------------------------------------------
+const undeclared = validateRouteTable(ROUTES);
+if (undeclared.length > 0) {
+  console.error(
+    "[webapi] เส้นทางต่อไปนี้ไม่ได้ประกาศระดับสิทธิ์ที่รู้จัก: " + undeclared.join(", "),
+  );
+  process.exit(1);
+}
+
 const handlers = new Map();
-for (const [route, file] of ROUTES) {
+const levels = new Map();
+for (const [route, file, level] of ROUTES) {
   try {
     const mod = await import(file);
     if (typeof mod.default?.fetch !== "function") {
@@ -30,10 +77,33 @@ for (const [route, file] of ROUTES) {
       continue;
     }
     handlers.set(route, mod.default.fetch);
-    console.log(`[webapi] พร้อมให้บริการ ${route}`);
+    levels.set(route, level);
+    console.log(`[webapi] พร้อมให้บริการ ${route} (${level})`);
   } catch (err) {
     console.error(`[webapi] โหลด ${file} ไม่สำเร็จ: ${err.message}`);
   }
+}
+
+// ตัวตรวจ token อ่านค่าตั้งค่าจาก env ครั้งเดียวตอนเริ่ม
+//
+// ไม่พิมพ์ค่าใด ๆ ออกมา บอกแค่ว่าตั้งค่าครบหรือไม่ครบ
+const env = supabaseEnv();
+const authDeps = env ? createRuntimeDeps(env) : null;
+if (!authDeps) {
+  console.error(
+    "[webapi] ไม่พบค่าตั้งค่าของ Supabase — เส้นทางที่ต้องมีสิทธิ์จะตอบ 500 ทุกครั้ง",
+  );
+}
+
+/**
+ * ตอบกลับสั้น ๆ แบบไม่เปิดเผยอะไรเกินจำเป็น
+ *
+ * ไม่ส่ง token ไม่ส่งคำตอบดิบจาก Supabase ไม่ส่งรายละเอียดภายใน
+ */
+function deny(res, status, body) {
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(body));
 }
 
 /** แปลงคำขอของ Node ให้เป็น Request มาตรฐาน */
@@ -61,21 +131,60 @@ const server = http.createServer(async (req, res) => {
   const path = (req.url || "").split("?")[0];
 
   if (path === "/healthz") {
+    // ประกาศระดับสิทธิ์ของแต่ละเส้นทางออกมาด้วย เพื่อให้ตรวจได้จากภายนอกว่าเส้นทางไหน
+    // ถูกคุ้มอยู่ระดับใด โดยไม่ต้องอ่านโค้ด — ไม่ใช่ความลับ เป็นสัญญาที่เปิดเผยได้
     res.setHeader("content-type", "application/json; charset=utf-8");
-    res.end(JSON.stringify({ status: "ok", routes: [...handlers.keys()] }));
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        authConfigured: Boolean(authDeps),
+        routes: [...handlers.keys()].map((route) => ({ route, level: levels.get(route) })),
+      }),
+    );
     return;
   }
 
   const entry = [...handlers.entries()].find(([route]) => path === route || path.startsWith(route + "/"));
   if (!entry) {
-    res.statusCode = 404;
-    res.setHeader("content-type", "application/json; charset=utf-8");
-    res.end(JSON.stringify({ error: "not found" }));
+    // 404 ก่อนตรวจสิทธิ์โดยเจตนา — เส้นทางที่บริการนี้ไม่รับผิดชอบไม่ใช่ความลับ
+    // Caddy เป็นผู้ตัดสินว่าคำขอไหนมาถึงที่นี่อยู่แล้ว
+    deny(res, 404, { error: "not found" });
+    return;
+  }
+
+  const [route, handler] = entry;
+  const level = levels.get(route);
+  const request = toRequest(req);
+
+  // ---- ด่านตรวจสิทธิ์ ----
+  if (level !== PUBLIC && !authDeps) {
+    // ตั้งค่าไม่ครบ = ตรวจสิทธิ์ไม่ได้ = ต้องไม่ปล่อยผ่าน
+    deny(res, 500, { error: "Authorization is not configured" });
+    return;
+  }
+
+  let context = null;
+  if (authDeps && needsAuthContext(level)) {
+    const resolved = await resolveAuthContext(request, authDeps);
+    if (!resolved.ok) {
+      // เหลือเฉพาะกรณีตั้งค่าไม่ครบ (500) — ข้อมูลยืนยันตัวตนที่ใช้ไม่ได้ถูกลดระดับ
+      // เป็น anonymous ไปแล้วใน resolveAuthContext ไม่ได้ปฏิเสธที่นี่
+      deny(res, resolved.status, resolved.body);
+      return;
+    }
+    context = resolved.context;
+  }
+
+  const verdict = authorize(context, level);
+  if (!verdict.ok) {
+    // บันทึกเฉพาะเส้นทางกับระดับสิทธิ์ที่เห็น — ไม่มี token ไม่มีอีเมล ไม่มี uuid
+    console.warn(`[webapi] ปฏิเสธ ${path} (${level}) — ผู้เรียก: ${describeForLog(context)}`);
+    deny(res, verdict.status, verdict.body);
     return;
   }
 
   try {
-    await send(res, await entry[1](toRequest(req)));
+    await send(res, await handler(request));
   } catch (err) {
     console.error(`[webapi] ${path} ล้มเหลว:`, err);
     if (!res.headersSent) {
