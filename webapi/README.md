@@ -47,6 +47,70 @@ webapi/api/_lib/ingest.js         webapi/api/sci-connect-news.js
 webapi/api/_lib/rag.js            webapi/api/sci-connect-news-detail.js
 ```
 
+### ถ้าไม่มีรีโปของทีมออกแบบอยู่ในมือ — ใช้ไฟล์สำรอง
+
+เนื่องจาก `api/` ไม่ได้อยู่ใน git ของเรา ถ้าเครื่องที่ build ไม่มีรีโปของทีมออกแบบ
+จะ build ไม่ได้เลย จึงเก็บสำเนาสำรองของชุดที่รันอยู่บน production ไว้
+
+| รายการ | ค่า |
+|---|---|
+| ไฟล์สำรอง | `D:/workspace/webapi-api-backup-20261009T204112.tar.gz` |
+| ที่มา | `/home/ubuntu/course-advisor-system/webapi/api/` บนเครื่อง production |
+| วันที่สำรอง | 9 ตุลาคม 2569 |
+| จำนวนไฟล์ | 10 ไฟล์ · 3 โฟลเดอร์ · 0 symlink · 30,836 ไบต์ |
+| SHA256 รวม | `2b67e0f4a9dc9fd9f47231d93eaff12903d962d0e8d430f3347dbe52cafa8fcd` |
+
+**สำเนานี้เป็นของสำรองเพื่อกู้คืน ไม่ใช่แหล่งต้นทาง** แหล่งต้นทางยังเป็นรีโปของทีมออกแบบ
+ถ้าทีมนั้นแก้โค้ด สำเนานี้จะเก่าทันที — ให้ใช้วิธี `cp` ข้างบนเป็นหลักเสมอ
+และใช้ไฟล์สำรองเฉพาะตอนที่เข้าถึงรีโปต้นทางไม่ได้
+
+```bash
+# กู้คืนลงที่เดิม
+tar -xzf webapi-api-backup-20261009T204112.tar.gz -C webapi/
+```
+
+### ตรวจ SHA256 ก่อน build ทุกครั้ง
+
+ไม่ว่าจะคัดลอกจากรีโปต้นทางหรือกู้จากไฟล์สำรอง ให้ตรวจก่อน build เสมอ
+
+```bash
+cd webapi
+
+# 1) ต้องได้ครบ 10 ไฟล์
+find api -type f | wc -l
+
+# 2) ต้องไม่มี symlink
+find api -type l | wc -l            # ต้องได้ 0
+
+# 3) hash รวม — เทียบกับค่าในตารางข้างบน
+find api -type f -print0 | sort -z | xargs -0 sha256sum \
+  | awk '{print $1}' | sha256sum
+```
+
+> ค่า hash รวมคำนวณจาก **ค่า hash ของแต่ละไฟล์เรียงตามชื่อ** ไม่ใช่จาก output ดิบของ
+> `sha256sum` เพราะบน Windows คำสั่งนั้นใส่ `*` นำหน้าชื่อไฟล์แต่บน Linux ใส่ช่องว่าง
+> ทำให้เทียบข้ามระบบปฏิบัติการไม่ได้ถ้าไม่ตัดชื่อไฟล์ออกก่อน
+>
+> ถ้า hash ไม่ตรง **ไม่ได้แปลว่าผิดเสมอไป** — อาจเป็นเพราะทีมออกแบบแก้โค้ดจริง
+> ให้ตรวจว่าต่างตรงไหนก่อนตัดสินใจ อย่าเพิ่ง build ทับ
+
+### ขั้นตอน build
+
+```bash
+# ยืนยันว่ามี api/ ครบแล้วค่อย build (ถ้าไม่มี COPY api ./api จะล้ม)
+cd webapi && find api -type f | wc -l        # ต้องได้ 10
+
+# build ด้วย tag ที่ระบุเวอร์ชัน ไม่ใช่ latest เปล่า ๆ
+docker build -t course-advisor-system-webapi:$(git rev-parse --short HEAD) .
+```
+
+**ก่อน build ทับของที่ใช้งานอยู่ ให้ติด tag สำรองไว้ก่อนเสมอ** ไม่งั้นจะไม่มีอะไรให้ย้อนกลับ
+
+```bash
+docker tag course-advisor-system-webapi:latest course-advisor-system-webapi:rollback-pre-<ชื่องาน>
+docker images | grep webapi          # ยืนยันว่า tag ติดแล้วจริง
+```
+
 ---
 
 ## ตัวครอบทำอะไร
