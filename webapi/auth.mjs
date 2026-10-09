@@ -164,7 +164,9 @@ export async function resolveAuthContext(request, deps) {
 
   let profile = null;
   try {
-    profile = await readProfile(identity.userId);
+    // ส่ง identity ของคำขอนี้ต่อไปด้วย — ตัวตรวจจะได้ใช้ client ที่ผูกกับ token
+    // ของคำขอนี้ ไม่ใช่ของคำขออื่นที่มาทับ (ดูเหตุผลที่ createRuntimeDeps)
+    profile = await readProfile(identity.userId, identity);
   } catch {
     // อ่านโปรไฟล์ไม่ได้ = ไม่รู้สิทธิ์ = ต้องไม่เดาว่ามีสิทธิ์
     profile = null;
@@ -320,17 +322,35 @@ export function createSupabaseVerifier(config) {
 /**
  * ประกอบ deps สำหรับใช้งานจริง — ส่ง identity ที่ได้จาก verifyToken ต่อให้
  * readProfile เพื่อให้ใช้ client ตัวเดียวกัน (หนึ่งคำขอ = หนึ่ง client)
+ *
+ * ⚠ ทำไมห้ามเก็บ identity ไว้ในตัวแปรร่วมของ closure
+ * --------------------------------------------------
+ * รุ่นก่อนหน้าเก็บไว้ใน `let lastIdentity` ซึ่งใช้ร่วมกันทุกคำขอ · คำขอสองรายการ
+ * ที่ทับเวลากันจะทับค่ากันเอง
+ *
+ *     A: verifyToken  -> lastIdentity = A
+ *     B: verifyToken  -> lastIdentity = B      <-- ทับของ A
+ *     A: readProfile  -> ได้ client ของ B
+ *
+ * ผลคือ A อ่านโปรไฟล์ของตัวเองด้วย client ของ B แล้ว RLS คืนศูนย์แถว →
+ * ผู้ใช้ที่มีสิทธิ์ถูกปฏิเสธแบบสุ่มเมื่อมีคนใช้พร้อมกัน
+ *
+ * (ไม่ใช่ช่องทางไต่สิทธิ์ เพราะ userId ส่งเข้ามาตรง ๆ และ RLS บังคับในนามผู้เรียก
+ * แต่เป็นบั๊กจริงที่โผล่เฉพาะตอนมีทราฟฟิกพร้อมกัน ซึ่งหายากที่สุด)
+ *
+ * วิธีแก้: ไม่เก็บสถานะใด ๆ ไว้ที่นี่เลย · identity เดินทางไปกับค่าที่คืนจาก
+ * verifyToken แล้ว resolveAuthContext ส่งต่อให้ readProfile เอง
+ * ทุกคำขอจึงถือ identity ของตัวเองคนละชุด
  */
 export function createRuntimeDeps(config) {
   const verifier = createSupabaseVerifier(config);
-  let lastIdentity = null;
   return {
     async verifyToken(token) {
-      lastIdentity = await verifier.verifyToken(token);
-      return lastIdentity ? { userId: lastIdentity.userId } : null;
+      // คืน identity ทั้งก้อนรวม client ที่ผูกกับ token นี้ — ไม่เก็บไว้ที่ใด
+      return verifier.verifyToken(token);
     },
-    async readProfile(userId) {
-      return verifier.readProfile(userId, lastIdentity);
+    async readProfile(userId, identity) {
+      return verifier.readProfile(userId, identity);
     },
   };
 }
@@ -338,49 +358,61 @@ export function createRuntimeDeps(config) {
 // ---------------------------------------------------------------------
 // สัญญาเรื่องผู้เขียนข้อมูล (created_by / updated_by)
 //
-// ยังเขียนลงฐานข้อมูลไม่ได้ในรอบนี้ และนั่นเป็นข้อสรุปที่ตั้งใจ ไม่ใช่งานที่ลืมทำ
+// เขียนได้แล้วตั้งแต่ M3 — ก่อนหน้านี้ปฏิเสธเสมอโดยตั้งใจ
 // ---------------------------------------------------------------------
 
-/** รหัสที่ใช้อ้างอิงข้อจำกัดนี้ในเอกสารและใน log */
+/** รหัสที่ใช้อ้างอิงกรณี "ยังไม่ได้ต่อตัวแปลงตัวตน" ในเอกสารและใน log */
 export const ACTIVE_USER_MAPPING_REQUIRED = "B1_ACTIVE_USER_MAPPING_REQUIRED";
 
 /**
  * แปลงตัวตนของผู้เรียก (Supabase) ไปเป็น public.users.id ของ PostgreSQL
  *
- * ตอนนี้ทำไม่ได้ และฟังก์ชันนี้มีไว้เพื่อ "ปฏิเสธอย่างมีเสียง" ไม่ใช่เพื่อเดา
+ * ประวัติของฟังก์ชันนี้
+ * -------------------
+ * รุ่นก่อนปฏิเสธทุกครั้งพร้อมเหตุผลว่า auth.users.id ของ Supabase กับ
+ * public.users.id ของเราเป็น uuid คนละชุดที่ไม่มีเส้นเชื่อมกัน การเอาค่าหนึ่ง
+ * ไปใส่อีกที่คือการชี้ไปผู้ใช้ที่ไม่มีอยู่ หรือแย่กว่านั้นคือชี้ไปผู้ใช้คนอื่น
  *
- * เหตุผล
- * ------
- * auth.users.id ของ Supabase กับ public.users.id ของเราเป็น uuid ที่ถูกสร้าง
- * แยกกันคนละฐาน ไม่มีเส้นเชื่อมกันเลย การเอาค่าหนึ่งไปใส่อีกที่คือการชี้ไปผู้ใช้
- * ที่ไม่มีอยู่ หรือแย่กว่านั้นคือชี้ไปผู้ใช้คนอื่นที่ uuid ชนกันโดยบังเอิญ
+ * เส้นเชื่อมนั้นมีแล้ว — คอลัมน์ public.users.supabase_user_id จาก migration 006
+ * และการจับคู่ของผู้ใช้จริงที่ยืนยันแล้ว (S1_MAPPING_APPLIED_VERIFIED)
+ * ฟังก์ชันนี้จึงถามฐานข้อมูลแทนการเดา
  *
- * ทางที่จับคู่ได้มีแต่อีเมล ซึ่งยังไม่มีการออกแบบที่ปลอดภัยสำหรับผู้ใช้ที่ยังใช้งานอยู่
- * (ของ legacy ปิดไปแล้วด้วยการใช้ NULL — ดู docs/B2_LEGACY_AUTHOR_RESOLUTION.md
- * แต่ข้อสรุปนั้นใช้กับแถวเก่า 15 แถวเท่านั้น ไม่ใช่กับข้อมูลใหม่)
+ * สิ่งที่ยังห้ามเหมือนเดิมทุกข้อ
+ * ---------------------------
+ *   - ห้าม fallback ด้วยอีเมล (และ advisor_web อ่านคอลัมน์ email ไม่ได้อยู่แล้ว)
+ *   - ห้าม fallback เป็นผู้ดูแลระบบ
+ *   - ห้ามใช้ Supabase uuid เป็น local id ตรง ๆ
+ *   - ห้ามสร้างผู้ใช้ใหม่ (และ advisor_web ไม่มีสิทธิ์ INSERT อยู่แล้ว)
+ *   - ห้ามเชื่อค่าจาก request body
  *
- * ห้ามแก้ฟังก์ชันนี้ให้คืนค่าอะไรจนกว่าจะมีการออกแบบ mapping ที่ได้รับอนุมัติ
- * ห้ามใส่ค่า fallback เป็นผู้ดูแลระบบ ห้ามสร้างผู้ใช้ใหม่ ห้ามเชื่อค่าจาก request
+ * ปฏิเสธเมื่อไม่แน่ใจเสมอ — ทุกเส้นทางที่ไม่ใช่ "เจอหนึ่งคนและยังใช้งานอยู่"
+ * คือการปฏิเสธ
  */
-export function resolveAuthorId() {
-  return {
-    ok: false,
-    reason: ACTIVE_USER_MAPPING_REQUIRED,
-    detail:
-      "ยังไม่มีการจับคู่ผู้ใช้ Supabase กับ public.users ที่ปลอดภัย " +
-      "จึงยังเขียน created_by / updated_by ไม่ได้",
-  };
+export async function resolveAuthorId(context, resolver) {
+  if (!context?.authenticated || !context?.userId) {
+    return { ok: false, reason: "NOT_AUTHENTICATED", detail: "ไม่มีตัวตนที่ยืนยันแล้ว" };
+  }
+  if (typeof resolver?.resolveLocalUser !== "function") {
+    // ไม่ได้ต่อตัวแปลงตัวตนไว้ = แปลงไม่ได้ = เขียนไม่ได้
+    // ไม่ใช่ "ลองเดาดูก่อน"
+    return {
+      ok: false,
+      reason: ACTIVE_USER_MAPPING_REQUIRED,
+      detail: "ยังไม่ได้ต่อตัวแปลงตัวตนกับฐานข้อมูล จึงยังเขียน created_by / updated_by ไม่ได้",
+    };
+  }
+
+  const found = await resolver.resolveLocalUser(context.userId);
+  if (!found?.ok) {
+    return {
+      ok: false,
+      reason: found?.reason ?? "IDENTITY_LOOKUP_FAILED",
+      detail: found?.detail ?? "แปลงตัวตนไม่สำเร็จ",
+    };
+  }
+  return { ok: true, id: found.localUserId };
 }
 
-/**
- * ตัดคอลัมน์ผู้เขียนออกจากข้อมูลที่ผู้เรียกส่งมา
- *
- * ใช้กับทุก endpoint ที่เขียนข้อมูล ไม่ว่าจะ CREATE หรือ UPDATE
- * ค่าผู้เขียนต้องมาจากตัวตนที่ยืนยันแล้วเท่านั้น ไม่ใช่จาก body
- *
- * วันนี้หน้าเว็บส่ง updated_by มาเองจริง (KnowledgeForm.jsx ส่ง updated_by: user?.id)
- * ซึ่ง RLS ต้นทางไม่ได้กัน ถ้าชั้น API เชื่อค่านั้น ใครก็อ้างเป็นคนอื่นได้
- */
 export function stripAuthorFields(payload) {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     return { value: payload, removed: [] };
@@ -409,9 +441,10 @@ export function stripAuthorFields(payload) {
  * ถ้า UPDATE เขียนค่าลงไป ความหมายจะกลายเป็น "คนที่เพิ่งมาแก้เป็นคนสร้าง" ซึ่งไม่จริง
  * เป็นการยัดเจ้าของผิดคนแบบเดียวกับที่ห้ามไว้ตอน migration เพียงแต่เกิดภายหลัง
  *
- * ตอนนี้คืน ok: false ทุกครั้งเพราะ resolveAuthorId ยังทำงานไม่ได้
+ * ต้องส่ง resolver มาด้วย — ถ้าไม่ส่ง resolveAuthorId จะปฏิเสธด้วย
+ * ACTIVE_USER_MAPPING_REQUIRED แทนที่จะเดาค่าผู้เขียน
  */
-export function authorFieldsFor(mode, context) {
+export async function authorFieldsFor(mode, context, resolver) {
   if (mode !== "create" && mode !== "update") {
     return { ok: false, reason: "UNKNOWN_WRITE_MODE", detail: `mode ${mode} ไม่รู้จัก` };
   }
@@ -419,10 +452,9 @@ export function authorFieldsFor(mode, context) {
     return { ok: false, reason: "NOT_AUTHENTICATED", detail: "ไม่มีตัวตนที่ยืนยันแล้ว" };
   }
 
-  const mapped = resolveAuthorId(context);
+  const mapped = await resolveAuthorId(context, resolver);
   if (!mapped.ok) return mapped;
 
-  // ยังไม่มีทางมาถึงบรรทัดนี้ — คงไว้ให้เห็นรูปร่างที่ตั้งใจเมื่อ mapping พร้อม
   return mode === "create"
     ? { ok: true, fields: { created_by: mapped.id, updated_by: mapped.id } }
     : { ok: true, fields: { updated_by: mapped.id } };

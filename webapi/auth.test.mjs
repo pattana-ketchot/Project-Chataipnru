@@ -509,40 +509,110 @@ test("ข้อความตอบกลับไม่มีรายละ�
 });
 
 // =====================================================================
-// สัญญาเรื่องผู้เขียนข้อมูล — ต้องปฏิเสธ ไม่ใช่เดา
+// สัญญาเรื่องผู้เขียนข้อมูล — ปฏิเสธเมื่อไม่แน่ใจ ไม่ใช่เดา
+//
+// ตั้งแต่ M3 ฟังก์ชันพวกนี้ถาม PostgreSQL ผ่าน resolver ที่ฉีดเข้ามา
+// ชุดนี้จึงใส่ resolver ปลอม ไม่ต้องมีฐานข้อมูลจริง
 // =====================================================================
 
-test("resolveAuthorId ปฏิเสธเสมอ และบอกเหตุผลด้วยรหัสที่ตามรอยได้", () => {
-  const got = resolveAuthorId({
-    authenticated: true,
-    userId: "u-admin",
-    role: "admin",
-    status: "approved",
-  });
+const ADMIN_CONTEXT = {
+  authenticated: true,
+  userId: "u-admin",
+  role: "admin",
+  status: "approved",
+};
+
+/** resolver ปลอมที่ตอบตามที่กำหนด และจำว่าถูกถามด้วยค่าอะไร */
+function fakeResolver(answer) {
+  const asked = [];
+  return {
+    asked,
+    async resolveLocalUser(id) {
+      asked.push(id);
+      return answer;
+    },
+  };
+}
+
+test("resolveAuthorId ปฏิเสธเมื่อไม่ได้ต่อ resolver — และไม่คืน id ออกมา", async () => {
+  const got = await resolveAuthorId(ADMIN_CONTEXT);
   assert.equal(got.ok, false);
   assert.equal(got.reason, ACTIVE_USER_MAPPING_REQUIRED);
   assert.equal("id" in got, false, "ต้องไม่คืน id ออกมาเลย");
 });
 
-test("authorFieldsFor ยังเขียนผู้เขียนไม่ได้ ทั้ง create และ update", () => {
-  const admin = { authenticated: true, userId: "u-admin", role: "admin", status: "approved" };
+test("resolveAuthorId ปฏิเสธเมื่อยังไม่ได้ยืนยันตัวตน", async () => {
+  const resolver = fakeResolver({ ok: true, localUserId: "local-1" });
+  for (const ctx of [ANONYMOUS, null, { authenticated: true }]) {
+    const got = await resolveAuthorId(ctx, resolver);
+    assert.equal(got.ok, false);
+    assert.equal(got.reason, "NOT_AUTHENTICATED");
+  }
+  assert.deepEqual(resolver.asked, [], "ยังไม่ยืนยันตัวตนก็ต้องไม่ไปถามฐานข้อมูล");
+});
+
+test("resolveAuthorId ส่ง Supabase userId ไปถาม resolver แล้วคืน local id", async () => {
+  const resolver = fakeResolver({ ok: true, localUserId: "local-1" });
+  const got = await resolveAuthorId(ADMIN_CONTEXT, resolver);
+  assert.equal(got.ok, true);
+  assert.equal(got.id, "local-1");
+  assert.deepEqual(resolver.asked, ["u-admin"], "ต้องถามด้วย userId ของ Supabase");
+});
+
+test("resolveAuthorId ส่งต่อเหตุผลที่ resolver ปฏิเสธ โดยไม่แปลงเป็นสำเร็จ", async () => {
+  for (const reason of [
+    "ACCOUNT_NOT_LINKED",
+    "ACCOUNT_INACTIVE",
+    "MAPPING_AMBIGUOUS",
+    "IDENTITY_LOOKUP_FAILED",
+    "DATABASE_NOT_CONFIGURED",
+  ]) {
+    const got = await resolveAuthorId(ADMIN_CONTEXT, fakeResolver({ ok: false, reason }));
+    assert.equal(got.ok, false, reason);
+    assert.equal(got.reason, reason);
+    assert.equal("id" in got, false, "ปฏิเสธแล้วต้องไม่มี id ติดมา");
+  }
+});
+
+test("authorFieldsFor create ตั้งทั้งสองคอลัมน์ · update ตั้งแต่ updated_by", async () => {
+  const resolver = fakeResolver({ ok: true, localUserId: "local-1" });
+
+  const created = await authorFieldsFor("create", ADMIN_CONTEXT, resolver);
+  assert.equal(created.ok, true);
+  assert.deepEqual(created.fields, { created_by: "local-1", updated_by: "local-1" });
+
+  const updated = await authorFieldsFor("update", ADMIN_CONTEXT, resolver);
+  assert.equal(updated.ok, true);
+  assert.deepEqual(
+    updated.fields,
+    { updated_by: "local-1" },
+    "UPDATE ห้ามแตะ created_by แม้จะรู้ค่าก็ตาม",
+  );
+  assert.equal("created_by" in updated.fields, false);
+});
+
+test("authorFieldsFor ปฏิเสธเมื่อ resolver ปฏิเสธ และไม่คืนคอลัมน์ออกมา", async () => {
+  const resolver = fakeResolver({ ok: false, reason: "ACCOUNT_NOT_LINKED" });
   for (const mode of ["create", "update"]) {
-    const got = authorFieldsFor(mode, admin);
+    const got = await authorFieldsFor(mode, ADMIN_CONTEXT, resolver);
     assert.equal(got.ok, false, `mode ${mode}`);
-    assert.equal(got.reason, ACTIVE_USER_MAPPING_REQUIRED);
+    assert.equal(got.reason, "ACCOUNT_NOT_LINKED");
     assert.equal("fields" in got, false, "ต้องไม่คืนคอลัมน์ที่จะเขียนออกมา");
   }
 });
 
-test("authorFieldsFor ไม่ยอมทำงานถ้าไม่มีตัวตนที่ยืนยันแล้ว", () => {
-  assert.equal(authorFieldsFor("create", ANONYMOUS).reason, "NOT_AUTHENTICATED");
-  assert.equal(authorFieldsFor("create", null).reason, "NOT_AUTHENTICATED");
+test("authorFieldsFor ไม่ยอมทำงานถ้าไม่มีตัวตนที่ยืนยันแล้ว", async () => {
+  const resolver = fakeResolver({ ok: true, localUserId: "local-1" });
+  assert.equal((await authorFieldsFor("create", ANONYMOUS, resolver)).reason, "NOT_AUTHENTICATED");
+  assert.equal((await authorFieldsFor("create", null, resolver)).reason, "NOT_AUTHENTICATED");
+  assert.deepEqual(resolver.asked, [], "ไม่ยืนยันตัวตนก็ต้องไม่ไปถามฐานข้อมูล");
 });
 
-test("authorFieldsFor ปฏิเสธ mode ที่ไม่รู้จัก", () => {
-  const admin = { authenticated: true, userId: "u", role: "admin", status: "approved" };
-  assert.equal(authorFieldsFor("upsert", admin).reason, "UNKNOWN_WRITE_MODE");
-  assert.equal(authorFieldsFor("delete", admin).ok, false);
+test("authorFieldsFor ปฏิเสธ mode ที่ไม่รู้จัก", async () => {
+  const resolver = fakeResolver({ ok: true, localUserId: "local-1" });
+  assert.equal((await authorFieldsFor("upsert", ADMIN_CONTEXT, resolver)).reason, "UNKNOWN_WRITE_MODE");
+  assert.equal((await authorFieldsFor("delete", ADMIN_CONTEXT, resolver)).ok, false);
+  assert.deepEqual(resolver.asked, [], "mode ผิดก็ต้องไม่ไปถามฐานข้อมูล");
 });
 
 test("stripAuthorFields ไม่พังกับค่าที่ไม่ใช่ object", () => {
