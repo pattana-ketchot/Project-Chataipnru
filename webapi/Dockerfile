@@ -11,8 +11,12 @@ FROM node:22-alpine
 WORKDIR /app
 
 # ติดตั้งไลบรารีก่อน เพื่อให้ชั้นนี้ถูกใช้ซ้ำเมื่อโค้ดเปลี่ยนแต่ไลบรารีไม่เปลี่ยน
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --no-audit --no-fund
+#
+# ใช้ npm ci ไม่ใช่ npm install เพื่อให้ image ได้ไลบรารีชุดเดียวกับที่ทดสอบเป๊ะ ๆ
+# และไม่ใส่ * ท้ายชื่อ lock file อีกต่อไป — ถ้าไฟล์หาย build ต้องล้มเสียงดัง
+# ไม่ใช่เงียบ ๆ แล้วไปดึงรุ่นใหม่กว่าที่ไม่เคยมีใครทดสอบ
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 
 # โค้ดของเพื่อน คัดลอกมาทั้งอย่างโดยไม่แก้ไข
 COPY api ./api
@@ -22,7 +26,8 @@ COPY api ./api
 # คอนเทนเนอร์จะพังตอนเริ่มทำงาน ไม่ใช่ตอนมีคนเรียก
 #
 # ไม่คัดลอก *.test.mjs เข้า image โดยเจตนา ชุดทดสอบไม่ใช่ของที่ต้องรันใน production
-COPY server.mjs auth.mjs ./
+# db.mjs ก็เช่นเดียวกับ auth.mjs — server.mjs นำเข้ามันตั้งแต่บรรทัดแรก
+COPY server.mjs auth.mjs db.mjs ./
 
 # ไม่รันด้วยสิทธิ์ผู้ดูแลระบบ
 USER node

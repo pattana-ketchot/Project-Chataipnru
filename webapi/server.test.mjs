@@ -70,6 +70,38 @@ const calls = async () => {
   }
 };
 
+/**
+ * วาง pg ปลอมไว้ใน node_modules ของโฟลเดอร์ทดสอบ
+ *
+ * ชุดนี้ไม่ได้ทดสอบฐานข้อมูลเลย และไม่ได้ตั้ง ADVISOR_WEB_PASSWORD ด้วย
+ * db.mjs จึงไม่สร้าง pool อะไรทั้งสิ้น แต่ import ของมันต้องหาโมดูลเจอ
+ *
+ * ใช้ของปลอมแทนการคัดลอก node_modules จริงเพราะเร็วกว่ามากและทำให้เห็นชัดว่า
+ * เส้นทางที่ทดสอบอยู่ไม่แตะฐานข้อมูล · ถ้าวันหนึ่งโค้ดเริ่มเรียก pg จริงในเส้นทางนี้
+ * ของปลอมจะพังเสียงดัง ซึ่งเป็นสิ่งที่ต้องการ
+ */
+async function stubPg(root) {
+  const dir = path.join(root, "node_modules", "pg");
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    path.join(dir, "package.json"),
+    JSON.stringify({ name: "pg", version: "0.0.0-stub", main: "index.js" }),
+  );
+  await writeFile(
+    path.join(dir, "index.js"),
+    [
+      "class Pool {",
+      "  constructor() {",
+      "    throw new Error('ชุดทดสอบนี้ไม่ควรสร้าง pool จริง');",
+      "  }",
+      "}",
+      "module.exports = { Pool };",
+      "module.exports.default = { Pool };",
+      "",
+    ].join("\n"),
+  );
+}
+
 before(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "webapi-authz-"));
   callLog = path.join(dir, "calls.log");
@@ -82,10 +114,11 @@ before(async () => {
   for (const name of ["extract-file", "ingest", "sync-sci-news"]) {
     await writeFile(path.join(dir, "api", "admin", `${name}.js`), STUB(`admin/${name}`));
   }
-  for (const file of ["server.mjs", "auth.mjs"]) {
+  for (const file of ["server.mjs", "auth.mjs", "db.mjs"]) {
     await cp(path.join(HERE, file), path.join(dir, file));
   }
   await writeFile(path.join(dir, "package.json"), JSON.stringify({ type: "module" }));
+  await stubPg(dir);
 
   child = spawn(process.execPath, ["server.mjs"], {
     cwd: dir,
@@ -225,10 +258,11 @@ test("เส้นทางที่ไม่ประกาศระดับ�
   try {
     await mkdir(path.join(alt, "api", "admin"), { recursive: true });
     await writeFile(path.join(alt, "api", "oops.js"), STUB("oops"));
-    for (const file of ["server.mjs", "auth.mjs"]) {
+    for (const file of ["server.mjs", "auth.mjs", "db.mjs"]) {
       await cp(path.join(HERE, file), path.join(alt, file));
     }
     await writeFile(path.join(alt, "package.json"), JSON.stringify({ type: "module" }));
+    await stubPg(alt);
 
     // เพิ่มเส้นทางที่ "ไม่มีระดับสิทธิ์" เข้าไปในตาราง
     const src = await readFile(path.join(alt, "server.mjs"), "utf8");

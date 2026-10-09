@@ -35,6 +35,7 @@ import {
   supabaseEnv,
   validateRouteTable,
 } from "./auth.mjs";
+import { createDatabase } from "./db.mjs";
 
 const PORT = Number(process.env.PORT || 3001);
 
@@ -95,6 +96,21 @@ if (!authDeps) {
   );
 }
 
+// ตัวเชื่อมฐานข้อมูลสำหรับแปลงตัวตน Supabase เป็น public.users.id
+//
+// คืน null เมื่อตั้งค่าไม่ครบ — เส้นทางสาธารณะยังทำงานได้ตามปกติ เพราะไม่ได้ใช้
+// ฐานข้อมูลเลย · เส้นทางที่ต้องเขียนข้อมูลจะปฏิเสธอย่างมีเสียงแทนที่จะเดา
+//
+// log บอกแค่ว่าต่อไปที่ไหนด้วย user อะไร — **ไม่มีรหัสผ่าน**
+const database = createDatabase();
+if (database) {
+  console.log(`[webapi] ตั้งค่าฐานข้อมูลแล้ว: ${database.describe()}`);
+} else {
+  console.warn(
+    "[webapi] ไม่พบค่าตั้งค่าฐานข้อมูล — แปลงตัวตนผู้เขียนไม่ได้ (เส้นทางสาธารณะยังทำงานปกติ)",
+  );
+}
+
 /**
  * ตอบกลับสั้น ๆ แบบไม่เปิดเผยอะไรเกินจำเป็น
  *
@@ -136,8 +152,15 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("content-type", "application/json; charset=utf-8");
     res.end(
       JSON.stringify({
+        // status สะท้อนเฉพาะว่า HTTP server ยังรับคำขอได้ — **ห้ามขึ้นกับฐานข้อมูล**
+        // Docker HEALTHCHECK ตัดสินจากเส้นทางนี้ ถ้าปล่อยให้ล้มเพราะฐานข้อมูลล่ม
+        // คอนเทนเนอร์จะถูกมองว่าพัง ทั้งที่สองเส้นทางสาธารณะยังให้บริการได้ปกติ
         status: "ok",
         authConfigured: Boolean(authDeps),
+        dbConfigured: Boolean(database),
+        // "unknown" จนกว่าจะมีคนใช้จริงครั้งแรก — ไม่ยิง query ถามเองเพื่อไม่ให้
+        // เส้นทางนี้ช้าตามฐานข้อมูล
+        db: database ? database.status() : "not-configured",
         routes: [...handlers.keys()].map((route) => ({ route, level: levels.get(route) })),
       }),
     );
@@ -198,3 +221,41 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`[webapi] ฟังที่พอร์ต ${PORT} · ${handlers.size} เส้นทาง`);
 });
+
+// ---------------------------------------------------------------------
+// ปิดอย่างเรียบร้อย
+//
+// ก่อนมี pool ของฐานข้อมูล การถูก SIGKILL ไม่ทำให้เสียอะไร จึงไม่เคยมีส่วนนี้
+// ตอนนี้มี connection ค้างอยู่ฝั่ง PostgreSQL ที่ควรคืนให้เรียบร้อย
+//
+// ลำดับสำคัญ: หยุดรับคำขอใหม่ -> รอคำขอที่ทำอยู่ให้จบ -> ค่อยปิด pool
+// ถ้าปิด pool ก่อน คำขอที่กำลังทำงานจะพังกลางคัน
+// ---------------------------------------------------------------------
+let closing = false;
+async function shutdown(signal) {
+  // docker compose down อาจส่งสัญญาณซ้ำ — ครั้งที่สองต้องไม่เริ่มงานซ้อน
+  if (closing) return;
+  closing = true;
+  console.log(`[webapi] ได้รับ ${signal} — กำลังปิดอย่างเรียบร้อย`);
+
+  // Docker ส่ง SIGKILL หลัง stop_grace_period (ค่าตั้งต้น 10 วินาที)
+  // ออกเองก่อนถูกฆ่าดีกว่า เพราะอย่างน้อยได้พยายามคืน connection แล้ว
+  const hardStop = setTimeout(() => {
+    console.error("[webapi] ปิดไม่ทันใน 10 วินาที — ออกแบบบังคับ");
+    process.exit(1);
+  }, 10_000);
+  hardStop.unref();
+
+  server.close(async () => {
+    try {
+      if (database) await database.close();
+    } catch (err) {
+      console.error("[webapi] ปิด pool ไม่สำเร็จ:", err?.message ?? err);
+    }
+    clearTimeout(hardStop);
+    process.exit(0);
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

@@ -117,11 +117,32 @@ services:
     build:
       context: ./webapi
     restart: unless-stopped
+    # ตั้งแต่ M3 บริการนี้ต่อ PostgreSQL เพื่อแปลงตัวตน Supabase เป็น public.users.id
+    # จึงต้องรอให้ฐานข้อมูลพร้อมรับ connection จริงก่อน ไม่ใช่แค่คอนเทนเนอร์ขึ้น
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
       VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
       # เว้นว่างไว้ตามที่ตกลง -> /api/admin/ingest จะตอบข้อผิดพลาดจนกว่าจะใส่คีย์
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      # ---- การเชื่อมต่อฐานข้อมูล (M3) ----
+      #
+      # แยกค่าลับออกจากค่าที่ไม่ลับโดยตั้งใจ ไม่รวมเป็น DATABASE_URL เดียว
+      # เพื่อให้อ่าน compose แล้วรู้ทันทีว่าอะไรคือความลับ และไม่ต้อง percent-encode
+      # อักขระพิเศษของรหัสผ่านให้ถูกต้องในรูปแบบ URL
+      #
+      # host/port ยืนยันจากของจริง: ชื่อ service `postgres` แปลงเป็น IP ใน network
+      # เดียวกันได้ และต่อพอร์ต 5432 ได้จากคอนเทนเนอร์ webapi
+      WEBAPI_DB_HOST: postgres
+      WEBAPI_DB_PORT: "5432"
+      WEBAPI_DB_NAME: course_advisor
+      # ใช้ role สิทธิ์ต่ำที่อ่าน public.users ได้แค่ 3 คอลัมน์ — ไม่ใช่ postgres
+      # และไม่ใช่ advisor_api ซึ่งอ่าน email ได้
+      WEBAPI_DB_USER: advisor_web
+      # บังคับให้ต้องมีใน .env — ขึ้นมาแล้วต่อฐานข้อมูลไม่ได้ ตรวจยากกว่าไม่ขึ้นเลย
+      ADVISOR_WEB_PASSWORD: ${ADVISOR_WEB_PASSWORD:?ต้องตั้งค่าใน .env}
     # ไม่เปิดพอร์ตออกนอกเครื่อง เข้าถึงได้เฉพาะผ่าน Caddy เหมือนที่ backend ทำ
     expose:
       - "3001"
