@@ -61,3 +61,49 @@ psql -v ON_ERROR_STOP=1 \
 EOSQL
 
 echo "20-roles.sh: สร้าง role advisor_api และ advisor_ingest เรียบร้อย"
+
+# ---------------------------------------------------------------------
+# advisor_web — role ของ webapi (บริการที่รับคำขอจากหน้าเว็บ)
+#
+# ทำไมเป็น "ทางเลือก" ไม่ใช่บังคับแบบสองตัวข้างบน
+# ---------------------------------------------------
+# ไฟล์นี้ถูก mount โดย compose สามไฟล์ — docker-compose.yml (dev),
+# docker-compose.prod.yml (production) และ eval/e2e/docker-compose.e2e.yml
+# และยังไม่มีไฟล์ใดส่ง ADVISOR_WEB_PASSWORD มา
+# ถ้าใช้ "${VAR:?}" แบบสองตัวข้างบน ทุกสภาพแวดล้อมจะไม่ยอมเริ่มทำงานทันที
+# รวมถึงชุดทดสอบ e2e ที่ตั้งรหัสผ่านไว้แค่สองตัว
+#
+# จึงข้ามไปอย่างมีเสียงเมื่อไม่ได้ตั้งค่า แทนที่จะล้มทั้งการเริ่มต้นฐานข้อมูล
+# เมื่อ compose ทั้งสามไฟล์ส่งตัวแปรนี้มาแล้ว จะเปลี่ยนเป็นบังคับก็ได้
+#
+# ** ไม่ให้สิทธิ์ตารางหรือ schema ใด ๆ ที่นี่ **
+# GRANT ของ advisor_web อยู่ใน migration 006 ตามหลัก "role = infrastructure,
+# grant = migration" ที่ไฟล์นี้กับ 005 ตั้งไว้แล้ว
+# (ดู docs/B1_ADVISOR_WEB_ROLE_DESIGN.md ข้อ 7)
+#
+# production ไม่ได้ role จากไฟล์นี้ เพราะ initdb รันเฉพาะตอน data directory ว่าง
+# ซึ่ง production ไม่ใช่ -> ต้องสร้างด้วยขั้น provisioning แยกครั้งเดียว
+# ---------------------------------------------------------------------
+if [ -n "${ADVISOR_WEB_PASSWORD:-}" ]; then
+    psql -v ON_ERROR_STOP=1 \
+         -v web_password="$ADVISOR_WEB_PASSWORD" \
+         --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-'EOSQL'
+
+        -- ตรวจก่อนสร้างเพื่อให้รันซ้ำได้ — ไม่ใช้ DO $$ … $$ เพราะ psql
+        -- ไม่แทนค่าตัวแปร :'web_password' ข้างใน dollar-quoted string
+        SELECT NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'advisor_web')
+            AS need_web_role \gset
+
+        \if :need_web_role
+            CREATE ROLE advisor_web LOGIN PASSWORD :'web_password'
+                NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+        \else
+            \echo 'advisor_web มีอยู่แล้ว — ไม่สร้างซ้ำและไม่เปลี่ยนรหัสผ่าน'
+        \endif
+
+EOSQL
+    echo "20-roles.sh: จัดการ role advisor_web เรียบร้อย (ยังไม่ให้สิทธิ์ตาราง — อยู่ใน migration 006)"
+else
+    echo "20-roles.sh: ไม่พบ ADVISOR_WEB_PASSWORD จึงข้ามการสร้าง advisor_web" >&2
+    echo "20-roles.sh: webapi จะต่อฐานข้อมูลไม่ได้จนกว่าจะตั้งตัวแปรนี้แล้วสร้าง role" >&2
+fi
