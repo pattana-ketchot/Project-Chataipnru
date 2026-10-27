@@ -1,0 +1,5 @@
+# ย้อนอิมเมจ backend กลับเป็นของ release ตัวนับการใช้โมเดล (16 ต.ค. 2569)
+# ใช้แทนที่ compose.pin-backend-level.yml ในชุด -f เมื่อต้องย้อนกลับ
+services:
+  backend:
+    image: course-advisor-system-backend:counter-2569-10-16

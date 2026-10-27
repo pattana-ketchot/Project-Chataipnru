@@ -6,10 +6,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.routes import (auth, chat, compare, courses, crawl_review, documents, match,
-                            recommend, search, users, web_compat)
+from app.api.routes import (auth, chat, compare, courses, crawl_review, documents, extract,
+                            match, recommend, search, site, site_admin, uploads, users,
+                            web_compat)
 from app.core.config import get_settings
 from app.db.session import engine
+from app.services import llm_usage
 
 from llm.connector import ChatMessage  # noqa: E402  (sys.path ตั้งโดย llm_client)
 
@@ -82,6 +84,13 @@ async def _keep_models_warm() -> None:
 async def lifespan(_: FastAPI):
     _check_embedding_dim()
 
+    # ตัวนับว่าคำตอบมาจากโมเดลตัวไหน — เธรดเบื้องหลังตื่นตามเวลา ไม่ใช่ตามเหตุการณ์
+    #
+    # ต้องผูกกับ lifespan ไม่ใช่ปล่อยให้คำขอของผู้ใช้เป็นคนจุดชนวนการเขียน เพราะ
+    # คำถามของระบบนี้มาเป็นช่วง ๆ แล้วเงียบไปเป็นชั่วโมง ตัวเลขของช่วงท้ายจะค้าง
+    # อยู่ในหน่วยความจำจนกว่าจะมีคนถามอีกครั้งหรือจนกว่าจะปิดระบบ
+    llm_usage.start_flusher()
+
     task = None
     if settings.warmup_interval_minutes > 0:
         task = asyncio.create_task(_keep_models_warm())
@@ -91,6 +100,9 @@ async def lifespan(_: FastAPI):
 
     if task is not None:
         task.cancel()
+
+    # เขียนตัวเลขช่วงสุดท้ายก่อนปิด — รอได้อย่างมาก 3 วินาทีแล้วปล่อย
+    llm_usage.stop_flusher()
 
 
 app = FastAPI(
@@ -122,6 +134,14 @@ app.include_router(documents.router)
 app.include_router(crawl_review.router)
 # เส้นทางในรูปแบบที่หน้าเว็บของทีมออกแบบเรียก — ดู routes/web_compat.py
 app.include_router(web_compat.router)
+# ข้อมูลหน้าเว็บจาก schema web — แทนที่การที่หน้าเว็บเรียก Supabase ตรง (Phase 4)
+app.include_router(site.router)
+# จัดการเนื้อหาสำหรับผู้ดูแล — ด่าน require_staff / require_admin_role (Phase 4)
+app.include_router(site_admin.router)
+# ไฟล์ที่ผู้ดูแลอัปโหลด — มาแทน Supabase Storage (Phase 4)
+app.include_router(uploads.router)
+# แตกข้อความจากไฟล์เพื่อเติมฟอร์มคลังความรู้ — มาแทน webapi/api/admin/extract-file (Phase 4)
+app.include_router(extract.router)
 
 
 @app.get("/health")

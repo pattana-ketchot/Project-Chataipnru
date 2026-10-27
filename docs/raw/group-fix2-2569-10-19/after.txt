@@ -1,0 +1,27 @@
+=== หลังแก้: กลุ่มฝึกประสบการณ์ ===
+code | name_th | credits | requirement
+4124813 | การเตรียมความพร้อมฝึกประสบการณ์วิชาชีพและสหกิจศึกษา | 2 | required_in_group
+4124814 | การฝึกประสบการณ์วิชาชีพวิทยาการคอมพิวเตอร์ | 5 | choose_group
+4124815 | สหกิจศึกษา | 6 | choose_group
+(3 rows)
+
+=== หลังแก้: ยอดของวิทคอม 2566 (ยอดวิชาบังคับต้องคงเดิม 35/96) ===
+requirement | วิชา | หน่วยกิต
+choose_group | 2 | 11
+elective | 44 | 114
+required | 35 | 96
+required_in_group | 1 | 2
+(4 rows)
+
+=== หลักฐานที่บันทึกไว้กับแถว 4124813 ===
+code | requirement | source_filename | page_start | หลักฐาน
+4124813 | required_in_group | cs66.pdf | 19 | 2.4) กลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ไม่น้อยกว่า 7 หน่วยกิต 4124813 การเตรียมความพร้อมฝึกประสบการณ์วิชาชีพและสหกิจศึกษา Preparation for Professional Internship and Cooperative Education 2(
+(1 row)
+
+=== ของเดิมไม่หาย ===
+t | count
+published_values | 604
+published_subjects | 164
+published_list_items | 652
+published_subject_prerequisites | 12
+(4 rows)

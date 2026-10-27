@@ -1,0 +1,65 @@
+%% System Architecture — ระบบแนะนำหลักสูตร SCI Advisor
+%% ฉบับ Mermaid สำหรับนำเข้า lucid.app  ·  ซอร์สต้นทาง: docs/diagrams/architecture.puml
+%% ---
+%% ข้อมูลประกอบที่ Mermaid ไม่มีที่วาง (PlantUML ใส่ไว้ในบล็อก legend):
+%%   ลำดับของ Caddy มีความหมาย — เลือกบล็อกแรกที่ตรงกับเส้นทาง
+%%   ถ้าสลับลำดับ /api/admin/* จะถูก /api/* กลืนไปหา backend แล้วได้ 404
+%%   ข้อมูลตรวจจากเซิร์ฟเวอร์จริงเมื่อ 16 ต.ค. 2569
+%%   อิมเมจ backend อัปเดตเป็น counter-2569-10-16 เมื่อ 16 ต.ค. 2569 เย็น
+
+flowchart TB
+    user(["ผู้ใช้ทั่วไป<br/>นักเรียน"])
+    sysadmin(["ผู้ดูแลระบบ<br/>เซิร์ฟเวอร์"])
+
+    subgraph HOST["เซิร์ฟเวอร์เดียว — Oracle Cloud ARM ไม่มีการ์ดจอ · Docker Compose: course-advisor-system · 7 คอนเทนเนอร์"]
+        caddy["1. caddy<br/>caddy:2-alpine<br/>เปิดพอร์ต 80, 443 ออกอินเทอร์เน็ต<br/>ตัวเดียวที่เปิด"]
+        spa["ไฟล์นิ่งของหน้าเว็บ ไม่ใช่คอนเทนเนอร์<br/>./web to /srv/web อ่านอย่างเดียว<br/>index.html · index-VoqZ65Zz.js · index-CmT3E8tu.css"]
+        backend["2. backend FastAPI<br/>course-advisor-system-backend:counter-2569-10-16<br/>พอร์ต 8000 ภายใน ไม่เปิดออกนอก<br/>CHAT_TOP_K=25 · STRUCTURED_ANSWERS=on"]
+        webapi["5. webapi Node<br/>รับผิดชอบ 5 เส้นทาง<br/>หน้าเว็บรุ่นนี้ไม่เรียกใช้เลย"]
+        oldfe["6. frontend Next.js<br/>course-advisor-system-frontend:2fdc6f2<br/>เว็บหลังบ้านตัวเดิม เข้าทางเลข IP<br/>ไม่ใช่หน้าเว็บที่ผู้ใช้ใช้"]
+        pg[("3. postgres<br/>pgvector/pgvector:pg16<br/>ฐาน course_advisor")]
+        ollama["4. ollama<br/>ollama/ollama:latest<br/>bge-m3 ทำ embedding เสมอ<br/>qwen2.5:3b ตัวสำรองเขียนคำตอบ"]
+        adminer["7. db-viewer adminer<br/>ผูก 127.0.0.1:18081 เท่านั้น"]
+        storage[("ที่เก็บข้อมูลถาวร<br/>./documents to /srv/documents ro ไฟล์ มคอ.2<br/>./uploads to /srv/uploads rw ไฟล์ที่ผู้ดูแลอัปโหลด<br/>volume: pgdata, ollama_models, caddy_data")]
+    end
+
+    subgraph EXT["บริการภายนอก"]
+        gemini["Google Gemini API<br/>gemini-3.5-flash-lite<br/>ผู้เขียนคำตอบหลัก<br/>LLM_PROVIDER=gemini"]
+        supabase["Supabase<br/>ตรวจตัวตนและข่าว Sci Connect<br/>รายละเอียดภายในยังไม่ยืนยัน"]
+    end
+
+    user -->|"HTTPS 443"| caddy
+    sysadmin -->|"เข้าทางเลข IP พอร์ต 80 ไม่มี HTTPS"| oldfe
+    sysadmin -.->|"SSH tunnel 127.0.0.1:18081"| adminer
+
+    caddy -->|"ลำดับ 5-6 /assets/* และเส้นทางอื่น<br/>ไม่เจอไฟล์ คืน index.html"| spa
+    caddy -->|"ลำดับ 1 /api/chat เขียนใหม่เป็น /chat-web<br/>ลำดับ 4 /api/* ที่เหลือ ตัด /api ออก"| backend
+    caddy -->|"ลำดับ 2 /api/sci-connect-news*<br/>ลำดับ 3 /api/admin/*"| webapi
+    caddy -->|"เมื่อเข้าทางเลข IP"| oldfe
+
+    backend -->|"DB user advisor_api"| pg
+    backend -->|"embed ด้วย bge-m3 เสมอ<br/>+ ตัวสำรองเมื่อ Gemini ล้มก่อนส่งตัวอักษรแรก"| ollama
+    backend -->|"เขียนคำตอบ chat / chat_stream"| gemini
+    backend -->|"อ่าน PDF / เขียนไฟล์อัปโหลด"| storage
+
+    webapi -->|"DB user advisor_web<br/>อ่าน public.users ได้ 3 คอลัมน์"| pg
+    webapi -->|"HTTPS"| supabase
+    oldfe -->|"เรียกใช้งาน API"| backend
+    adminer -->|"DB user postgres"| pg
+    pg --- storage
+
+    N1["หน้าเว็บจริงไม่ได้อยู่ในคอนเทนเนอร์<br/>เป็นไฟล์ที่ build แล้ววางในโฟลเดอร์ของโฮสต์<br/>การขึ้นเว็บรุ่นใหม่ = วางไฟล์ ไม่ใช่ build คอนเทนเนอร์<br/>index.html ส่ง no-cache · /assets/* แคชได้ 1 ปี"]
+    N2["embedding เปลี่ยนไม่ได้<br/>เวกเตอร์ของเอกสาร 9,039 ชิ้นสร้างด้วย bge-m3 ขนาด 1024 มิติ<br/>และคอลัมน์ในฐานข้อมูลประกาศไว้ตายตัว<br/>การเปลี่ยนโมเดล = ต้องคำนวณใหม่ทั้งคลัง"]
+    spa --- N1
+    ollama --- N2
+
+    classDef note fill:#FFF9E8,stroke:#C8A000,color:#333
+    classDef edge fill:#E8F4FF,stroke:#3A77B5,stroke-width:2px
+    classDef app fill:#E8FFE8,stroke:#3C8C3C
+    classDef unused fill:#F3F3F3,stroke:#999,color:#666
+    classDef external fill:#FFE8E8,stroke:#B55A5A
+    class N1,N2 note
+    class caddy,pg edge
+    class backend app
+    class webapi,oldfe,adminer unused
+    class gemini external

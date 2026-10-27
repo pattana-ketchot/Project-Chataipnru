@@ -1,0 +1,115 @@
+@startuml dfd-level2-p2
+' =====================================================================
+' DFD Level 2 — ขยายกระบวนการ P2 "ตอบคำถามด้วย AI"
+' ระบบแนะนำหลักสูตร SCI Advisor · สร้าง 25 ต.ค. 2569
+'
+' ทำไมต้องมีภาพนี้
+' ----------------
+' ใน DFD Level 1 (ก) กระบวนการ P2 ต่อกับคลังข้อมูล 5 คลังและบริการภายนอก 1 ราย
+' รวมเส้น 12 เส้น ทำให้ภาพกว้างเกิน 3,200 px และป้ายชื่อข้อมูลลอยห่างจากเส้นจนอ่านยาก
+' (เปิดดูภาพที่ render แล้วเมื่อ 25 ต.ค. 2569 จึงเห็นปัญหานี้)
+' การแตกเป็น Level 2 เป็นวิธีมาตรฐานของ DFD ไม่ใช่การเลี่ยงปัญหา
+' คลัง D2 D3 D4 D8 จึงปรากฏที่ระดับนี้แทนที่จะอยู่ใน Level 1
+'
+' หลักฐาน (อ่านจากซอร์สในอิมเมจที่ deploy จริง counter-2569-10-16 เมื่อ 25 ต.ค. 2569):
+'   P2.1-P2.3 backend/app/services/chat.py::prepare_answer
+'             ด่านเรียงกันแบบคืนค่าทันทีเมื่อตอบได้ (early return)
+'             จุดตรวจแคชอยู่กลางลำดับ ไม่ใช่ด่านแรก
+'   P2.4      backend/app/services/vector_search.py:17-34 (cosine `<=>`, CHAT_TOP_K=25)
+'   P2.5      llm/gemini.py ผ่าน services/llm_client.py
+'   P2.6      backend/app/services/answer_evidence.py + answer_claims.py
+'             chat.py::_with_rag_sources — คัดหลังรู้ข้อความคำตอบทั้งหมด
+'   P2.7      chat.py บรรทัด 2068 และ 2226 (cache_store) · services/llm_usage.py
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+skinparam ArrowFontSize 11
+skinparam defaultFontSize 13
+
+rectangle "นักเรียน /\nผู้สนใจ" as student
+rectangle "Google\nGemini API" as gemini
+
+usecase "P2.1\nตอบจากค่าที่\nตรวจรับแล้ว" as G1
+usecase "P2.2\nตรวจแคช\nคำตอบ" as G2
+usecase "P2.3\nแนะนำสาขา /\nถามกลับ" as G3
+usecase "P2.4\nค้นเอกสาร\nด้วยเวกเตอร์" as G4
+usecase "P2.5\nให้โมเดล\nเขียนคำตอบ" as G5
+usecase "P2.6\nคัดหน้าที่เป็น\nที่มาจริง" as G6
+usecase "P2.7\nบันทึกผล" as G7
+
+database "D6 ข้อมูลหลักสูตรที่เผยแพร่" as D6
+database "D4 แคชคำตอบ" as D4
+database "D2 คลังเอกสารและเวกเตอร์" as D2
+database "D3 บทสนทนา" as D3
+database "D8 สถิติการเรียกโมเดล" as D8
+
+student --> G1 : คำถามภาษาไทย + ประวัติบทสนทนา
+D6 --> G1 : ค่าหลักสูตรที่ตรวจรับแล้ว
+G1 --> G2 : คำถามที่ด่านนี้ตอบไม่ได้
+
+G2 --> D4 : คำถาม + รุ่นคลังเอกสาร
+D4 --> G2 : คำตอบที่เคยตอบไว้ (ถ้ามี)
+G2 --> G3 : คำถามที่ไม่พบในแคช
+
+D6 --> G3 : เงื่อนไขสาขา
+G3 --> G4 : คำถามที่ต้องค้นเอกสาร
+
+G4 --> D2 : เวกเตอร์ของคำถาม (bge-m3 1024 มิติ)
+D2 --> G4 : ชิ้นส่วนเอกสาร 25 ชิ้นที่ใกล้ที่สุด
+G4 --> G5 : คำถามที่เรียบเรียง + ชิ้นส่วนเอกสาร
+
+G5 --> gemini : คำถาม + ชิ้นส่วนเอกสาร
+gemini --> G5 : ข้อความคำตอบแบบสตรีม
+G5 --> G6 : ข้อความคำตอบฉบับเต็ม
+
+D2 --> G6 : ข้อความทั้งหน้าของหน้าที่จะอ้าง
+G6 --> student : ข้อความคำตอบ + ชื่อไฟล์และเลขหน้าที่รองรับ
+
+G1 --> student : คำตอบสำเร็จรูปจากฐาน
+G2 --> student : คำตอบจากแคช
+G3 --> student : คำแนะนำสาขา / คำถามกลับ
+
+G6 --> G7 : คำตอบและรายการที่มา
+G7 --> D3 : ข้อความของผู้ใช้และของระบบ
+G7 --> D4 : คำตอบใหม่ที่เก็บเป็นแคช
+G7 --> D8 : จำนวนครั้งที่เรียกโมเดลแยกตามเหตุการณ์
+
+@enduml

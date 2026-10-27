@@ -20,6 +20,7 @@
 import base64
 import json
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -31,6 +32,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import web_rate_limiter
 from app.db.session import get_db
 from app.services.chat import PriorTurn, stream_answer
+from app.services.curriculum_facts import LIST_FIELDS
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
 from app.services.program_names import program_about, program_facts
@@ -48,6 +50,10 @@ BUSY = "ขออภัยครับ ระบบตอบไม่ได้�
 _PROS_ROWS = ["เรียนอะไรบ้าง", "ทักษะที่ได้รับ", "จบแล้วทำงานอะไร", "จำนวนหน่วยกิต", "ค่าเทอม"]
 _BEST_FOR_ROW = "คุณสมบัติผู้เข้าศึกษา"
 _MISSING_PREFIX = "ไม่พบข้อมูล"
+
+# ชนิดของรายการ "อาชีพ" ใน mko.v_live_list_items — อ้างจากที่เดียวกับที่ชั้นคำตอบใช้
+# เพื่อไม่ให้สองที่หลุดจากกันเมื่อชื่อชนิดเปลี่ยน
+_CAREER_ITEM_TYPE = LIST_FIELDS["careers"]
 
 # หน้าเว็บแสดงสาขาแนะนำ 1 อันดับหลัก กับอีกไม่เกิน 2 อันดับสำรอง แต่ต้องขอมาเผื่อมาก
 # เพราะอันดับที่หลังบ้านคืนมาต้องมีอยู่ในรายการสาขาที่หน้าเว็บส่งมาด้วยจึงจะแสดงได้
@@ -214,7 +220,9 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
         if kind == "meta" and parsed:
             source_headers = _source_headers(db, parsed.get("source"))
     except LLMConnectionError as e:
-        prelude = str(e).strip() or BUSY
+        # ส่งต่อเฉพาะข้อความที่ "เขียนไว้ให้ผู้ใช้" ไม่ใช่ str(exc) ซึ่งมีรายละเอียด
+        # วินิจฉัยและอาจพาเนื้อหาจากปลายทางออกมา (ดู LLMConnectionError.user_text)
+        prelude = (getattr(e, "user_text", None) or "").strip() or BUSY
     except Exception:  # noqa: BLE001
         logger.exception("chat-web ล้มตั้งแต่ก่อนเริ่มสตรีม")
         prelude = BUSY
@@ -234,10 +242,11 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
                     # ส่งเป็นตัวอักษรต่อท้าย เพราะสถานะ HTTP ถูกส่งไปตั้งแต่ตัวอักษรแรกแล้ว
                     yield "\n\n" + parsed.get("detail", BUSY)
         except LLMConnectionError as e:
-            # ตัวเชื่อมต่อเขียนเหตุผลไว้ให้ผู้ใช้อ่านรู้เรื่องแล้วและไม่มีข้อมูลลับปนอยู่
-            # จึงส่งต่อตามนั้น ก่อนหน้านี้ถูกกลืนไปกับ Exception ก้อนล่าง ผู้ใช้จึงเห็นแค่
-            # "ระบบตอบไม่ได้ในขณะนี้" ทั้งที่ระบบตั้งใจไม่ตอบและอธิบายเหตุผลไว้แล้ว
-            yield "\n\n" + (str(e).strip() or BUSY)
+            # ส่งเหตุผลให้ผู้ใช้เมื่อตัวเชื่อมต่อเขียนไว้ให้ (user_text) เพื่อไม่ให้ผู้ใช้
+            # เห็นแค่ "ระบบตอบไม่ได้ในขณะนี้" ทั้งที่ระบบตั้งใจไม่ตอบและมีเหตุผลอยู่
+            # แต่ไม่ส่ง str(exc) ต่อ เพราะข้อความวินิจฉัยไม่ได้เขียนให้ผู้ใช้อ่าน
+            # และอาจพาเนื้อหาจากปลายทางออกมา — เจอจาก n1-05 เมื่อ 14 ต.ค. 2569
+            yield "\n\n" + ((getattr(e, "user_text", None) or "").strip() or BUSY)
         except Exception:
             logger.exception("chat-web ล้มกลางคัน")
             yield "\n\n" + BUSY
@@ -249,6 +258,105 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
     )
 
 
+# ปี พ.ศ. ของฉบับในชื่อหลักสูตร เช่น "…สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566)"
+_EDITION_IN_TITLE = re.compile(r"\(\s*พ\s*\.?\s*ศ\s*\.?\s*(25\d\d)\s*\)")
+
+
+def _course_for_site_title(db: Session, title: str) -> "Course | None":
+    """
+    หาหลักสูตรในคลังเอกสารของสาขาที่หน้าเว็บถามถึง — **ยึด course_id ของแถวบนเว็บก่อน**
+
+    แถวใน web.site_courses มีคอลัมน์ course_id ซึ่งเป็นการจับคู่ที่ทำไว้ตอนย้ายข้อมูล
+    และเป็นของที่ถูกต้องกว่าเดาจากชื่อ เพราะชื่อบนเว็บกับชื่อในเอกสารไม่ตรงกันเสมอไป
+    วัดจริงเมื่อ 15 ต.ค. 2569: สาขา "เทคโนโลยีการเกษตรสมัยใหม่" บนเว็บ คู่กับ
+    "หลักสูตร…สาขาวิชาการจัดการเทคโนโลยีการเกษตรสมัยใหม่ (พ.ศ. 2564)" ในคลัง
+    การเทียบด้วยชื่ออย่างเดียวจึงไม่เจอ และหน้านั้นได้ {} กลับไปทั้งที่มีเอกสารอยู่
+
+    ถ้าหาแถวบนเว็บไม่เจอ (ผู้เรียกอื่นที่ไม่ใช่หน้ารายละเอียด) จึงค่อยถอยไปเทียบชื่อ
+    """
+    from app.models.course import Course
+
+    row = db.execute(
+        text("select course_id from web.site_courses where title = :t and course_id is not null"),
+        {"t": title},
+    ).mappings().first()
+    if row:
+        course = db.get(Course, row["course_id"])
+        if course is not None:
+            return course
+    matched, _ = match_by_title(db, [{"id": "", "title": title}])
+    return matched[0][1] if matched else None
+
+
+def _course_documents(db: Session, course_id) -> list[dict]:
+    """
+    เอกสารของหลักสูตรนั้นสำหรับแท็บ "เอกสารหลักสูตร" ของหน้าเว็บ
+
+    ชื่อที่แสดงคือชื่อหลักสูตรพร้อมปีฉบับจากคลัง (courses.title) ผู้ใช้จึงเห็นว่ากำลังเปิด
+    เอกสารของฉบับไหน · ไม่ตั้งชื่อประเภทเอกสารเอง นอกจาก "ฉบับย่อ" ซึ่งดูจากชื่อไฟล์
+    ที่ลงท้าย _brief และตรวจแล้วว่าเนื้อหาเป็นฉบับสรุป
+
+    ลิงก์ชี้ไปที่ /api/documents/{id}/pdf ซึ่งเป็นเส้นทางเปิดเอกสารที่มีอยู่แล้ว
+    (เปิดแบบ inline รองรับ #page=N) ไม่ได้สร้างที่เก็บไฟล์ใหม่
+    """
+    rows = db.execute(
+        text("""
+            select d.id::text as id, d.original_filename as file, d.page_count, c.title as course_title
+              from course_documents d join courses c on c.id = d.course_id
+             where d.course_id = :cid
+             order by d.original_filename
+        """),
+        {"cid": course_id},
+    ).mappings().all()
+    out = []
+    for r in rows:
+        # ไฟล์ที่ไม่ใช่ PDF เปิดผ่านเส้นทางนี้ไม่ได้ (เช่นข้อความที่คัดมาจากหน้าเว็บคณะ)
+        # จึงไม่แสดงเป็นเอกสารให้กด เพราะลิงก์จะพาไปหน้า 404
+        if not r["file"].lower().endswith(".pdf"):
+            continue
+        name = r["course_title"]
+        if r["file"].lower().endswith("_brief.pdf"):
+            name += " (ฉบับย่อ)"
+        bits = [f"ไฟล์ {r['file']}"]
+        if r["page_count"]:
+            bits.append(f"{r['page_count']} หน้า")
+        out.append({
+            "name": name,
+            "type": bits[0],
+            "size": bits[1] if len(bits) > 1 else "",
+            "url": f"/api/documents/{r['id']}/pdf",
+        })
+    return out
+
+
+def _faculty_for(course_title: str, about: dict) -> list[dict]:
+    """
+    รายชื่ออาจารย์ผู้รับผิดชอบหลักสูตรสำหรับการ์ดบนหน้าเว็บ — เฉพาะที่ตรงฉบับเท่านั้น
+
+    กฎสองข้อที่ตั้งไว้หลังตรวจเมื่อ 15 ต.ค. 2569
+      1. **ฉบับต้องตรงกัน** ชุดรายชื่อมี faculty_source บอกว่ามาจากเล่มไหนปีไหน ถ้าไม่ตรงกับ
+         ฉบับของหลักสูตรที่หน้านั้นแสดงอยู่ ให้ไม่แสดงเลย ดีกว่ายืมรายชื่อฉบับเก่ามาอ้างว่า
+         เป็นชุดปัจจุบัน (คอมพิวเตอร์แอนิเมชันฯ: รายชื่อมาจากฉบับ 2564 แต่หน้าแสดงฉบับ 2569)
+      2. **ป้ายต้องไม่อ้างเกินต้นทาง** ค่าที่มีคือคอลัมน์ "ตำแหน่งทางวิชาการ" ของตารางในเล่ม
+         ซึ่งเขียนเป็น "ผู้ช่วยศาสตราจารย์ (เทคโนโลยีสารสนเทศ)" — วงเล็บคือสาขาที่ได้รับ
+         ตำแหน่ง ไม่ใช่ความเชี่ยวชาญและไม่ใช่สังกัด จึงติดป้ายว่า "ตำแหน่งทางวิชาการ"
+
+    ไม่ใส่ช่องรูปและอีเมล เพราะเอกสารไม่มีข้อมูลนั้น การ์ดของหน้าเว็บขึ้นไอคอนแทนรูปเองอยู่แล้ว
+    """
+    source = about.get("faculty_source") or {}
+    edition = source.get("edition")
+    year = _EDITION_IN_TITLE.search(course_title or "")
+    if not edition or not year or edition != year.group(1):
+        return []
+    out = []
+    for person in about.get("faculty", []):
+        label = f"อาจารย์ผู้รับผิดชอบหลักสูตร ฉบับ พ.ศ. {edition}"
+        if (position := (person.get("academic_position") or "").strip()):
+            label += f" · ตำแหน่งทางวิชาการ: {position}"
+        out.append({"name": person["name"], "positionTh": label})
+    return out
+
+
 @router.get("/course-facts")
 def course_facts_web(title: str, db: Session = Depends(get_db)) -> dict:
     """
@@ -257,15 +365,83 @@ def course_facts_web(title: str, db: Session = Depends(get_db)) -> dict:
     หน้าเว็บดึงข้อมูลชุดนี้จากฐานข้อมูลของตัวเองซึ่งยังไม่มีใครกรอก จึงขึ้นว่า
     "ไม่ระบุ" ทุกช่อง ทั้งที่เอกสาร มคอ.2 ระบุไว้ครบ
 
-    รับชื่อสาขาเป็นข้อความ ไม่ใช่รหัส เพราะฐานข้อมูลสองฝั่งใช้รหัสคนละชุดกัน
+    รับชื่อสาขาเป็นข้อความ เพราะหน้าเว็บส่งมาเท่านี้ แต่ภายในแปลงเป็น course_id
+    ของแถวบนเว็บก่อนเสมอ (ดู _course_for_site_title)
 
     คืน {} เมื่อไม่มีเอกสารของสาขานั้น ผู้เรียกต้องคงค่าเดิมของตัวเองไว้
     """
-    matched, _ = match_by_title(db, [{"id": "", "title": title}])
-    if not matched:
+    course = _course_for_site_title(db, title)
+    if course is None:
         return {}
-    course_title = matched[0][1].title
-    return {**program_facts(course_title), **program_about(course_title)}
+    about = dict(program_about(course.title))
+    about.pop("faculty_source", None)
+    about["faculty"] = _faculty_for(course.title, program_about(course.title))
+    if not about["faculty"]:
+        about.pop("faculty")
+    out = {**program_facts(course.title), **about}
+    if (docs := _course_documents(db, course.id)):
+        out["documents"] = docs
+    return out
+
+
+@router.get("/career-lists")
+def career_lists_web(db: Session = Depends(get_db)) -> dict:
+    """
+    รายการอาชีพของทุกหลักสูตรที่ผ่านการตรวจและเผยแพร่แล้ว — ให้หน้า "อาชีพหลังจบ" ของหน้าเว็บใช้
+
+    ทำไมต้องมีเส้นทางนี้
+    -------------------
+    หน้าเว็บเก็บอาชีพไว้ในคอลัมน์ `careers` ของฐานข้อมูลตัวเอง ซึ่งยังว่างทุกแถว หน้านั้นจึง
+    ขึ้นว่า "ยังไม่มีข้อมูลหลักสูตร" ทั้งที่เอกสาร มคอ.2 ระบุอาชีพไว้และเราตรวจกับเอกสาร
+    แล้วเผยแพร่เก็บไว้ใน schema mko เรียบร้อย
+
+    อ่านจาก `mko.v_live_list_items` ตรงๆ **ไม่เรียกโมเดลภาษา** จึงได้ผลเดิมทุกครั้งและเร็วพอ
+    ให้หน้าเว็บขอครั้งเดียวตอนเปิดหน้า ต่างจาก /compare-courses ที่ให้โมเดลสกัดข้อความจาก
+    เอกสารทีละหัวข้อ — ซึ่งช้าและไม่คงที่ จึงใช้ทำหน้ารวมไม่ได้
+
+    คืนเฉพาะหลักสูตรที่ **มีรายการอาชีพที่ผ่านการตรวจแล้วจริง** หลักสูตรที่ยังไม่มีจะไม่อยู่ใน
+    ผลลัพธ์เลย ผู้เรียกต้องแสดงสถานะของตัวเอง ห้ามเดาแทน (เหตุผลเดียวกับ _source_headers)
+
+    ทุกรายการมีไฟล์และหน้าของเอกสารต้นทางมาด้วย เพื่อให้หน้าเว็บทำปุ่มเปิดเอกสารได้
+    """
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT course_title, seq, text AS item, source_filename, page_start, page_end, document_id
+                  FROM mko.v_live_list_items
+                 WHERE item_type = :item_type
+                 ORDER BY course_title, seq
+                """
+            ),
+            {"item_type": _CAREER_ITEM_TYPE},
+        ).mappings().all()
+    except Exception:  # noqa: BLE001
+        # ยังไม่ได้ลง migration ของ schema mko หรืออ่านไม่ได้ — หน้าเว็บต้องยังเปิดได้
+        logger.exception("อ่านรายการอาชีพที่เผยแพร่แล้วไม่สำเร็จ")
+        return {"programmes": []}
+
+    grouped: dict[str, list] = {}
+    for row in rows:
+        grouped.setdefault(row["course_title"], []).append(row)
+
+    programmes = []
+    for course_title, items in grouped.items():
+        first = items[0]
+        source: dict[str, Any] = {
+            "file": first["source_filename"],
+            "page_start": min(i["page_start"] for i in items),
+            "page_end": max(i["page_end"] for i in items),
+        }
+        # ส่ง document_id เฉพาะเมื่อรู้จริง เพราะหน้าเว็บเอาไปทำลิงก์ /documents/{id}/pdf
+        if first["document_id"]:
+            source["document_id"] = str(first["document_id"])
+        programmes.append({
+            "course_title": course_title,
+            "careers": [i["item"] for i in items],
+            "source": source,
+        })
+    return {"programmes": programmes}
 
 
 def _row_value(rows, dimension: str, index: int) -> str | None:

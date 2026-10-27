@@ -47,3 +47,14 @@ frontend/.vitest-cache/
 # โค้ดฝั่ง API ของหน้าเว็บที่ทีมออกแบบดูแล อยู่คนละรีโปและคนละเจ้าของ
 # ตอน deploy ต้องคัดลอกมาวางเองก่อน build (ดู webapi/README.md)
 webapi/api/
+
+# ไฟล์ที่ build ไว้ส่งขึ้นเซิร์ฟเวอร์ — สร้างใหม่ได้ ไม่ต้องเก็บใน git
+dist-deploy/
+.claude/settings.local.json
+
+# ไฟล์ที่ build ได้ใหม่จากซอร์ส ไม่ต้องเก็บใน git
+# ค่า SHA256SUMS ของแต่ละ release ยังอยู่ ใช้ตรวจย้อนได้
+docs/raw/**/web-release/assets/
+# ไฟล์บีบอัดที่มีเนื้อหาเดียวกับโฟลเดอร์ที่ commit ไว้แล้ว
+docs/SCI_ADVISOR_DIAGRAMS_BW_*.zip
+docs/SCI_ADVISOR_DIAGRAMS_REVIEW.zip

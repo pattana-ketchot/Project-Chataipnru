@@ -1,0 +1,188 @@
+--- image/app/services/subjects.py
++++ release/app/services/subjects.py
+@@ -48,7 +48,25 @@
+ # "วิชาบังคับ" ที่ไม่ได้ตามด้วย "ก่อน"
+ _ASKS_REQUIRED = re.compile(r"วิชาบังคับ(?!ก่อน)")
+ _ASKS_ELECTIVE = re.compile(r"วิชาเลือก")
+-_LIST_TAIL = re.compile(r"อะไรบ้าง|มีอะไร|บ้าง|ประกอบด้วย|รายการ")
++_LIST_TAIL = re.compile(r"อะไรบ้าง|มีอะไร|บ้าง|ประกอบด้วย|รายการ|รายชื่อ|กี่วิชา")
++
++# คำที่บอกว่ากำลังถามถึง "ชุดของวิชา" ไม่ใช่วิชาเดียว
++_GROUP_WORD = re.compile(r"กลุ่ม|หมวดวิชา")
++
++
++def _is_group_question(question: str) -> bool:
++    """
++    คำถามระดับกลุ่ม/หมวด เช่น "กลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา มีวิชาอะไรบ้าง"
++
++    ต้องแยกออกจากคำถามรายวิชา เพราะ**ชื่อกลุ่มกับชื่อวิชามักมีคำซ้ำกัน** —
++    กลุ่ม "ฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา" มีวิชาชื่อ "สหกิจศึกษา" อยู่ข้างใน
++    การจับคู่ด้วยชื่อจึงเจอวิชาเดียวแล้วตอบรายละเอียดของวิชานั้น ทั้งที่ผู้ถามขอทั้งกลุ่ม
++    (พบจากการใช้งานจริง 19 ต.ค. 2569: ถามรายชื่อ 3 วิชาในกลุ่ม ได้คำตอบเฉพาะ 4124815)
++
++    ต้องเข้าเงื่อนไขทั้งสองอย่าง: เอ่ยถึงกลุ่ม/หมวด **และ** ถามแบบรายการ
++    ถ้าถามแค่ว่า "วิชานี้อยู่กลุ่มไหน" ยังเป็นคำถามรายวิชาตามเดิม
++    """
++    return bool(_GROUP_WORD.search(question) and _LIST_TAIL.search(question))
+ 
+ _SOURCE_LABEL = "ที่มา:"
+ 
+@@ -94,7 +112,10 @@
+ def _requirement_label(value: str) -> str:
+     return {"required": "วิชาบังคับ",
+             "elective": "วิชาเลือก",
+-            "choose_group": "วิชาในกลุ่มที่ต้องเลือกให้ครบหน่วยกิตขั้นต่ำ"}.get(value, value)
++            "choose_group": "วิชาในกลุ่มที่ต้องเลือกให้ครบหน่วยกิตขั้นต่ำ",
++            # ต้องเรียนแน่นอน แต่กลุ่มของมันมีเพดานขั้นต่ำกำกับอยู่ จึงไม่ถูกนับรวม
++            # ในยอด "วิชาบังคับ" ที่เล่มพิมพ์ไว้ (ดู db/migrations/009)
++            "required_in_group": "วิชาที่ต้องเรียนในกลุ่มที่มีหน่วยกิตขั้นต่ำ"}.get(value, value)
+ 
+ 
+ def _prerequisites(db: Session, row: dict) -> list[dict]:
+@@ -199,14 +220,29 @@
+ 
+     lines.append(f"รวม{label} {len(picked)} วิชา {total} หน่วยกิต")
+ 
+-    # กลุ่มที่ต้องเลือกให้ครบหน่วยกิตขั้นต่ำ ไม่ใช่วิชาบังคับทุกวิชา จึงบอกแยกให้เห็น
++    # กลุ่มที่มีเพดานขั้นต่ำไม่ได้นับรวมในยอดข้างบน จึงต้องบอกแยกให้เห็น ไม่ใช่เงียบไป
++    #
++    # แยกสองอย่างในกลุ่มเดียวกันด้วย: วิชาที่ต้องเรียนแน่นอน กับวิชาที่ให้เลือก
++    # ถ้ารวมเป็นก้อนเดียว ผู้อ่านจะเข้าใจว่าทั้งกลุ่มเป็นของให้เลือก ซึ่งไม่ตรงกับเล่ม
+     if want == "required":
++        in_group = [r for r in rows if r["requirement"] == "required_in_group"]
+         choose = [r for r in rows if r["requirement"] == "choose_group"]
+-        if choose:
+-            names = ", ".join(sorted({" > ".join(c["category_path"]) if c["category_path"]
+-                                      else "ไม่ระบุกลุ่ม" for c in choose}))
+-            lines.append(f"นอกจากนี้มี {len(choose)} วิชาในกลุ่มที่ต้องเลือกให้ครบหน่วยกิต"
+-                         f"ขั้นต่ำ ({names}) ซึ่งไม่ใช่วิชาที่ต้องเรียนทุกวิชา")
++        if in_group or choose:
++            groups = sorted({" > ".join(r["category_path"]) if r["category_path"]
++                             else "ไม่ระบุกลุ่ม" for r in in_group + choose})
++            lines.append("")
++            lines.append(f"ยอดข้างบนไม่รวม {', '.join(groups)} ซึ่งเล่มนับแยกต่างหาก")
++            for r in in_group:
++                lines.append(f"- {r['code']} {r['name_th']} "
++                             f"{r['credits'] if r['credits'] is not None else '-'} หน่วยกิต "
++                             f"(ต้องเรียน)")
++            if choose:
++                names = ", ".join(f"{c['code']} {c['name_th']} "
++                                  f"{c['credits'] if c['credits'] is not None else '-'} หน่วยกิต"
++                                  for c in choose)
++                lines.append(f"- เลือกจาก: {names}")
++            lines.append("หน่วยกิตขั้นต่ำของกลุ่มนี้ดูได้จากเอกสารหลักสูตร "
++                         "ข้อมูลที่ตรวจรับแล้วยังไม่ได้เก็บตัวเลขนั้นไว้")
+     lines.append(_cite(picked))
+     return SubjectAnswer("\n".join(lines), [_source_of(r) for r in picked[:12]])
+ 
+@@ -258,6 +294,17 @@
+                 return _answer_list(db, ids, question, "elective")
+ 
+         # 3) ถามถึงวิชาด้วยชื่อ (ต้องถามเรื่องที่ข้อมูลตอบได้: ชื่อ หน่วยกิต หรือบังคับก่อน)
++        #
++        # คำถามระดับกลุ่มห้ามตกมาถึงตรงนี้ เพราะการจับคู่ด้วยชื่อจะยุบคำถามทั้งกลุ่ม
++        # ให้เหลือวิชาเดียวเสมอ (ดู _is_group_question)
++        #
++        # ปล่อยให้ไปเส้นทางค้นเอกสารแทนการตอบรายการจากฐานข้อมูล เพราะ**เงื่อนไขของกลุ่ม
++        # ไม่ได้อยู่ในข้อมูลที่มีโครงสร้าง** — หน่วยกิตขั้นต่ำของกลุ่มและกติกาการเลือก
++        # อยู่ในเนื้อความของเอกสารเท่านั้น (cs66.pdf หน้า 19: "ไม่น้อยกว่า 7 หน่วยกิต"
++        # และ "ให้เลือกรายวิชาต่อไปนี้ ไม่น้อยกว่า 5 หน่วยกิต") ถ้าตอบจากตารางรายวิชา
++        # อย่างเดียวจะได้รายชื่อครบแต่**ขาดเงื่อนไข** ซึ่งอ่านแล้วเข้าใจผิดได้
++        if _is_group_question(question):
++            return None
+         if not (_ASKS_PREREQ.search(question) or _ASKS_CREDITS.search(question)
+                 or _ASKS_NAME.search(question)):
+             return None
+--- image/app/services/chat.py
++++ release/app/services/chat.py
+@@ -59,7 +59,7 @@
+ from app.services.answer_claims import CONTENT_CLAIMS
+ from app.services.answer_claims import supported_by as supported_by_claims
+ from app.services.answer_claims import verify as verify_claims
+-from app.services.answer_evidence import list_items, supporting
++from app.services.answer_evidence import MAX_SOURCES, list_items, supporting
+ from app.services.structured_shadow import (SERVED_RAG, SERVED_STRUCTURED, admission_gap,
+                                            structured_answer)
+ from app.services.subjects import answer_subject_question
+@@ -1934,6 +1934,10 @@
+     units = p.retrieved
+     if len(items) >= 2 and (pages := _retrieved_page_units(db, p.retrieved)):
+         units = pages
++    # เพดานจำนวนหน้าในบรรทัดที่มา — ใช้ค่าเดียวกับขั้นเลือกหน้า บวกอีกหนึ่งหน้าสำหรับ
++    # หน้าที่ถูกเติมเพราะยืนยันข้ออ้างที่ค้าง (ชั้น 2.5) เพื่อไม่ให้บรรทัดที่มายาวเกินอ่าน
++    _MAX_EVIDENCE_PAGES = MAX_SOURCES + 1
++    units_all = units
+     picked = supporting(reply, units, p.search_query or "", items=items)
+     files = _evidence_filenames(db, [s.chunk_id for s in picked])
+     sources: list[dict] = []
+@@ -1986,6 +1990,70 @@
+         units.append(page + " · " + (s.course_title or ""))
+     verdict = verify_claims(reply, units)
+ 
++    # ---- ชั้นที่ 2.5: ข้ออ้างที่ยังไม่มีหน้ารองรับ ลองหาหน้าที่รองรับจากผลการค้น ----
++    #
++    # ขั้นเลือกหน้าข้างบนเป็นการไล่เก็บความครอบคลุมของ "ข้อความคำตอบทั้งก้อน" (greedy
++    # set cover) พอครอบถึงเกณฑ์แล้วมันหยุด · เงื่อนไขที่เป็นตัวเลขสั้น ๆ อย่าง
++    # "ไม่น้อยกว่า 7 หน่วยกิต" กินสัดส่วนของข้อความน้อยมาก หน้าที่มีข้อความนั้นจึงไม่เคย
++    # ชนะการไล่เก็บ แม้จะเป็นหน้าเดียวที่ยืนยันข้ออ้างนั้นได้
++    #
++    # วัดจริง 19 ต.ค. 2569: คำถามกลุ่มฝึกประสบการณ์/สหกิจ ได้คำตอบถูกต้องครบ แต่บรรทัด
++    # ที่มาอ้าง cs66_brief.pdf หน้า 31 แล้วรายงานว่า "ยังยืนยันไม่ได้: ไม่น้อยกว่า 7
++    # หน่วยกิต" ทั้งที่ cs66.pdf หน้า 19 เขียนไว้ตรงตัวและอยู่ในผลการค้นรอบนั้นด้วย
++    #
++    # เติมหน้าโดยดูว่า "หน้านั้นยืนยันข้ออ้างที่ยังค้างได้หรือไม่" ไม่ใช่ดูว่ามาจากเล่มไหน
++    # — การจัดอันดับฉบับเต็มเหนือฉบับย่อจะแก้เคสนี้ได้ก็จริง แต่ผิดหลักเมื่อข้อเท็จจริง
++    # อยู่ในฉบับย่อเล่มเดียว และยังไม่ช่วยกรณีข้ออ้างค้างภายในเล่มเดียวกัน
++    #
++    # **ไม่ปิดข้อความเตือน** ถ้าไม่มีหน้าใดในผลการค้นยืนยันข้ออ้างที่ค้างได้
++    # บรรทัด "ยังยืนยันไม่ได้" ยังขึ้นตามเดิมทุกประการ
++    if verdict.unsupported and len(sources) < _MAX_EVIDENCE_PAGES:
++        shown = {(x["document_id"], x["page_start"]) for x in sources}
++        want = {c.shown for c in verdict.unsupported}
++        # ชิ้นที่ค้นมาไม่มี document_id ติดมาด้วย ต้องหาจากตารางก่อนจึงจะเทียบกับหน้าที่
++        # แสดงอยู่แล้วได้ — ถ้าเทียบด้วยเลขหน้าอย่างเดียวจะชนกันข้ามเล่ม
++        cand_files = _evidence_filenames(db, [c.chunk_id for c in units_all])
++        keyed = []
++        for c in units_all:
++            row = cand_files.get(str(c.chunk_id))
++            doc = str(row["document_id"]) if row and row["document_id"] else None
++            if row is None or not row["file"] or c.page_number is None:
++                continue
++            key = (doc, int(c.page_number))
++            if key not in shown:
++                keyed.append((key, c, row))
++        extra_texts = _page_texts(db, [k for k, _c, _r in keyed])
++        for key, cand, row in keyed:
++            if len(sources) >= _MAX_EVIDENCE_PAGES:
++                break
++            if key in shown:
++                continue
++            text_of_page = extra_texts.get(key) or getattr(cand, "content", "") or ""
++            if not text_of_page:
++                continue
++            got = {c.shown for c in verify_claims(reply, [text_of_page]).checked if c.supported}
++            if not (got & want):
++                continue
++            shown.add(key)
++            # บันทึกไว้ให้ตรวจย้อนหลังได้ว่าหน้าไหนถูกเติมเพราะยืนยันข้ออ้างใด
++            logger.info("เติมหน้าที่ยืนยันข้ออ้างที่ยังค้าง: %s หน้า %s -> %s",
++                        row["file"], cand.page_number, sorted(got & want))
++            sources.append({
++                "file": row["file"],
++                "page_start": cand.page_number,
++                "page_end": cand.page_number,
++                "course_title": cand.course_title,
++                "document_id": str(row["document_id"]) if row["document_id"] else None,
++                # หน้านี้ถูกเติมเพราะยืนยันข้ออ้างที่ค้าง ไม่ได้มาจากการไล่เก็บถ้อยคำ
++                "answer_coverage": None,
++            })
++            page_texts.append(text_of_page)
++            units.append(text_of_page + " · " + (cand.course_title or ""))
++            want -= got
++            if not want:
++                break
++        verdict = verify_claims(reply, units)
++
+     # ---- ชั้นที่สาม: หน้าที่เนื้อหาไม่รองรับข้ออ้างใดเลย ไม่ใช่ที่มาของคำตอบนี้ ----
+     #
+     # การเลือกหน้าเป็นการเทียบถ้อยคำ หน้าที่ซ้ำแต่ชื่อหลักสูตรหรือคำเชื่อมจึงเข้ามาได้

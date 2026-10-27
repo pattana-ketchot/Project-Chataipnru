@@ -14,11 +14,13 @@
   6. บันทึกทั้งข้อความผู้ใช้และคำตอบลง chat_messages
 """
 import json
+import logging
 import os
 import re
+import time
 import uuid
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field as dc_field, replace
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -38,7 +40,12 @@ from app.services.comparison_evidence import (
 from app.services.follow_up import explicit_programmes, rewrite_keeps_explicit, swap_follow_up
 from app.services.course_scope import (
     _distinctive_name,
+    degree_level_label,
+    missing_degree_level,
+    missing_edition_year,
+    more_specific_unknown_name,
     programmes_named,
+    requested_degree_level,
     resolve_scope,
     resolve_scopes,
     without_programme_names,
@@ -49,12 +56,20 @@ from app.services.program_list import asks_for_program_list, program_list_answer
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
 from app.services.small_talk import match_small_talk
-from app.services.structured_shadow import SERVED_RAG, SERVED_STRUCTURED, structured_answer
+from app.services.answer_claims import CONTENT_CLAIMS
+from app.services.answer_claims import supported_by as supported_by_claims
+from app.services.answer_claims import verify as verify_claims
+from app.services.answer_evidence import MAX_SOURCES, list_items, supporting
+from app.services.structured_shadow import (SERVED_RAG, SERVED_STRUCTURED, admission_gap,
+                                           structured_answer)
+from app.services.subjects import answer_subject_question
 from app.services.structured_shadow import submit as shadow_submit
 from app.services.tuition import answer as tuition_answer, find_program as find_tuition_program, is_tuition_question
 from app.services.vector_search import search_similar_chunks
 
-from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402  (sys.path ตั้งโดย llm_client)
+from llm.connector import (ChatMessage as LLMMessage, LLMConnectionError,  # noqa: E402
+                           apply_budget, reset_budget,
+                           start_budget)  # (sys.path ตั้งโดย llm_client)
 from llm.prompts import (  # noqa: E402
     CHAT_COMPARISON_RULES,
     CHAT_SYSTEM_PROMPT,
@@ -90,6 +105,10 @@ from llm.prompts import (  # noqa: E402
 # ช่องว่างระหว่างสองกลุ่มหลังกว้างเพียง 0.022 ซึ่งแคบเกินกว่าจะวางเกณฑ์ให้เชื่อถือ
 # ได้จากตัวอย่างเท่านี้ จึงลดบทบาทของตัวเลขลงเหลือแค่ทางลัดสำหรับกรณีที่ชัดเจนมาก
 # แล้วให้ _gate() เป็นคนตัดสินจริงในช่วงที่ก้ำกึ่ง
+# ใช้ชื่อเดียวกับ routes/chat.py และ services/web_compat.py เพื่อให้บรรทัดเวลาของคำขอ
+# ไปอยู่กับ log ของระบบตัวเดียวกัน ไม่ต้องตั้งค่า logger แยก
+logger = logging.getLogger("course_advisor")
+
 OFF_TOPIC_THRESHOLD = 0.50
 
 # ขอบบนของช่วงที่คะแนนแยกไม่ออกว่านอกเรื่องหรือแค่เอกสารไม่ครอบคลุม
@@ -468,6 +487,52 @@ class Prepared:
     # เอกสารต้นฉบับของคำตอบ {"document_id": ..., "page_start": ...} มีเฉพาะคำตอบจากฐานข้อมูล
     # ที่อ้างถึงฉบับเดียว ใช้บอกที่มาให้หน้าเว็บทำปุ่มเปิดเอกสาร ไม่มีผลกับข้อความคำตอบ
     source: dict | None = None
+    # ที่มาของทุกฉบับที่คำตอบจากฐานข้อมูลอ้างถึง — ช่องนี้ว่างสำหรับคำตอบสาย RAG
+    #
+    # คำตอบสาย RAG มีที่มาของตัวเองเหมือนกัน แต่คัดหลังรู้ข้อความคำตอบทั้งหมด
+    # (ดู _with_rag_sources) จึงไม่ได้อยู่ใน Prepared นี้ แต่อยู่ใน ChatReply.sources และ
+    # เหตุการณ์ sources ของสตรีมแทน
+    sources: list[dict] = dc_field(default_factory=list)
+    # เวลาที่ใช้ในแต่ละขั้นของ prepare_answer — ผู้เรียกนำไปรวมกับเวลาขั้นเขียนคำตอบ
+    # แล้วพิมพ์บรรทัดเดียวต่อหนึ่งคำขอ · None เมื่อคำตอบออกจากด่านต้น ๆ ที่ไม่ได้จับเวลา
+    stages: "_Stages | None" = None
+    # ชิ้นเอกสารที่การค้นหยิบมา พร้อมเนื้อหา — เก็บไว้เพื่อคัดว่าชิ้นไหนรองรับคำตอบที่เขียนออกมาจริง
+    # ต่างจาก citations ที่เป็น "รายการที่ค้นได้" ทั้งหมด ดูเหตุผลใน services/answer_evidence.py
+    retrieved: tuple = ()
+
+
+
+class _Stages:
+    """
+    จับเวลารายขั้นของหนึ่งคำขอ แล้วให้ผู้เรียกพิมพ์บรรทัดเดียวตอนจบ
+
+    มีไว้หาคอขวดจากของจริง · 13 ต.ค. 2569 มีคำขอหนึ่งใช้เวลา 408 วินาที แล้วพบว่า
+    138 วินาทีของช่วงนั้นไม่มี log บรรทัดใดเลย จึงชี้สาเหตุไม่ได้ — ขั้นที่อยู่
+    ระหว่างสองคำขอ embeddings ไม่มีใครบันทึกเวลาไว้
+
+    ใช้ perf_counter ซึ่งไม่ขึ้นกับการปรับเวลาของระบบ และเก็บเฉพาะตัวเลข
+    ไม่เก็บเนื้อหาคำถามหรือคำตอบไว้ในตัวเอง
+    """
+
+    __slots__ = ("_t0", "_last", "_rows")
+
+    def __init__(self) -> None:
+        now = time.perf_counter()
+        self._t0 = now
+        self._last = now
+        self._rows: list[tuple[str, float]] = []
+
+    def mark(self, name: str) -> None:
+        now = time.perf_counter()
+        self._rows.append((name, (now - self._last) * 1000))
+        self._last = now
+
+    def elapsed_ms(self) -> float:
+        return (time.perf_counter() - self._t0) * 1000
+
+    def parts(self) -> str:
+        # ตัดขั้นที่เร็วกว่า 1 มิลลิวินาทีออก เพื่อให้บรรทัดอ่านง่ายและเห็นตัวที่ช้าจริง
+        return " ".join(f"{n}={ms:.0f}ms" for n, ms in self._rows if ms >= 1.0)
 
 
 # คำที่บ่งชี้ว่าผู้ใช้ถามหาตัวเลขเจาะจง ไม่ใช่คำอธิบายกว้างๆ
@@ -731,6 +796,37 @@ def _context_programme(db: Session, history: list) -> str | None:
     return None
 
 
+def _context_edition(db: Session, history: list, name: str) -> str:
+    """
+    ชื่อหลักสูตรที่คุยอยู่ **พร้อมปีฉบับและระดับปริญญา** ที่บทสนทนาระบุไว้ (ไม่เรียกโมเดล)
+
+    ทำไมต้องมี
+    ---------
+    `_context_programme()` คืนเฉพาะ "ชื่อสาขา" ไม่เก็บปี คำถาม "สาขานี้เรียนกี่หน่วยกิต"
+    หลังคุยเรื่องฉบับ 2561 จึงได้คำถามที่ไม่มีปี แล้วได้คำตอบคลุมทุกฉบับของสาขานั้น
+    (ทั้ง 2566 และ 2561) ซึ่งไม่ผิดตัวเลขแต่ไม่เจาะจงเท่าบริบทที่คุยกันอยู่ — พิสูจน์แล้ว
+    ว่าเป็นพฤติกรรมเดิมของ production ด้วย (probe_ref_year.py 14 ต.ค. 2569)
+
+    ชื่อสาขาเดียวกันมีได้หลายระดับปริญญา (โท/เอก ปีเดียวกัน) จึงต้องพาระดับไปด้วย
+    ไม่งั้นชั้นข้อมูลจะเห็นสองเล่มแล้วตอบว่ากำกวม
+
+    อ่านจากข้อความล่าสุดที่เอ่ยชื่อนั้น ย้อนขึ้นไป · ถ้าข้อความนั้นเอ่ยหลายปีถือว่า
+    ไม่ชัด (เช่นคำตอบที่คลุมสองฉบับ) แล้วคืนชื่อเปล่าตามพฤติกรรมเดิม
+    """
+    parts = [name]
+    for turn in reversed(history):
+        if name not in turn.content:
+            continue
+        years = {int(m.group(0)) for m in re.finditer(r"(?<!\d)25\d{2}(?!\d)", turn.content)}
+        if len(years) == 1:
+            parts.append(f"พ.ศ. {years.pop()}")
+        if (level := requested_degree_level(turn.content)) is not None:
+            parts.append(f"ระดับ{degree_level_label(level)}")
+        break
+    # เว้นวรรคท้ายเมื่อมีส่วนขยาย เพื่อไม่ให้ปีติดกับคำถามที่ตามมา ("2561เรียนกี่หน่วยกิต")
+    return " ".join(parts) + (" " if len(parts) > 1 else "")
+
+
 def _resolve_reference(message: str, programme: str) -> str:
     """แทนคำอ้างอิงด้วยชื่อสาขา ถ้าไม่มีคำอ้างอิงแบบที่แทนได้ ให้ต่อชื่อสาขาไว้ท้ายคำถาม"""
     m = _REFERENCE.search(message)
@@ -849,7 +945,9 @@ def _refinement_of_recommendation(db: Session, history: list, message: str) -> s
 #   เหตุผลว่าง        = ขั้นเขียนเหตุผลล้ม (โมเดลตอบไม่ครบ คีย์ไม่ตรง อ่าน JSON ไม่ออก)
 #                       ยังไม่มีใครดูเอกสารของสาขานี้เลย จึงไม่รู้ว่ารองรับหรือไม่
 #   [[ไม่มีข้อมูลรองรับ]] = โมเดลดูเอกสารแล้วและตัดสินว่าไม่มีข้อความที่เชื่อมโยงตรงๆ
-#                       ซึ่งเป็นคำตอบจริง ไม่ใช่ความล้มเหลว
+#                       **หรือ** ชั้นตรวจหลักฐานลดชั้นเหตุผลนั้นลงมา เพราะข้อความอ้างอิง
+#                       ไม่อยู่ในเอกสารของหลักสูตรนั้น หรือเหตุผลมีข้ออ้างที่เอกสารไม่รองรับ
+#                       (ดู program_match._verified_rationales) ซึ่งเป็นคำตอบจริง ไม่ใช่ความล้มเหลว
 # ทั้งสองข้อความไม่กล่าวอ้างอะไรเกินกว่าที่ระบบรู้ และคงที่เสมอสำหรับอินพุตเดียวกัน
 _RATIONALE_UNAVAILABLE = "ตอนนี้ระบบยังเขียนคำอธิบายประกอบให้ไม่ได้ ถามรายละเอียดของสาขานี้ต่อได้เลยครับ"
 _RATIONALE_NO_EVIDENCE = ("เอกสารหลักสูตรของสาขานี้ไม่ได้ระบุไว้ตรงๆ ว่าเชื่อมโยงกับสิ่งที่คุณบอกอย่างไร "
@@ -1006,6 +1104,89 @@ def _asks_for_a_number(text: str) -> bool:
     return any(w in text for w in _NUMERIC_WORDS)
 
 
+# คำที่บ่งว่าข้อความนี้ขอคำแนะนำหรือให้ระบบช่วยตัดสิน ไม่ใช่ถามข้อเท็จจริงล้วน
+#
+# ใช้กันด่านตอบจากฐานข้อมูลที่ย้ายขึ้นมาก่อนด่านขอคำแนะนำ — ข้อความที่มีคำเหล่านี้ปนอยู่
+# ต้องไหลไปด่าน 0.72 ตามเดิม ไม่ว่าจะมีคำถามข้อเท็จจริงปนอยู่ด้วยหรือไม่ เพื่อไม่ให้
+# คำถามผสมได้คำตอบแค่ส่วนข้อเท็จจริงแล้วส่วนคำแนะนำหายไป
+_ADVICE_WORDS = re.compile(
+    r"แนะนำ|เหมาะ|ควรเรียน|ควรเลือก|ควรจะ|เรียนอะไรดี|เรียนไหนดี|อันไหนดี|ดีไหม|ดีมั้ย|ดีกว่า"
+    r"|ช่วยเลือก|ช่วยตัดสิน|ตัดสินใจ|สนใจ|ชอบ|อยากทำงาน|อยากเป็น|ถนัด|ไม่ถนัด"
+    r"|recommend|suggest|which.*better|should i"
+)
+
+
+def _asks_for_advice(message: str) -> bool:
+    """ข้อความนี้ขอคำแนะนำหรือให้ช่วยตัดสินด้วยหรือไม่ (รวมคำถามผสมข้อเท็จจริง+คำแนะนำ)"""
+    return _ADVICE_WORDS.search(message.lower()) is not None
+
+
+def _blank(session_id: uuid.UUID, query: str, version: str, history: list) -> Prepared:
+    """Prepared เปล่าที่ยังไม่มีคำตอบ ใช้เป็นฐานให้ด่านที่ตอบได้เองเติมค่าทับ"""
+    return Prepared(
+        session_id=session_id,
+        status="not_found",
+        search_query=query,
+        best_score=0.0,
+        citations=[],
+        canned=None,
+        messages=[],
+        corpus_version=version,
+        interpreted=query,
+        has_history=bool(history),
+    )
+
+
+def _structured_prepared(p: Prepared, served, query: str) -> Prepared:
+    """ประกอบ Prepared จากคำตอบที่ฐานข้อมูลหลักสูตรให้มา — ใช้ร่วมกันทั้งด่านเร็วและด่านท้าย"""
+    # แนบที่มาเมื่อรู้เอกสารแน่นอนเท่านั้น ไม่รู้ก็ปล่อยเป็น None ห้ามเดา
+    source = ({"document_id": served.document_id, "page_start": served.page_start}
+              if served.document_id else None)
+    return replace(p, status="answered", citations=[], canned=served.answer, messages=[],
+                   allow_fallback=False, cacheable=False, served_source=SERVED_STRUCTURED,
+                   source=source, sources=list(served.sources), search_query=query,
+                   interpreted=query)
+
+
+def _structured_fast(db: Session, p: Prepared, query: str) -> Prepared | None:
+    """
+    ตอบจากข้อมูลหลักสูตรที่เผยแพร่แล้ว **ก่อน** ขั้นค้นเอกสารและก่อนเรียกโมเดลทุกตัว
+    คืน None เมื่อตอบไม่ได้ แล้วผู้เรียกไปเส้นทาง RAG เดิมทุกขั้น
+
+    ทำไมต้องมาก่อน
+    --------------
+    เดิม `_with_structured()` ถูกเรียกหลัง prepare_answer() ทำงานจบทั้งหมด คำตอบสำเร็จรูป
+    จึงต้องรอขั้นค้นเอกสาร ขั้นเขียนคำถามใหม่ และด่านตรวจว่าเอกสารตอบได้ (ซึ่งเรียกโมเดล)
+    เสร็จก่อน แล้วงานทั้งหมดนั้นถูกโยนทิ้ง · วัดเมื่อ 13 ต.ค. 2569: ขั้นที่ถูกข้ามได้
+    รวม 248 มิลลิวินาที แต่ขั้นเรียกโมเดลที่ตามมาใช้เวลาถึง 408 วินาทีในคำขอหนึ่ง
+    เพราะ Gemini ตอบ 503 แล้วตกไปใช้โมเดลในเครื่องที่ timeout 120 วินาทีต่อครั้ง
+
+    เงื่อนไข "คำถามมีข้อมูลครบในตัวเอง"
+    ---------------------------------
+    ไม่ได้ตรวจด้วยรายการคำ แต่ใช้ผลของ detect() เอง: `structured_answer()` ตอบได้ก็เมื่อ
+    หา **หลักสูตร** และ **เรื่องที่ถาม** ได้จากข้อความที่ส่งเข้าไปโดยตรง ถ้าข้อความพึ่ง
+    บทสนทนาก่อนหน้า (เช่น "แล้วปี 2566 ล่ะ" ที่ไม่มีคำว่าหน่วยกิต) detect จะหาเรื่องที่ถาม
+    ไม่ได้ ฟังก์ชันนี้จึงคืน None แล้วคำถามไปเข้าขั้นตีความตามเดิม ก่อนถูก `_with_structured()`
+    รับช่วงที่ปลายทาง — บริบทคำถามต่อเนื่องจึงไม่เสีย
+
+    ข้อความที่ส่งเข้าไปคือ `query` ไม่ใช่ข้อความดิบ เพราะถึงจุดนี้ขั้นแทนคำอ้างอิง ("สาขานี้")
+    และขั้นประกอบคำถามต่อเนื่องด้วยโค้ด (swap_follow_up) ทำงานไปแล้ว ทั้งสองขั้นไม่เรียกโมเดล
+    คำถามต่อเนื่องที่โค้ดตีความได้เองจึงได้ความเร็วนี้ด้วย
+
+    สิ่งที่ยังเหมือนเดิมทุกอย่าง
+    -------------------------
+    อ่านเฉพาะ view ของข้อมูลที่ผ่านการตรวจและเผยแพร่แล้ว · ด่านตรวจก่อนหน้านี้ทั้งหมด
+    (คำทักทาย รายการหลักสูตร ค่าเทอม คำขอคำแนะนำ สาขาที่คณะไม่มี คำถามที่ยังไม่บอกสาขา)
+    ทำงานตามลำดับเดิมก่อนมาถึงที่นี่ · การบันทึกบทสนทนาอยู่ที่ผู้เรียกไม่ได้แตะ ·
+    คำว่า "ไม่น้อยกว่า" กับ source/sources มาจากตัวเดียวกับด่านท้าย · โหมด
+    STRUCTURED_ANSWERS=off ทำให้ structured_answer() คืน None ทุกครั้ง ด่านนี้จึงเงียบสนิท
+    """
+    served = structured_answer(question=query, interpreted=None)
+    if served is None:
+        return None
+    return _structured_prepared(p, served, query)
+
+
 def _with_structured(p: Prepared, message: str) -> Prepared:
     """
     โหมด STRUCTURED_ANSWERS=on: แทนคำตอบด้วยคำตอบจากฐานข้อมูลหลักสูตรเมื่อ structured_reply ให้มา
@@ -1015,14 +1196,46 @@ def _with_structured(p: Prepared, message: str) -> Prepared:
     คำตอบจากฐานข้อมูลเป็นคำตอบสำเร็จรูป จึงไม่เรียกโมเดลเขียนคำตอบ ไม่แนบรายการอ้างอิงจากการค้นเอกสาร (ที่มาอยู่ในตัวคำตอบ)
     และไม่เก็บลงแคช — แคชไม่รู้โหมด ถ้าเก็บไว้ การย้อนกลับเป็น shadow จะยังตอบข้อความจากฐานข้อมูลจากแคชต่อไป
     """
+    # ด่านเร็วใน prepare_answer ตอบไปแล้ว ไม่ต้องถามฐานซ้ำและห้ามทับค่าที่ได้มา
+    if p.served_source == SERVED_STRUCTURED:
+        return p
     served = structured_answer(question=message, interpreted=p.interpreted)
     if served is None:
         return p
-    # แนบที่มาเมื่อรู้เอกสารแน่นอนเท่านั้น ไม่รู้ก็ปล่อยเป็น None ห้ามเดา
-    source = ({"document_id": served.document_id, "page_start": served.page_start}
-              if served.document_id else None)
-    return replace(p, status="answered", citations=[], canned=served.answer, messages=[], allow_fallback=False,
-                   cacheable=False, served_source=SERVED_STRUCTURED, source=source)
+    # ด่านนี้คงคำถามที่ค้นและคำถามที่ตีความไว้ตามเดิม เพราะมันผ่านขั้นค้นเอกสารมาแล้ว
+    return replace(_structured_prepared(p, served, p.search_query),
+                   interpreted=p.interpreted, best_score=p.best_score)
+
+
+def _log_timing(route: str, outer: "_Stages", p: "Prepared | None", question: str,
+                outcome: str = "ok") -> None:
+    """
+    พิมพ์เวลาที่ใช้ของหนึ่งคำขอเป็นบรรทัดเดียว เพื่อให้หาคอขวดจาก log ได้
+
+    ตัดคำถามไว้ 60 ตัวอักษรเพื่อให้ไล่ย้อนได้ว่าบรรทัดนี้คือคำขอไหน — ข้อความคำถาม
+    ถูกเก็บลงตาราง chat_messages อยู่แล้ว การใส่ไว้ที่นี่จึงไม่ได้เปิดเผยอะไรเพิ่ม
+    **ไม่มีคำตอบ ไม่มี token ไม่มี key** อยู่ในบรรทัดนี้
+
+    outcome บอกว่าคำขอจบแบบไหน — ต้องพิมพ์บรรทัดนี้แม้ขั้นเขียนคำตอบล้ม เพราะคำขอที่ล้ม
+    คือคำขอที่อยากรู้เวลามากที่สุด · 13 ต.ค. 2569 คำถามวิชาบังคับใช้เวลา 54.5 วินาที
+    แล้วไม่มีบรรทัด timing เลย เพราะโมเดลโยน LLMConnectionError ก่อนถึงบรรทัดนี้
+    """
+    # ห้ามให้บรรทัด log กลบข้อผิดพลาดเดิม — ฟังก์ชันนี้ถูกเรียกใน finally ถ้ามันโยน
+    # ข้อยกเว้นออกมาเอง ข้อยกเว้นจริงที่กำลังเดินทางอยู่จะถูกแทนที่ แล้วผู้ใช้จะเห็น
+    # ข้อผิดพลาดของเครื่องมือวัดแทนข้อผิดพลาดของระบบ ซึ่งไล่ปัญหาต่อไม่ได้เลย
+    try:
+        # p เป็น None ได้เมื่อ prepare_answer ล้มก่อนคืนค่า — ยังต้องพิมพ์เวลารวมให้เห็น
+        inner = (p.stages.parts() if p is not None and p.stages is not None
+                 else "ไม่ได้จับเวลารายขั้น")
+        logger.info(
+            "timing %s total=%.0fms %s | %s | source=%s status=%s outcome=%s q=%r",
+            route, outer.elapsed_ms(), outer.parts(), inner,
+            p.served_source if p is not None else "-",
+            p.status if p is not None else "-",
+            outcome, question[:60],
+        )
+    except Exception:  # noqa: BLE001 — การวัดเวลาล้มไม่ควรทำให้คำขอล้ม
+        pass
 
 
 def _persist(db: Session, session_id: uuid.UUID, question: str, reply: str) -> None:
@@ -1064,6 +1277,65 @@ def _tuition_reply(session_id: uuid.UUID, question: str) -> Prepared:
     )
 
 
+# คำที่ใช้ต่อประโยคเมื่อผู้ใช้ถามหลายเรื่องในข้อความเดียว
+#
+# ใช้เฉพาะในด่านค่าเทอม เพื่อแยก "ส่วนที่ถามค่าเทอม" ออกจาก "ส่วนที่ถามเรื่องอื่น"
+# ไม่ได้นำไปตัดประโยคในเส้นทางอื่น เพราะคำว่า "แล้ว" อยู่กลางคำถามปกติได้ เช่น
+# "จบวิทยาการคอมพิวเตอร์แล้วทำงานอะไรได้บ้าง" — ข้อความแบบนั้นไม่มีคำว่าค่าเทอม
+# จึงไม่เคยมาถึงโค้ดนี้
+_CLAUSE_JOINERS = re.compile(r"\s*(?:แล้ว|และ|กับ|ส่วน|อีกอย่าง|[?,·\n])\s*")
+
+# ส่วนที่เหลือนับว่า "เป็นคำถาม" จริงหรือเป็นแค่คำลงท้าย เช่น "ขอบคุณครับ"
+_ASKS_SOMETHING = re.compile(r"กี่|เท่าไ|อะไร|ไหน|ใด|อย่างไร|ยังไง|ไหม|มั้ย|บ้าง")
+
+_PART_NOT_ANSWERED = ("ส่วนคำถามที่ว่า “{}” ยังตอบจากข้อมูลที่ตรวจแล้วไม่ได้ครับ "
+                      "ถามแยกอีกครั้งได้ เดี๋ยวผมค้นจากเอกสารหลักสูตรให้")
+
+
+def _tuition_and_other_parts(message: str) -> tuple[list[str], list[str]]:
+    """แยกประโยคย่อยเป็น (ประโยคที่ถามค่าเทอม, ประโยคที่ถามเรื่องอื่น)"""
+    clauses = [c.strip() for c in _CLAUSE_JOINERS.split(message) if c.strip()]
+    fee = [c for c in clauses if is_tuition_question(c)]
+    rest = [c for c in clauses if not is_tuition_question(c)]
+    return fee, rest
+
+
+def _plus_other_part(db: Session, p_fee: Prepared, message: str) -> Prepared:
+    """
+    ถามค่าเทอม "และ" เรื่องอื่นในข้อความเดียว ต้องตอบให้ครบทั้งสองส่วน
+
+    ที่ต้องมี: ด่านค่าเทอมอยู่ก่อนด่านอื่นทั้งหมด คำถาม "วิทคอมเรียนกี่หน่วยกิต
+    แล้วค่าเทอมเท่าไหร่" จึงได้คำตอบเรื่องค่าเทอมอย่างเดียว ส่วนคำถามหน่วยกิตหายไป
+    เงียบ ๆ โดยผู้ใช้ไม่รู้ว่าถูกข้าม — วัดเจอจากการตรวจทางตอบเร็ว 14 ต.ค. 2569
+
+    ถ้าตอบส่วนที่เหลือจากข้อมูลที่เผยแพร่แล้วไม่ได้ ก็ยังบอกผู้ใช้ว่าส่วนไหนยังไม่ได้ตอบ
+    ไม่ปล่อยให้เข้าใจว่าตอบครบแล้ว · ไม่เรียกโมเดลเพิ่มทั้งสองกรณี
+    """
+    fee_clauses, rest_clauses = _tuition_and_other_parts(message)
+    rest = " ".join(rest_clauses)
+    if not rest or not _ASKS_SOMETHING.search(rest):
+        return p_fee
+
+    # ชื่อหลักสูตรอาจอยู่ในประโยคค่าเทอม ("ค่าเทอมวิทคอมเท่าไหร่ แล้วเรียนกี่หน่วยกิต")
+    # ส่วนที่เหลือจึงไม่มีชื่อให้ชั้นข้อมูลจับ ต้องเติมให้ด้วยกติกาเดียวกับคำว่า "สาขานี้"
+    names = _program_names(db)
+    asked = rest
+    if not programmes_named(rest, names, from_assistant=False):
+        found = programmes_named(message, names, from_assistant=False)
+        if len(found) == 1:
+            asked = f"{rest} (หลักสูตร{found[0]})"
+
+    served = structured_answer(question=asked, interpreted=None)
+    if served is None:
+        note = _PART_NOT_ANSWERED.format(rest)
+        return replace(p_fee, canned=f"{p_fee.canned}\n\n{note}")
+
+    # เรียงตามลำดับที่ผู้ใช้ถาม ไม่สลับให้อ่านสะดุด
+    fee_first = bool(fee_clauses) and message.find(fee_clauses[0]) < message.find(rest_clauses[0])
+    parts = [p_fee.canned, served.answer] if fee_first else [served.answer, p_fee.canned]
+    return replace(p_fee, canned="\n\n".join(parts), sources=list(served.sources))
+
+
 def prepare_answer(
     db: Session,
     user_id: uuid.UUID,
@@ -1071,32 +1343,15 @@ def prepare_answer(
     message: str,
     prior: list[PriorTurn] | None = None,
 ) -> Prepared:
+    stages = _Stages()
     connector = get_llm_connector()
     session = _load_session(db, user_id, session_id)
     # prior มาจากผู้เรียกที่เก็บบทสนทนาไว้เอง (หน้าเว็บ) ส่วนผู้เรียกที่ใช้ session_id
     # ให้อ่านจากฐานข้อมูลตามเดิม
     history = list(prior[-HISTORY_LIMIT:]) if prior else _load_history(db, session.id)
 
-    # --- -1. เคยตอบคำถามนี้ไปแล้วไหม -> ใช้คำตอบเดิม ไม่ต้องเรียกโมเดลใหม่ ---
-    #
-    # ใช้แคชเฉพาะข้อความแรกของบทสนทนา เพราะคำถามที่มีบทสนทนานำหน้าตีความได้ก็ต่อเมื่อ
-    # อ่านบริบทก่อนหน้าด้วย คำว่า "แล้วค่าเทอมล่ะ" หมายถึงคนละสาขากันได้ในสองบทสนทนา
-    # การเทียบจากตัวคำถามอย่างเดียวจึงหยิบคำตอบผิดมาให้
-    #
-    # หน้าเว็บส่งคำถามมาโดยไม่มี session_id ทุกครั้ง ข้อความจากหน้าเว็บจึงเข้าเงื่อนไข
-    # นี้เสมอ ซึ่งเป็นทางที่ผู้ใช้จริงเกือบทั้งหมดเข้ามา
     version = corpus_version(db, TOP_K_CHUNKS)
-    if not history and (hit := cache_lookup(db, message, version)) is not None:
-        return Prepared(
-            session_id=session.id,
-            status=hit["status"],
-            search_query=message,
-            best_score=0.0,
-            citations=[ChatCitation(**c) for c in hit["citations"]],
-            canned=hit["reply"],
-            messages=[],
-            cacheable=False,  # หยิบมาจากแคชอยู่แล้ว ไม่ต้องเขียนกลับ
-        )
+    stages.mark("corpus_version")
 
     # --- 0. คำทักทาย/ขอบคุณ/ถามตัวตน -> ตอบทันทีโดยไม่ค้นเอกสารและไม่เรียก LLM ---
     if (canned := match_small_talk(message)) is not None:
@@ -1138,7 +1393,8 @@ def prepare_answer(
     # คำถามค่าเทอมที่ไม่บอกสาขาในบทสนทนา ต้องหาสาขาจากบทสนทนาก่อน และห้ามไหลไปค้นเอกสาร
     # (ดู _tuition_question)
     if is_tuition_question(message):
-        return _tuition_reply(session.id, _tuition_question(db, connector, history, message))
+        fee = _tuition_reply(session.id, _tuition_question(db, connector, history, message))
+        return _plus_other_part(db, fee, message)
 
     # --- 0.7 ผู้ใช้ตอบคำถามต่อยอดหลังแนะนำสาขา -> จับคู่ใหม่ด้วยความสนใจที่รวมกันแล้ว ---
     #
@@ -1157,6 +1413,161 @@ def prepare_answer(
             canned=advice,
             messages=[],
             cacheable=False,  # ขึ้นกับบทสนทนาก่อนหน้า
+        )
+
+    # --- 0.715 ระบุระดับปริญญาที่หลักสูตรนั้นไม่มี -> บอกตรง ๆ ไม่เดาเล่มอื่นมาตอบ ---
+    #
+    # ต้องมาก่อนทุกด่านที่เลือกเล่ม เพราะการเดาเล่มคนละระดับคือคำตอบที่ผิดโดยไม่มีสัญญาณเตือน
+    # วัดเจอเมื่อ 13 ต.ค. 2569: ถามปริญญาโทได้คำตอบของปริญญาตรี (130 แทน 36 หน่วยกิต)
+    if (gap := missing_degree_level(db, message)) is not None:
+        programme, level = gap
+        thai_q = written_in_thai(message)
+        # พูดในขอบเขตที่ระบบรู้จริง — "ยังไม่พบในข้อมูลของระบบ" ไม่ใช่ "มหาวิทยาลัยไม่มี"
+        # ฐานข้อมูลนี้เก็บเฉพาะเล่ม มคอ.2 ที่นำเข้าและตรวจรับแล้วของคณะวิทยาศาสตร์และ
+        # เทคโนโลยี การสรุปแทนมหาวิทยาลัยทั้งแห่งจากข้อมูลเท่านี้เป็นการพูดเกินที่รู้
+        say = (f"ยังไม่พบหลักสูตร{programme}ระดับ{degree_level_label(level)}"
+               f"ในข้อมูลของระบบครับ กรุณาตรวจชื่อหลักสูตรและระดับที่ต้องการอีกครั้ง "
+               f"หรือสอบถามฝ่ายวิชาการของคณะโดยตรง"
+               if thai_q else
+               f"{programme} at {level} level is not in this system's data yet.")
+        return replace(_blank(session.id, message, version, history),
+                       status="answered", canned=say, cacheable=False, stages=stages)
+
+    # --- 0.716 ระบุปีฉบับที่ยังไม่มีในข้อมูล -> บอกปีที่มี ไม่เดาฉบับอื่นมาตอบ ---
+    #
+    # เดิมคำถาม "หลักสูตรคณิตศาสตร์ พ.ศ. 2554 เรียนกี่หน่วยกิต" ได้ status=no_data
+    # แล้วตกไปเส้นทางเอกสาร ซึ่งปลอดภัย (ไม่เอาปีอื่นมาตอบ) แต่ต้องพึ่งโมเดลทั้งหมด
+    # ทั้งที่ระบบรู้แน่นอนว่ามีฉบับปีใดอยู่ — ตรวจทางตอบเร็ว 14 ต.ค. 2569
+    #
+    # ถ้อยคำต้องไม่สรุปว่ามหาวิทยาลัยไม่มีหลักสูตรนั้น เพราะสิ่งที่ระบบรู้คือ
+    # "ยังไม่มีเล่มฉบับปีนั้นในข้อมูลที่ตรวจรับแล้ว" เท่านั้น
+    if (miss := missing_edition_year(db, message)) is not None:
+        programme, asked_year, have = miss
+        years = ", ".join(f"พ.ศ. {y}" for y in have)
+        say = (f"ยังไม่พบหลักสูตร{programme} ฉบับ พ.ศ. {asked_year} ในข้อมูลของระบบครับ "
+               f"ฉบับที่มีข้อมูลตรวจรับแล้วคือ {years} "
+               f"ถามฉบับใดฉบับหนึ่งได้เลย หรือสอบถามฝ่ายวิชาการของคณะสำหรับฉบับอื่น"
+               if written_in_thai(message) else
+               f"Edition {asked_year} of {programme} is not in this system's data yet. "
+               f"Available: {years}.")
+        return replace(_blank(session.id, message, version, history),
+                       status="answered", canned=say, cacheable=False, stages=stages)
+
+    # --- 0.717 คำถามต่อเนื่อง: ตีความด้วยโค้ดก่อนถึงด่านที่เรียกโมเดล ---
+    #
+    # ย้ายขึ้นมาจากตำแหน่งเดิม (หลังด่าน 0.72) เพราะทั้งสองขั้นนี้ไม่เรียกโมเดลเลย
+    # แต่เดิมคำถามต่อเนื่องต้องผ่านด่าน 0.72 ซึ่งเรียกโมเดลหนึ่งครั้งก่อน · วัดเมื่อ
+    # 14 ต.ค. 2569: "แล้วปี 2566 ล่ะ" ตอบถูกแต่ใช้เวลา 30.18 วินาทีเต็มเพดาน
+    # เพราะเสียเวลาไปกับโมเดลที่ล่มอยู่ ทั้งที่คำตอบอยู่ในฐานข้อมูล
+    #
+    # 0.9 แทนคำอ้างถึงสาขาที่กำลังคุย ("สาขานี้" "หลักสูตรนี้") ด้วยชื่อ ปี และระดับ
+    #     ปริญญาที่บทสนทนาระบุไว้ ถ้าอ้างถึงแต่หาสาขาไม่ได้หรือกำกวม ให้ถามกลับ ไม่เดา
+    # 0.85 คำถามที่เปลี่ยนแค่หลักสูตรหรือปี ("แล้ว X ล่ะ") ประกอบคำถามใหม่จากคำถามก่อนหน้า
+    #     ด้วยโค้ด เรื่องที่ถามคงเดิม เปลี่ยนเฉพาะสิ่งที่ผู้ใช้ระบุใหม่ (ดู services/follow_up.py)
+    own_scope = resolve_scope(db, message) is not None
+    context_programme = _context_programme(db, history) if history and not own_scope else None
+    query = message
+    swapped = swap_follow_up(db, history, message, context_programme) if history else None
+    if swapped:
+        if is_tuition_question(swapped):
+            return _plus_other_part(db, _tuition_reply(session.id, swapped), swapped)
+        query = swapped
+    elif not own_scope and _REFERENCE.search(message):
+        if context_programme:
+            query = _resolve_reference(message, _context_edition(db, history, context_programme))
+        elif ask := _ask_which_program(db, written_in_thai(message)):
+            return replace(_blank(session.id, message, version, history),
+                           status="answered", canned=ask, cacheable=False, stages=stages)
+
+    # --- 0.718 ฐานข้อมูลหลักสูตรตอบคำถามข้อเท็จจริงนี้ได้เลยไหม -> ตอบก่อนเรียกโมเดลตัวแรก ---
+    #
+    # ย้ายขึ้นมาก่อนด่าน 0.72 ตามที่เจ้าของโครงการอนุมัติเมื่อ 13 ต.ค. 2569 · เหตุผล:
+    # ด่าน 0.72 เรียกโมเดลหนึ่งครั้งเมื่อตัดสินเองไม่ได้ วัดได้ว่าคำถามที่ฐานข้อมูลตอบได้
+    # ในระดับมิลลิวินาที ต้องใช้เวลา 30 วินาทีเต็มเพดานเมื่อผู้ให้บริการโมเดลล่ม
+    #
+    # **ไม่คว้าคำถามขอคำแนะนำไป** เพราะกันไว้สองชั้น
+    #   1. _asks_for_advice() — ข้อความที่มีคำขอคำแนะนำปนอยู่ ไม่เข้าด่านนี้เลย
+    #      ครอบทั้งคำถามขอคำแนะนำล้วน และคำถามผสมข้อเท็จจริงกับคำแนะนำ
+    #   2. structured_answer() ตอบได้ก็เมื่อหาหลักสูตรและหัวข้อได้จากข้อความโดยตรง
+    #      ข้อความเล่าความสนใจลอย ๆ จึงไม่เข้าเงื่อนไขอยู่แล้ว
+    # คำถามผสมจะไหลไปด่าน 0.72 ตามเดิม เพื่อให้ส่วนคำแนะนำได้รับการจัดการครบ
+    #
+    # ใช้ `query` (คำถามที่ผ่านขั้นตีความคำถามต่อเนื่องแล้ว) ไม่ใช่ข้อความดิบ
+    # คำถามต่อเนื่องจึงได้ความเร็วนี้ด้วย ส่วนการกันคำถามขอคำแนะนำยังดูจากข้อความดิบ
+    # เพราะนั่นคือถ้อยคำที่ผู้ใช้พิมพ์มาจริง
+    if not _asks_for_advice(message) and (
+        early := _structured_fast(db, _blank(session.id, query, version, history), query)
+    ) is not None:
+        stages.mark("structured_fast_early")
+        return replace(early, stages=stages)
+
+    # --- 0.7183 คำถามเทียบที่เอ่ยชื่อเจาะจงกว่าที่ระบบมี -> บอกว่ายังไม่พบ ไม่สรุปแทนคณะ ---
+    #
+    # เช่น "คณิตศาสตร์ กับ คณิตศาสตร์ประยุกต์ ต่างกันไหม" (ชุด 37 ข้อ a1-04)
+    # ดูเหตุผลเต็มใน course_scope.more_specific_unknown_name()
+    if (unknown_side := more_specific_unknown_name(db, query)) is not None:
+        say = (f"ยังไม่พบหลักสูตร{unknown_side} ในข้อมูลของระบบครับ "
+               f"จึงยังเทียบให้ไม่ได้ · ระบบมีข้อมูลของหลักสูตรที่คณะเปิดสอนตามรายการ "
+               f"ซึ่งถามแยกได้ หรือสอบถามฝ่ายวิชาการของคณะสำหรับหลักสูตรอื่น"
+               if written_in_thai(query) else
+               f"{unknown_side} is not in this system's data yet, so it cannot be compared.")
+        return replace(_blank(session.id, query, version, history),
+                       status="answered", canned=say, cacheable=False, stages=stages)
+
+    # --- 0.7184 คำถามคุณสมบัติผู้เข้าศึกษาที่ฐานยังไม่มีข้อมูลที่ตรวจรับ -> ระบุชัด ไม่ตอบจากภาคผนวก ---
+    #
+    # ด่าน 0.718 ตอบไปแล้วถ้าฐานมีข้อมูล (admission อยู่ใน USER_FACING_FIELDS ตั้งแต่ 14 ต.ค. 2569)
+    # ที่เหลือมาถึงตรงนี้คือ "ระบุหลักสูตรได้ แต่ไม่มีข้อมูลที่ผ่านการตรวจ" ซึ่งถ้าปล่อยไปเส้นทาง
+    # เอกสาร คำตอบจะมาจากภาคผนวกข้อบังคับของมหาวิทยาลัยที่เย็บไว้ท้ายเล่ม มคอ.2 แทนคุณสมบัติ
+    # ของหลักสูตร (ดูเหตุผลเต็มใน structured_shadow.admission_gap)
+    if (gap := admission_gap(db, query)) is not None:
+        stages.mark("admission_gap")
+        return replace(_blank(session.id, query, version, history),
+                       status="answered", canned=gap, cacheable=False, stages=stages)
+
+    # --- 0.7185 คำถามรายวิชา -> ตอบจากข้อมูลรายวิชาที่ตรวจรับและเผยแพร่แล้ว ---
+    #
+    # แยกจากด่าน 0.718 เพราะชั้นข้อมูลเดิม (structured_intent) กันคำว่า "วิชา" ออกไว้
+    # โดยเจตนา — ตอนนั้นยังไม่มีข้อมูลรายวิชาในระบบ การตอบจึงเป็นการเดา
+    #
+    # ตอบไม่ได้ก็คืน None แล้วไหลไปเส้นทางเอกสารตามเดิมทุกขั้น · ถ้าฐานยังไม่ได้รัน
+    # migration 002 (ยังไม่มีวิว) ด่านนี้เงียบสนิท จึง deploy โค้ดก่อนเผยแพร่ข้อมูลได้
+    if (subject := answer_subject_question(db, query)) is not None:
+        stages.mark("subjects")
+        return replace(_blank(session.id, query, version, history),
+                       status="answered", canned=subject.text, cacheable=False,
+                       sources=list(subject.sources), stages=stages)
+
+    # --- 0.719 เคยตอบคำถามนี้ไปแล้วไหม -> ใช้คำตอบเดิม ไม่ต้องเรียกโมเดลใหม่ ---
+    #
+    # **อยู่หลังด่านที่ตอบจากข้อมูลที่ตรวจรับแล้วโดยเจตนา** แคชเก็บข้อความที่โมเดล
+    # เขียนไว้เมื่อก่อน ส่วนด่านข้างบนประกอบคำตอบใหม่จาก view ของข้อมูลที่เผยแพร่แล้ว
+    # ถ้าอ่านแคชก่อน คำตอบเก่าจะทับข้อมูลปัจจุบันได้ เช่นเมื่อมีการเผยแพร่ฉบับใหม่
+    # หรือแก้ค่าที่ตรวจรับแล้ว ทั้งที่ corpus_version ผูกกับ "คลังเอกสาร" อย่างเดียว
+    # จึงไม่เปลี่ยนเมื่อข้อมูลที่สกัดไว้เปลี่ยน — ตรวจทางตอบเร็ว 14 ต.ค. 2569
+    #
+    # ใช้แคชเฉพาะข้อความแรกของบทสนทนา เพราะคำถามที่มีบทสนทนานำหน้าตีความได้ก็ต่อเมื่อ
+    # อ่านบริบทก่อนหน้าด้วย คำว่า "แล้วค่าเทอมล่ะ" หมายถึงคนละสาขากันได้ในสองบทสนทนา
+    # การเทียบจากตัวคำถามอย่างเดียวจึงหยิบคำตอบผิดมาให้
+    #
+    # หน้าเว็บส่งคำถามมาโดยไม่มี session_id ทุกครั้ง ข้อความจากหน้าเว็บจึงเข้าเงื่อนไข
+    # นี้เสมอ ซึ่งเป็นทางที่ผู้ใช้จริงเกือบทั้งหมดเข้ามา
+    if not history and (hit := cache_lookup(db, message, version)) is not None:
+        stages.mark("cache_hit")
+        return Prepared(
+            stages=stages,
+            session_id=session.id,
+            status=hit["status"],
+            search_query=message,
+            # คืนค่าตามความหมายเดิมของ top_score คือ "คะแนนความใกล้ของชิ้นที่ใกล้สุด"
+            # เดิมส่ง 0.0 ทุกครั้งที่หยิบจากแคช ผู้อ่านจึงเข้าใจว่าคำตอบไม่มีหลักฐานเลย
+            # ทั้งที่ citations ที่เก็บไว้มีคะแนน 0.5-0.7 — พบเมื่อ 14 ต.ค. 2569 ตอนตรวจห้าข้อสาย RAG
+            # จึงคืนค่าสูงสุดของชิ้นที่เก็บไว้ ความหมายเดิม ไม่ได้เปลี่ยนนิยามของค่านี้
+            best_score=round(max((float(c.get("score") or 0.0) for c in hit["citations"]), default=0.0), 4),
+            citations=[ChatCitation(**c) for c in hit["citations"]],
+            canned=hit["reply"],
+            messages=[],
+            cacheable=False,  # หยิบมาจากแคชอยู่แล้ว ไม่ต้องเขียนกลับ
         )
 
     # --- 0.72 ขอคำแนะนำว่าควรเรียนสาขาไหนจากความสนใจ -> ใช้ระบบจับคู่สาขา ไม่ใช่ถาม-ตอบเอกสาร ---
@@ -1199,11 +1610,11 @@ def prepare_answer(
         listing := program_list_answer(db, written_in_thai(message))
     ):
         head = (
-            f"คณะวิทยาศาสตร์และเทคโนโลยีไม่มีสาขา{unknown} ครับ "
-            "สาขาที่เปิดสอนอยู่มีดังนี้"
+            f"ยังไม่พบสาขา{unknown} ในข้อมูลของระบบครับ "
+            "สาขาที่มีข้อมูลอยู่มีดังนี้"
             if written_in_thai(message)
-            else f"The faculty does not offer a programme called {unknown}. "
-            "These are the programmes it does offer:"
+            else f"{unknown} is not in this system's data yet. "
+            "These are the programmes it does have:"
         )
         body = listing.split("\n\n", 1)[1] if "\n\n" in listing else listing
         return Prepared(
@@ -1232,40 +1643,20 @@ def prepare_answer(
             cacheable=False,
         )
 
-    # --- 0.9 คำอ้างถึงสาขาที่กำลังคุย ("สาขานี้" "หลักสูตรนี้") -> แทนด้วยชื่อสาขาจากบทสนทนา ---
-    #
-    # แก้แบบไม่ใช้โมเดล เพราะขั้นเขียนคำถามใหม่พึ่งได้เฉพาะตอนชื่อสาขายังอยู่ในหน้าต่างประวัติ
-    # (ดู _context_programme) ถ้าอ้างถึงแต่หาสาขาไม่ได้หรือกำกวม ให้ถามกลับ ไม่เดา
-    own_scope = resolve_scope(db, message) is not None
-    context_programme = _context_programme(db, history) if history and not own_scope else None
-    query = message
-    # --- 0.85 คำถามต่อเนื่องที่เปลี่ยนแค่หลักสูตรหรือปี ("แล้ว X ล่ะ") -> ประกอบคำถามใหม่จากคำถามก่อนหน้าด้วยโค้ด ---
-    # เรื่องที่ถามคงเดิม เปลี่ยนเฉพาะสิ่งที่ผู้ใช้ระบุใหม่ ไม่ให้โมเดลเดาว่าชื่อที่ผู้ใช้พิมพ์คือหลักสูตรหรือรายวิชา
-    # (ดู services/follow_up.py) ไม่ใช่กรณีนี้ก็ไปขั้นแทนคำอ้างอิงและขั้นเขียนคำถามใหม่ตามเดิม
-    swapped = swap_follow_up(db, history, message, context_programme) if history else None
-    if swapped:
-        if is_tuition_question(swapped):
-            return _tuition_reply(session.id, swapped)
-        query = swapped
-    elif not own_scope and _REFERENCE.search(message):
-        if context_programme:
-            query = _resolve_reference(message, context_programme)
-        elif ask := _ask_which_program(db, written_in_thai(message)):
-            return Prepared(
-                session_id=session.id,
-                status="answered",
-                search_query=message,
-                best_score=0.0,
-                citations=[],
-                canned=ask,
-                messages=[],
-                cacheable=False,
-            )
+    stages.mark("gates")
+
+    # --- 0.95 ฐานข้อมูลหลักสูตรตอบได้เลยไหม -> ตอบก่อนค้นเอกสารและก่อนเรียกโมเดล ---
+    # ดูเหตุผลและเงื่อนไขทั้งหมดใน _structured_fast() · ตอบไม่ได้ก็ไหลไปทาง RAG ตามเดิม
+    if (fast := _structured_fast(db, _blank(session.id, query, version, history), query)) is not None:
+        stages.mark("structured_fast")
+        return replace(fast, stages=stages)
+    stages.mark("structured_miss")
 
     # --- 1. ค้นด้วยคำถามดิบก่อน (หรือคำถามที่แทนคำอ้างอิงแล้ว) ---
     # ใช้ข้อความดิบก่อน เพราะเป็นสิ่งที่ผู้ใช้พิมพ์จริงและเป็นฐานที่ใช้สอบเทียบ
     # OFF_TOPIC_THRESHOLD ไว้
     chunks = _retrieve(db, connector, query)
+    stages.mark("retrieve1")
     best_score = chunks[0].score if chunks else 0.0
     search_query = query
     # คำถามที่ตีความแล้ว — ทุกขั้นหลังจากนี้ (ด่านขอบเขต ด่านตรวจเอกสาร ขั้นเขียนคำตอบ) ต้องใช้ตัวเดียวกัน
@@ -1293,6 +1684,7 @@ def prepare_answer(
         explicit = explicit_programmes(db, message)
         previous = context_programme or (_context_programme(db, history) if explicit else None)
         rewritten = _condense(connector, history, message, previous, explicit=explicit)
+        stages.mark("condense")
         if rewritten != message and not rewrite_keeps_explicit(db, message, rewritten):
             rewritten = message
         if rewritten != message:
@@ -1303,6 +1695,7 @@ def prepare_answer(
             if is_tuition_question(rewritten):
                 return _tuition_reply(session.id, rewritten)
             alt = _retrieve(db, connector, rewritten)
+            stages.mark("retrieve2")
             alt_score = alt[0].score if alt else 0.0
             gained_scope = not own_scope and resolve_scope(db, rewritten) is not None
             if gained_scope or alt_score > best_score:
@@ -1314,6 +1707,7 @@ def prepare_answer(
     # กินสัดส่วนส่วนใหญ่ของเวกเตอร์ (ดูตัวเลขที่วัดไว้ใน query_expansion.thai_only_query)
     if not written_in_thai(message) and (thai_query := thai_only_query(message)):
         alt = _retrieve(db, connector, thai_query)
+        stages.mark("retrieve_thai")
         alt_score = alt[0].score if alt else 0.0
         if alt_score > best_score:
             chunks, best_score, search_query = alt, alt_score, thai_query
@@ -1363,6 +1757,9 @@ def prepare_answer(
     else:
         status = "answered"
 
+    # ด่านตัดสินนี้รวมขั้นที่เรียกโมเดลไว้สองตัว (_is_about_scope และ _can_answer_from)
+    stages.mark("decide")
+
     messages: list[LLMMessage] = []
     if status == "answered":
         reply_text = None
@@ -1391,15 +1788,311 @@ def prepare_answer(
         search_query=search_query,
         best_score=round(best_score, 4),
         citations=citations,
+        retrieved=tuple(chunks) if status == "answered" else (),
         canned=reply_text,
         messages=messages,
         # คำตอบที่อ้างอิงเอกสารห้ามตกไปใช้โมเดลสำรอง ดูเหตุผลใน _asks_for_a_number()
         allow_fallback=status != "answered",
         cacheable=not history,
         corpus_version=version,
+        stages=stages,
         interpreted=interpreted,
         has_history=bool(history),
     )
+
+
+def _evidence_filenames(db: Session, chunk_ids: list) -> dict:
+    """ชื่อไฟล์เอกสารของชิ้นที่ถูกเลือกเป็นหลักฐาน (ดูชื่อจริงที่ผู้ใช้เปิดได้)"""
+    if not chunk_ids:
+        return {}
+    rows = db.execute(
+        text("""
+            SELECT ch.id AS chunk_id, ch.document_id, d.original_filename AS file
+              FROM course_chunks ch
+              LEFT JOIN course_documents d ON d.id = ch.document_id
+             WHERE ch.id = ANY(:ids)
+        """),
+        {"ids": [str(i) for i in chunk_ids]},
+    ).mappings().all()
+    return {str(r["chunk_id"]): r for r in rows}
+
+
+# ข้อความที่ใช้เมื่อจับคู่คำตอบกับหน้าเอกสารไม่ได้ — บอกตรงๆ ว่ายังยืนยันไม่ได้
+# **ห้ามเดาเลขหน้าหรือยกชื่อไฟล์ที่ไม่ได้รองรับคำตอบมาใส่** เพราะที่มาที่ชี้ผิดหน้า
+# แย่กว่าไม่มีที่มา ผู้ใช้เปิดไปแล้วไม่เจอข้อความที่อ้าง
+_NO_EVIDENCE_NOTE = (
+    "หมายเหตุ: ระบบยังจับคู่คำตอบนี้กับหน้าเอกสารที่รองรับไม่ได้ จึงยังยืนยันคำตอบนี้"
+    "กับเอกสารหลักสูตรไม่ได้ กรุณาตรวจกับเอกสารต้นฉบับก่อนนำไปใช้"
+)
+
+
+def _sources_from_line(reply: str) -> list[dict]:
+    """อ่านบรรทัด "ที่มา: ไฟล์ หน้า N" กลับมาเป็นรายการที่มา (ใช้กับคำตอบที่หยิบจากแคช)"""
+    out: list[dict] = []
+    seen: set = set()
+    for line in (reply or "").split("\n"):
+        # รับทุกรูปของบรรทัดที่มา รวม "ที่มา (ตรวจแล้วรองรับบางส่วน)" และ
+        # "หน้าที่ใกล้เคียงคำตอบ" · บรรทัดรายการข้อที่ยังยืนยันไม่ได้ไม่มีรูป ".pdf หน้า N" จึงไม่ติดมา
+        if ".pdf" not in line:
+            continue
+        for fname, page in re.findall(r"([A-Za-z0-9_.-]+\.pdf) หน้า (\d+)", line):
+            key = (fname, int(page))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"file": fname, "page_start": int(page), "page_end": int(page),
+                        "course_title": None, "document_id": None, "answer_coverage": None})
+    return out
+
+
+def _page_texts(db: Session, pairs: list[tuple]) -> dict[tuple, str]:
+    """
+    ข้อความทั้งหน้าของ (เอกสาร, เลขหน้า) ที่คำตอบอ้างถึง
+
+    ใช้เป็นหน่วยหลักฐานของชั้นตรวจข้ออ้าง — ขอบเขตต้องเท่ากับที่บรรทัดที่มาบอกผู้ใช้
+    (ชื่อไฟล์ + เลขหน้า) ผู้ใช้จึงเปิดไปตรวจเองได้ตรงจุด · หนึ่งหน้ามีหลายชิ้นในคลัง
+    จึงต่อทุกชิ้นของหน้านั้นเข้าด้วยกัน และ **ไม่** รวมข้ามหน้าหรือข้ามเอกสาร เพราะจะทำให้
+    หลักฐานของเล่มหนึ่งไปยืนยันข้ออ้างของอีกเล่มได้
+    """
+    wanted = {(str(d), int(pg)) for d, pg in pairs if d and pg}
+    if not wanted:
+        return {}
+    rows = db.execute(
+        text("""
+            SELECT document_id, page_number, string_agg(content, ' ' ORDER BY id) AS page_text
+              FROM course_chunks
+             WHERE document_id = ANY(:docs) AND page_number = ANY(:pages)
+             GROUP BY document_id, page_number
+        """),
+        {"docs": [d for d, _ in wanted], "pages": sorted({pg for _, pg in wanted})},
+    ).mappings().all()
+    out = {}
+    for r in rows:
+        key = (str(r["document_id"]), int(r["page_number"]))
+        if key in wanted:
+            out[key] = r["page_text"] or ""
+    return out
+
+
+def _retrieved_page_units(db: Session, retrieved) -> list:
+    """
+    รวมชิ้นที่ค้นได้ให้เป็น "หนึ่งหน่วยต่อหนึ่งหน้า" พร้อมข้อความทั้งหน้า
+
+    ใช้กับการเลือกที่มาของคำตอบแบบรายการ — บรรทัดที่มาบอกผู้ใช้เป็น "ไฟล์ + เลขหน้า"
+    การวัดหลักฐานจึงควรใช้ขอบเขตเดียวกัน · วัดเมื่อ 15 ต.ค. 2569: รายชื่อแคลคูลัสทั้งสี่วิชา
+    อยู่ในหน้า 142 ของ ma64.pdf แต่กระจายอยู่หลายชิ้นของหน้านั้น ชิ้นที่ค้นได้จึงไม่มีชิ้นใด
+    ครอบครบทั้งสี่รายการเลย
+
+    คืน [] เมื่ออ่านข้อความทั้งหน้าไม่ได้ ให้ผู้เรียกใช้ชิ้นเดิมตามปกติ
+    """
+    if not retrieved:
+        return []
+    files = _evidence_filenames(db, [c.chunk_id for c in retrieved])
+    pairs, rep = [], {}
+    for c in retrieved:
+        row = files.get(str(c.chunk_id))
+        doc = str(row["document_id"]) if row and row["document_id"] else None
+        if not doc or c.page_number is None:
+            continue
+        key = (doc, int(c.page_number))
+        pairs.append(key)
+        # ชิ้นที่คะแนนการค้นสูงสุดของหน้านั้นเป็นตัวแทน (ใช้ chunk_id เดิมในการหาไฟล์/หน้า)
+        if key not in rep or c.score > rep[key].score:
+            rep[key] = c
+    texts = _page_texts(db, pairs)
+    units = []
+    for key, c in rep.items():
+        text_of_page = texts.get(key)
+        if not text_of_page:
+            return []
+        units.append(c.model_copy(update={"content": text_of_page}))
+    return units
+
+
+def _with_rag_sources(db: Session, p: "Prepared", reply: str) -> tuple[str, list[dict]]:
+    """
+    เติมบรรทัดที่มาให้คำตอบที่มาจากการค้นเอกสาร และคืนรายการที่มาแบบมีโครงสร้าง
+
+    แยกสองเรื่องออกจากกันตามที่ตรวจพบเมื่อ 14 ต.ค. 2569
+        citations  รายการที่การค้นหยิบมา 20-25 ชิ้น ไม่ใช่สิ่งที่รองรับคำตอบ
+        sources    ชิ้นที่ข้อความคำตอบอ้างถึงจริง คัดด้วย answer_evidence.supporting()
+
+    คำตอบจากฐานข้อมูลหลักสูตร (ด่านทางเร็ว) มี p.sources ของตัวเองและเติมบรรทัดที่มา
+    ไว้ในข้อความแล้ว จึงไม่แตะ
+    """
+    if p.status != "answered" or not p.retrieved:
+        # คำตอบที่หยิบมาจากแคชไม่มีชิ้นเอกสารอยู่แล้ว จึงคิดหลักฐานใหม่ไม่ได้
+        # แต่ข้อความที่เก็บไว้มีบรรทัดที่มาอยู่ อ่านกลับมาเป็นช่อง sources ได้ เพื่อให้ผู้เรียก API
+        # เห็นที่มาเหมือนกันทั้งคำตอบสดและคำตอบจากแคช (ไม่ต้องเพิ่มคอลัมน์ในตารางแคช)
+        if not p.sources and p.citations:
+            return reply, _sources_from_line(reply)
+        return reply, list(p.sources)
+    # คำตอบที่ไล่รายการวัดด้วย "รายการ" ไม่ใช่ความคล้ายของข้อความรวม และวัดที่ระดับ "หน้า"
+    # เพราะหน้าหนึ่งถูกตัดเป็นหลายชิ้น รายชื่อทั้งชุดจึงอาจอยู่คนละชิ้นของหน้าเดียวกัน
+    # (ดูเหตุผลเต็มใน answer_evidence.list_items — ข้อ r1-05 เมื่อ 15 ต.ค. 2569)
+    items = list_items(reply)
+    units = p.retrieved
+    if len(items) >= 2 and (pages := _retrieved_page_units(db, p.retrieved)):
+        units = pages
+    # เพดานจำนวนหน้าในบรรทัดที่มา — ใช้ค่าเดียวกับขั้นเลือกหน้า บวกอีกหนึ่งหน้าสำหรับ
+    # หน้าที่ถูกเติมเพราะยืนยันข้ออ้างที่ค้าง (ชั้น 2.5) เพื่อไม่ให้บรรทัดที่มายาวเกินอ่าน
+    _MAX_EVIDENCE_PAGES = MAX_SOURCES + 1
+    units_all = units
+    picked = supporting(reply, units, p.search_query or "", items=items)
+    files = _evidence_filenames(db, [s.chunk_id for s in picked])
+    sources: list[dict] = []
+    seen: set = set()
+    for s in picked:
+        row = files.get(str(s.chunk_id))
+        if row is None or not row["file"]:
+            continue
+        key = (row["file"], s.page_number)
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.append({
+            "file": row["file"],
+            "page_start": s.page_number,
+            "page_end": s.page_number,
+            "course_title": s.course_title,
+            "document_id": str(row["document_id"]) if row["document_id"] else None,
+            # สัดส่วนของข้อความคำตอบที่หน้านี้ครอบได้ ไม่ใช่คะแนนการค้นและไม่ใช่ความมั่นใจว่าคำตอบถูก
+            "answer_coverage": s.coverage,
+        })
+    if not sources:
+        return f"{reply.rstrip()}\n\n{_NO_EVIDENCE_NOTE}", []
+
+    # ---- ชั้นที่สอง: ตรวจข้ออ้างสำคัญกับข้อความของหน้าที่เลือกไว้ ----
+    #
+    # การเลือกหน้าข้างบนเป็นการเทียบความคล้ายของข้อความ (lexical) ซึ่งบอกได้แค่ว่า
+    # "หน้านี้ควรเอามาตรวจ" ไม่ได้ยืนยันว่าคำตอบถูก · คำตอบที่ลอกย่อหน้ามาแล้วเปลี่ยน
+    # เลขหน่วยกิตจะยังคล้ายต้นฉบับเกือบทั้งหมด ถ้าติดป้ายว่า "มีที่มารองรับ" ทันที
+    # ผู้ใช้จะเห็นคำตอบผิดที่ดูน่าเชื่อถือกว่าเดิม — ดู services/answer_claims.py
+    # หนึ่งสมาชิก = หนึ่งหน่วยหลักฐาน (เนื้อหาของหน้านั้น + ชื่อหลักสูตรของหน้านั้น)
+    #
+    # เดิมส่งเนื้อหากับชื่อหลักสูตรเป็นสองสมาชิกแยกกัน และชั้นตรวจรวมทุกสมาชิกเป็นก้อนเดียว
+    # ผลคือเลขหน่วยกิตของเล่มหนึ่งกับปีในชื่อของอีกเล่มช่วยกันยืนยันข้ออ้างเดียวกันได้
+    # ซึ่งเป็นการยืมหลักฐานข้ามหลักสูตร/ข้ามฉบับ (ข้อบกพร่องที่ตรวจพบในรอบ 14)
+    # ตรวจกับ "ข้อความทั้งหน้า" ที่บรรทัดที่มาอ้างถึง ไม่ใช่เฉพาะชิ้นที่การค้นหยิบมา
+    #
+    # หนึ่งหน้าถูกตัดเป็นหลายชิ้น (วัดจริง: cs66_brief.pdf หน้า 1 มีสามชิ้น) ชิ้นที่ถูกเลือก
+    # อาจไม่มีข้ออ้างที่อีกชิ้นของหน้าเดียวกันมี · เมื่อบรรทัดที่มาบอกผู้ใช้ว่า "หน้า 1"
+    # การตรวจจึงต้องใช้ขอบเขตเดียวกับที่ผู้ใช้เปิดไปตรวจได้ ไม่งั้นจะรายงานว่า
+    # "ยังยืนยันไม่ได้" ทั้งที่หน้านั้นเขียนไว้จริง
+    pages = _page_texts(db, [(x["document_id"], x["page_start"]) for x in sources])
+    page_texts: list[str] = []
+    units = []
+    for s, x in zip(picked, sources):
+        page = pages.get((x["document_id"], x["page_start"]))
+        if not page:
+            page = getattr(next((c for c in p.retrieved if c.chunk_id == s.chunk_id), None), "content", "") or ""
+        page_texts.append(page)
+        units.append(page + " · " + (s.course_title or ""))
+    verdict = verify_claims(reply, units)
+
+    # ---- ชั้นที่ 2.5: ข้ออ้างที่ยังไม่มีหน้ารองรับ ลองหาหน้าที่รองรับจากผลการค้น ----
+    #
+    # ขั้นเลือกหน้าข้างบนเป็นการไล่เก็บความครอบคลุมของ "ข้อความคำตอบทั้งก้อน" (greedy
+    # set cover) พอครอบถึงเกณฑ์แล้วมันหยุด · เงื่อนไขที่เป็นตัวเลขสั้น ๆ อย่าง
+    # "ไม่น้อยกว่า 7 หน่วยกิต" กินสัดส่วนของข้อความน้อยมาก หน้าที่มีข้อความนั้นจึงไม่เคย
+    # ชนะการไล่เก็บ แม้จะเป็นหน้าเดียวที่ยืนยันข้ออ้างนั้นได้
+    #
+    # วัดจริง 19 ต.ค. 2569: คำถามกลุ่มฝึกประสบการณ์/สหกิจ ได้คำตอบถูกต้องครบ แต่บรรทัด
+    # ที่มาอ้าง cs66_brief.pdf หน้า 31 แล้วรายงานว่า "ยังยืนยันไม่ได้: ไม่น้อยกว่า 7
+    # หน่วยกิต" ทั้งที่ cs66.pdf หน้า 19 เขียนไว้ตรงตัวและอยู่ในผลการค้นรอบนั้นด้วย
+    #
+    # เติมหน้าโดยดูว่า "หน้านั้นยืนยันข้ออ้างที่ยังค้างได้หรือไม่" ไม่ใช่ดูว่ามาจากเล่มไหน
+    # — การจัดอันดับฉบับเต็มเหนือฉบับย่อจะแก้เคสนี้ได้ก็จริง แต่ผิดหลักเมื่อข้อเท็จจริง
+    # อยู่ในฉบับย่อเล่มเดียว และยังไม่ช่วยกรณีข้ออ้างค้างภายในเล่มเดียวกัน
+    #
+    # **ไม่ปิดข้อความเตือน** ถ้าไม่มีหน้าใดในผลการค้นยืนยันข้ออ้างที่ค้างได้
+    # บรรทัด "ยังยืนยันไม่ได้" ยังขึ้นตามเดิมทุกประการ
+    if verdict.unsupported and len(sources) < _MAX_EVIDENCE_PAGES:
+        shown = {(x["document_id"], x["page_start"]) for x in sources}
+        want = {c.shown for c in verdict.unsupported}
+        # ชิ้นที่ค้นมาไม่มี document_id ติดมาด้วย ต้องหาจากตารางก่อนจึงจะเทียบกับหน้าที่
+        # แสดงอยู่แล้วได้ — ถ้าเทียบด้วยเลขหน้าอย่างเดียวจะชนกันข้ามเล่ม
+        cand_files = _evidence_filenames(db, [c.chunk_id for c in units_all])
+        keyed = []
+        for c in units_all:
+            row = cand_files.get(str(c.chunk_id))
+            doc = str(row["document_id"]) if row and row["document_id"] else None
+            if row is None or not row["file"] or c.page_number is None:
+                continue
+            key = (doc, int(c.page_number))
+            if key not in shown:
+                keyed.append((key, c, row))
+        extra_texts = _page_texts(db, [k for k, _c, _r in keyed])
+        for key, cand, row in keyed:
+            if len(sources) >= _MAX_EVIDENCE_PAGES:
+                break
+            if key in shown:
+                continue
+            text_of_page = extra_texts.get(key) or getattr(cand, "content", "") or ""
+            if not text_of_page:
+                continue
+            got = {c.shown for c in verify_claims(reply, [text_of_page]).checked if c.supported}
+            if not (got & want):
+                continue
+            shown.add(key)
+            # บันทึกไว้ให้ตรวจย้อนหลังได้ว่าหน้าไหนถูกเติมเพราะยืนยันข้ออ้างใด
+            logger.info("เติมหน้าที่ยืนยันข้ออ้างที่ยังค้าง: %s หน้า %s -> %s",
+                        row["file"], cand.page_number, sorted(got & want))
+            sources.append({
+                "file": row["file"],
+                "page_start": cand.page_number,
+                "page_end": cand.page_number,
+                "course_title": cand.course_title,
+                "document_id": str(row["document_id"]) if row["document_id"] else None,
+                # หน้านี้ถูกเติมเพราะยืนยันข้ออ้างที่ค้าง ไม่ได้มาจากการไล่เก็บถ้อยคำ
+                "answer_coverage": None,
+            })
+            page_texts.append(text_of_page)
+            units.append(text_of_page + " · " + (cand.course_title or ""))
+            want -= got
+            if not want:
+                break
+        verdict = verify_claims(reply, units)
+
+    # ---- ชั้นที่สาม: หน้าที่เนื้อหาไม่รองรับข้ออ้างใดเลย ไม่ใช่ที่มาของคำตอบนี้ ----
+    #
+    # การเลือกหน้าเป็นการเทียบถ้อยคำ หน้าที่ซ้ำแต่ชื่อหลักสูตรหรือคำเชื่อมจึงเข้ามาได้
+    # (it66.pdf หน้า 137 เมื่อ 15 ต.ค. 2569 — หน้าผลสำรวจความเห็นอาจารย์ ถูกแสดงเป็น
+    # ที่มาของคำตอบโครงสร้างหลักสูตร) · การที่คำตอบ "โดยรวม" มีหลักฐานแล้วไม่ได้ทำให้
+    # ทุกหน้าที่ถูกเลือกใช้อ้างได้ จึงตรวจความเกี่ยวข้องของแต่ละหน้าแยกจากกัน
+    #
+    # เทียบด้วย **เนื้อหาหน้าเท่านั้น** ไม่ต่อชื่อหลักสูตร เพราะชื่อเล่มติดอยู่กับทุกหน้า
+    # (ดูเหตุผลใน answer_claims.supported_by) และนับเฉพาะข้ออ้างที่เป็นสาระ ไม่นับปีหรือ
+    # ระดับปริญญาซึ่งเขียนซ้ำแทบทุกหน้าของเล่ม (ดู answer_claims.CONTENT_CLAIMS)
+    #
+    # ตัดแล้วตรวจข้ออ้างใหม่กับชุดที่เหลือ เพื่อให้สถานะที่ผู้ใช้เห็นเป็นผลของหน้าที่แสดง
+    # จริง ๆ ไม่ใช่ของหน้าที่ถูกตัดออกไปแล้ว
+    own = supported_by_claims(reply, page_texts)
+    keep = [i for i, got in enumerate(own)
+            if any(c.kind in CONTENT_CLAIMS for c in got)]
+    if verdict.checked and keep and len(keep) < len(sources):
+        sources = [sources[i] for i in keep]
+        units = [units[i] for i in keep]
+        verdict = verify_claims(reply, units)
+
+    cite = "; ".join(
+        f"{x['file']} หน้า {x['page_start']}" if x["page_start"] else x["file"] for x in sources
+    )
+    unverified = "; ".join(c.shown for c in verdict.unsupported)
+    if verdict.status in ("รองรับครบ", "ไม่มีข้ออ้างที่ตรวจได้"):
+        line = f"ที่มา: {cite}"
+    elif verdict.status == "รองรับบางส่วน":
+        line = (f"ที่มา (ตรวจแล้วรองรับบางส่วน): {cite}"
+                f"\nยังยืนยันไม่ได้จากหน้าที่อ้าง: {unverified}")
+    else:
+        # หน้าที่เลือกมาใกล้เคียงคำตอบ แต่ข้ออ้างที่ตรวจได้ไม่มีข้อใดตรงเลย
+        # จึงห้ามเรียกว่า "ที่มา" ของคำตอบนี้
+        line = (f"หน้าที่ใกล้เคียงคำตอบ (ยังยืนยันคำตอบไม่ได้): {cite}"
+                f"\nยังยืนยันไม่ได้จากหน้าที่อ้าง: {unverified}")
+    for x in sources:
+        x["claim_status"] = verdict.status
+        x["unverified_claims"] = [c.shown for c in verdict.unsupported]
+    return f"{reply.rstrip()}\n\n{line}", sources
 
 
 def answer_question(
@@ -1410,26 +2103,48 @@ def answer_question(
     prior: list[PriorTurn] | None = None,
 ) -> ChatReply:
     """ตอบแบบรอจนเขียนเสร็จแล้วส่งทีเดียว — ใช้โดยชุดประเมินและผู้เรียกที่ไม่ต้องการสตรีม"""
-    p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
-    if p.canned is not None:
-        reply_text = p.canned
-    else:
-        # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
-        # มากกว่าความหลากหลายของสำนวน
-        connector = get_llm_connector()
-        reply_text = connector.chat(
-            p.messages,
-            temperature=0.1,
-            num_predict=connector.answer_token_cap,
-            **no_fallback_kwargs(connector, p.allow_fallback),
-        ).strip()
+    outer = _Stages()
+    # เพดานเวลารวมของคำขอ ครอบทุกขั้นที่ใช้โมเดล (เขียนคำถามใหม่ ด่านตรวจเอกสาร
+    # ขั้นเขียนคำตอบ) รวมการลองซ้ำ การพักรอ และการไล่โมเดลสำรอง
+    budget = start_budget()
+    # ทุกขั้นล้มได้ (โมเดลล่ม หรือคำขอเกินเพดานเวลา) และคำขอที่ล้มคือคำขอที่อยากรู้เวลา
+    # มากที่สุด จึงต้องพิมพ์บรรทัด timing ใน finally ไม่ใช่หลังทุกอย่างสำเร็จ
+    p: Prepared | None = None
+    outcome = "ok"
+    rag_sources: list[dict] = []
+    try:
+        p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
+        outer.mark("prepare")
+        if p.canned is not None:
+            reply_text = p.canned
+        else:
+            # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
+            # มากกว่าความหลากหลายของสำนวน
+            connector = get_llm_connector()
+            reply_text = connector.chat(
+                p.messages,
+                temperature=0.1,
+                num_predict=connector.answer_token_cap,
+                **no_fallback_kwargs(connector, p.allow_fallback),
+            ).strip()
+        outer.mark("write_answer")
 
-    _persist(db, p.session_id, message, reply_text)
-    if p.cacheable:
-        cache_store(
-            db, message, p.corpus_version, p.status, reply_text,
-            [c.model_dump(mode="json") for c in p.citations],
-        )
+        # เติมที่มาที่รองรับคำตอบก่อนเก็บ/เข้าแคช เพื่อให้คำตอบที่หยิบจากแคชมีที่มาเหมือนกัน
+        reply_text, rag_sources = _with_rag_sources(db, p, reply_text)
+
+        _persist(db, p.session_id, message, reply_text)
+        if p.cacheable:
+            cache_store(
+                db, message, p.corpus_version, p.status, reply_text,
+                [c.model_dump(mode="json") for c in p.citations],
+            )
+        outer.mark("persist")
+    except BaseException as exc:  # noqa: BLE001 — บันทึกเวลาแล้วโยนต่อตามเดิม
+        outcome = f"ล้ม:{type(exc).__name__}"
+        raise
+    finally:
+        reset_budget(budget)
+        _log_timing("/chat", outer, p, message, outcome)
     # บันทึกผลของคำตอบจากข้อมูลที่มีโครงสร้าง ทำงานหลังได้คำตอบแล้วใน thread แยก ไม่เปลี่ยนคำตอบนี้
     # STRUCTURED_ANSWERS=off (ค่าตั้งต้น) ไม่ทำอะไรเลย ดู services/structured_shadow.py
     shadow_submit(question=message, interpreted=p.interpreted, has_history=p.has_history,
@@ -1443,6 +2158,12 @@ def answer_question(
         status=p.status,
         in_scope=p.status in ("answered", "not_found"),
         citations=p.citations,
+        # ที่มาของคำตอบจากฐานข้อมูลหลักสูตร ซึ่งไม่ได้มาจากการค้นเอกสารจึงไม่มี citations
+        # ให้บอกที่มา — ก่อนหน้านี้ /chat ไม่ได้ส่งสองช่องนี้ออกมาเลย ทั้งที่ /chat/stream
+        # ส่งอยู่แล้วใน meta ผู้ที่เรียก /chat จึงมองไม่เห็นว่าคำตอบอ้างอิงเอกสารใดหน้าใด
+        source=p.source,
+        # คำตอบจากฐานหลักสูตรใช้ p.sources เดิม · คำตอบจากการค้นเอกสารใช้ชิ้นที่รองรับคำตอบจริง
+        sources=rag_sources,
     )
 
 
@@ -1454,7 +2175,52 @@ def stream_answer(
     prior: list[PriorTurn] | None = None,
 ) -> Iterator[str]:
     """
-    ตอบแบบทยอยส่ง คืนเป็นบรรทัดตามรูปแบบ Server-Sent Events
+    ตอบแบบทยอยส่ง — ตัวนี้ทำหน้าที่เดียวคือคุมเพดานเวลาให้ครอบทุก step ของการสตรีม
+
+    ทำไมต้องแยกเป็นสองชั้น
+    --------------------
+    Starlette ปั๊ม generator แบบ sync ทีละ step ผ่าน threadpool และ **แต่ละ step
+    ได้บริบท (Context) สำเนาใหม่ของคำขอ** ไม่ใช่บริบทเดียวกันทั้งก้อน ผลคือ
+    ค่าที่ตั้งใน ContextVar ตอน step แรกหายไปใน step ถัดไป เพดานเวลาจึงไม่ถูก
+    บังคับตลอดการอ่านสตรีมจากโมเดล ซึ่งเป็นช่วงที่กินเวลาที่สุด และ token ของ
+    ContextVar จาก step แรกก็ reset ใน step หลังไม่ได้ (ValueError)
+
+    เจอจากการรันชุดทดสอบผ่าน /chat-web จริงเมื่อ 14 ต.ค. 2569: ทุกคำขอตอบเนื้อหา
+    ถูกต้องแล้วต่อท้ายด้วย "ระบบตอบไม่ได้ในขณะนี้" เพราะ generator ล้มหลังส่ง
+    คำตอบเสร็จ — ล้มทั้ง 19/19 คำขอ ชุดทดสอบระดับฟังก์ชันมองไม่เห็นเพราะเรียก
+    prepare_answer ตรงๆ และตัวที่เลียน generator ก็รันในบริบทเดียว
+
+    จึงเก็บ "เวลาสิ้นสุด" เป็นตัวเลขไว้ที่นี่ แล้วตั้งซ้ำก่อนทุก step ของตัวใน
+    เวลาสิ้นสุดไม่ขยับเพราะเป็นค่าสัมบูรณ์ ตั้งกี่ครั้งก็ได้ผลเท่ากัน
+    """
+    # ตั้งครั้งแรกเพื่อให้ได้เวลาสิ้นสุด แล้วใช้ค่าเดิมนี้ตั้งซ้ำทุก step
+    deadline = start_budget()
+    inner = _stream_answer_events(db, user_id, session_id, message, prior)
+    try:
+        while True:
+            apply_budget(deadline)
+            try:
+                event = next(inner)
+            except StopIteration:
+                return
+            yield event
+    finally:
+        # ปิดตัวในก่อน เพื่อให้ finally ของมัน (บันทึกเวลา) ทำงานแม้ผู้ใช้ปิดหน้าเว็บกลางคัน
+        inner.close()
+        reset_budget()
+
+
+def _stream_answer_events(
+    db: Session,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID | None,
+    message: str,
+    prior: list[PriorTurn] | None = None,
+) -> Iterator[str]:
+    """
+    เนื้องานจริงของการสตรีม — ไม่แตะเพดานเวลา ตัวเรียก (stream_answer) ดูแลให้
+
+    ลำดับเหตุการณ์: meta (หนึ่งครั้ง) -> token (หลายครั้ง) -> done
 
     ลำดับเหตุการณ์: meta (หนึ่งครั้ง) -> token (หลายครั้ง) -> done
     ฝั่งหน้าเว็บใช้ meta ตั้งค่าสถานะกับรายการอ้างอิงได้ทันทีก่อนตัวอักษรแรกมาถึง
@@ -1463,7 +2229,20 @@ def stream_answer(
     FastAPI ปิด session ของ dependency ทิ้งตั้งแต่ตอนที่ route คืนค่า ซึ่งเกิดก่อน
     generator นี้ทำงานจบ ถ้าใช้ตัวเดิมจะได้ error เรื่อง session ถูกปิดไปแล้ว
     """
-    p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
+    outer = _Stages()
+    # ขั้นเตรียมคำตอบล้มได้เอง (โมเดลล่ม เพดานเวลาหมด ฐานข้อมูลสะดุด) และคำขอที่ล้ม
+    # ตรงนี้คือคำขอที่อยากรู้เวลามากที่สุด เพราะมันคือคำขอที่ผู้ใช้รอนานที่สุด
+    #
+    # เดิมบล็อก try/finally ที่บันทึกเวลาเริ่มหลังขั้นนี้ คำขอที่ล้มระหว่างเตรียมคำตอบ
+    # จึงไม่มีบรรทัด timing เลย — ตรวจทางตอบเร็ว 14 ต.ค. 2569 พบ 7 ข้อจาก 22 ข้อ
+    # ที่หายไปทั้งหมดแบบนี้ ทำให้หาสาเหตุความช้าจาก log ไม่ได้
+    p: Prepared | None = None
+    try:
+        p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
+    except BaseException as exc:  # noqa: BLE001 — บันทึกเวลาแล้วโยนต่อตามเดิม
+        _log_timing("/chat-web", outer, p, message, f"ล้มตอนเตรียม:{type(exc).__name__}")
+        raise
+    outer.mark("prepare")
     yield _sse(
         "meta",
         {
@@ -1476,32 +2255,53 @@ def stream_answer(
             # ที่มาของคำตอบจากฐานข้อมูลหลักสูตร (None สำหรับคำตอบอื่น) — เป็นคีย์ที่เพิ่มเข้ามา
             # ผู้อ่านเดิมที่ไม่รู้จักคีย์นี้ทำงานได้เหมือนเดิมทุกประการ
             "source": p.source,
+            # ครบทุกฉบับที่คำตอบอ้างถึง ต่างจาก source ที่มีค่าเฉพาะคำตอบฉบับเดียว
+            "sources": p.sources,
         },
     )
 
-    if p.canned is not None:
-        yield _sse("token", {"t": p.canned})
-        reply_text = p.canned
-    else:
-        parts: list[str] = []
-        connector = get_llm_connector()
-        for chunk in connector.chat_stream(
-            p.messages,
-            temperature=0.1,
-            num_predict=connector.answer_token_cap,
-            **no_fallback_kwargs(connector, p.allow_fallback),
-        ):
-            parts.append(chunk)
-            yield _sse("token", {"t": chunk})
-        reply_text = "".join(parts).strip()
+    # เหตุผลเดียวกับใน answer_question — ขั้นเขียนคำตอบล้มได้ ต้องบันทึกเวลาเสมอ
+    outcome = "ok"
+    try:
+        if p.canned is not None:
+            yield _sse("token", {"t": p.canned})
+            reply_text = p.canned
+        else:
+            parts: list[str] = []
+            connector = get_llm_connector()
+            for chunk in connector.chat_stream(
+                p.messages,
+                temperature=0.1,
+                num_predict=connector.answer_token_cap,
+                **no_fallback_kwargs(connector, p.allow_fallback),
+            ):
+                parts.append(chunk)
+                yield _sse("token", {"t": chunk})
+            reply_text = "".join(parts).strip()
+        outer.mark("write_answer")
 
-    with SessionLocal() as fresh:
-        _persist(fresh, p.session_id, message, reply_text)
-        if p.cacheable:
-            cache_store(
-                fresh, message, p.corpus_version, p.status, reply_text,
-                [c.model_dump(mode="json") for c in p.citations],
-            )
+        with SessionLocal() as fresh:
+            # คัดที่มาที่รองรับคำตอบ แล้วส่งส่วนที่เติมเป็น token ก้อนสุดท้าย
+            # ทำหลังโมเดลเขียนจบ เพราะต้องรู้ข้อความคำตอบทั้งหมดก่อนจึงรู้ว่าหน้าไหนรองรับ
+            # header ส่งไม่ได้แล้วเพราะ header ออกไปกับไบต์แรก จึงส่งเป็นเหตุการณ์ sources แทน
+            augmented, rag_sources = _with_rag_sources(fresh, p, reply_text)
+            if augmented != reply_text:
+                yield _sse("token", {"t": augmented[len(reply_text.rstrip()):]})
+                reply_text = augmented
+            if rag_sources:
+                yield _sse("sources", {"sources": rag_sources})
+            _persist(fresh, p.session_id, message, reply_text)
+            if p.cacheable:
+                cache_store(
+                    fresh, message, p.corpus_version, p.status, reply_text,
+                    [c.model_dump(mode="json") for c in p.citations],
+                )
+        outer.mark("persist")
+    except BaseException as exc:  # noqa: BLE001 — บันทึกเวลาแล้วโยนต่อตามเดิม
+        outcome = f"ล้ม:{type(exc).__name__}"
+        raise
+    finally:
+        _log_timing("/chat-web", outer, p, message, outcome)
     # ดูหมายเหตุเดียวกันใน answer_question — ส่งหลังตัวอักษรสุดท้ายถึงผู้ใช้แล้ว ไม่หน่วงหรือเปลี่ยนคำตอบ
     shadow_submit(question=message, interpreted=p.interpreted, has_history=p.has_history,
                   served_status=p.status, served_reply=reply_text, served_source=p.served_source)

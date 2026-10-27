@@ -1,0 +1,83 @@
+%% Sequence — ขั้นตอนถาม-ตอบ AI: POST /api/chat (เส้นทางที่หน้าเว็บใช้จริง)
+%% ฉบับ Mermaid สำหรับนำเข้า lucid.app  ·  ซอร์สต้นทาง: docs/diagrams/sequence-ai-chat.puml
+%% ---
+%% Mermaid ไม่มีเส้นคั่น == หัวข้อ == แบบ PlantUML จึงใช้ Note over แทน
+%% ---
+%% ข้อมูลประกอบที่ Mermaid ไม่มีที่วาง (PlantUML ใส่ไว้ในบล็อก legend):
+%%   หนึ่งคำถามของผู้ใช้ ไม่เท่ากับ หนึ่งการเรียกโมเดล
+%%     วัดจริงเมื่อ 16 ต.ค. 2569: คำขอ 4 ครั้ง ใช้การเรียกโมเดล 9 ครั้ง
+%%   คำถามที่ตอบได้จากฐานข้อมูลหรือจากแคช ไม่เรียกโมเดลเลย จึงเร็วกว่ามาก
+%%   ผู้เขียนคำตอบคือ Gemini (LLM_PROVIDER=gemini)
+%%     ส่วน Ollama ทำ embedding เสมอ และเป็นตัวสำรองเขียนคำตอบ
+
+sequenceDiagram
+    autonumber
+    actor user as ผู้ใช้ นักเรียน
+    participant spa as หน้าเว็บ SPA<br/>ChatAdvisor.jsx
+    participant caddy as Caddy
+    participant be as backend<br/>route_web_compat.py<br/>services/chat.py
+    participant db as PostgreSQL<br/>+ pgvector
+    participant ollama as Ollama<br/>bge-m3 / qwen2.5:3b
+    participant gemini as Gemini API
+
+    user ->> spa: พิมพ์คำถาม ไม่ต้องล็อกอิน
+    spa ->> caddy: POST /api/chat<br/>messages: ประวัติทั้งก้อน
+    caddy ->> be: เขียน URL ใหม่เป็น POST /chat-web<br/>ผ่าน web_rate_limiter 20/นาที 200/ชม. ต่อ IP
+
+    Note over be: ตัดข้อความสุดท้ายเป็นคำถามปัจจุบัน ที่เหลือคือประวัติ<br/>ผูกคำขอกับบัญชีกลางบัญชีเดียว shared_user db<br/>หน้าเว็บจึงไม่มีประวัติแชตรายบุคคล
+
+    Note over be,gemini: ขั้นที่ 1 — prepare_answer ต้องทำให้จบก่อนส่งตัวอักษรแรก<br/>เหตุผล: ที่มาของคำตอบเดินทางไปกับ HTTP header ซึ่งถูกส่งพร้อมสถานะ<br/>ตั้งแต่ไบต์แรก จึงต้องคิดให้เสร็จก่อน เปลี่ยนทีหลังไม่ได้
+
+    alt ด่าน 0 ถึง 0.7185 — ตอบได้เองจากโค้ดหรือฐานข้อมูล ไม่เรียกโมเดลเลย
+        be ->> db: ถามข้อมูลหลักสูตรที่ตรวจรับแล้ว<br/>mko.v_live_values / v_live_subjects
+        db -->> be: ข้อมูลที่ตรวจรับแล้ว
+        Note right of be: ด่าน 0 ทักทาย/ขอบคุณ · ด่าน 0.4 คณะเปิดสอนอะไรบ้าง<br/>ด่าน 0.5 ค่าเทอม · ด่าน 0.7-0.7185 ตอบต่อยอด / ระดับปริญญา /<br/>ปีฉบับ / ข้อเท็จจริงหลักสูตร / รายวิชา<br/>ได้ p.canned = True แล้วจบ ไม่ไปด่านถัดไป
+    else ด่าน 0.719 — ตรวจแคชคำตอบ
+        Note right of be: ด่านแคชอยู่ตรงนี้ ไม่ใช่ด่านแรก<br/>อยู่หลังด่านที่ตอบจากฐานข้อมูล และก่อนการค้นเอกสาร<br/>ใช้เฉพาะเมื่อไม่มีประวัติบทสนทนา
+        be ->> db: หา question_key + corpus_version ปัจจุบัน<br/>ในตาราง chat_answer_cache
+        alt เจอในแคช
+            db -->> be: คืน reply + citations บวก hits อัปเดต last_used_at
+        else ไม่เจอ
+            Note right of be: ไปด่าน 0.72 ถึงด่าน 3
+        end
+    else ด่าน 0.72 ถึง 0.95 — แนะนำสาขา / ถามกลับ / ตรวจฐานข้อมูลรอบสอง
+        be ->> db: ตรวจเงื่อนไขสาขา
+    else ด่าน 1 ถึง 3 — ค้นเอกสาร RAG แล้วตรวจว่าตอบได้ไหม
+        be ->> ollama: embed คำถามด้วย bge-m3 1024 มิติ
+        ollama -->> be: เวกเตอร์
+        be ->> db: search_similar_chunks<br/>ค้นบน course_chunks CHAT_TOP_K=25
+        db -->> be: ชิ้นส่วนเอกสาร มคอ.2
+        opt มีประวัติ หรือคำถามเป็นภาษาอังกฤษ ด่าน 2 และ 2.5
+            be ->> gemini: เขียนคำถามใหม่ / แปลเป็นไทย แล้วค้นซ้ำ
+        end
+        be ->> gemini: _grounding_verdict — ตอบจากเอกสารที่ค้นมาได้ไหม
+        gemini -->> be: ให้เหตุผลก่อน แล้วตัดสิน<br/>ตอบได้ / ปฏิเสธ / ไม่มีข้อมูล
+    end
+
+    Note over be,spa: ขั้นที่ 2 — ส่ง header แล้วจึงสตรีมคำตอบ
+
+    be ->> be: ดึงเหตุการณ์ meta ออกมาก่อนสร้าง StreamingResponse
+    be -->> spa: HTTP 200 text/plain charset=utf-8<br/>X-Source-Document, X-Source-Page<br/>X-Source-Title base64, X-Source-Programme base64
+
+    alt คำตอบเตรียมไว้แล้ว p.canned = True จากด่าน DB หรือแคช
+        be -->> spa: ส่งเป็น token ก้อนเดียวจบ — ไม่เรียกโมเดลเลย
+    else ต้องให้โมเดลเขียนคำตอบใหม่
+        be ->> gemini: chat_stream
+        alt Gemini ทำงานปกติ
+            gemini -->> be: สตรีม token ทีละส่วน
+            be -->> spa: ส่งต่อให้หน้าเว็บแสดงทันที
+        else Gemini ล้มก่อนส่งตัวอักษรแรก started = False
+            Note over be,ollama: _SplitConnector สลับไปโมเดลในเครื่องเงียบ ๆ<br/>สลับได้เฉพาะตอนยังไม่ได้ส่งตัวอักษรแรก<br/>ถ้าสลับกลางคัน ผู้ใช้จะเห็นคำตอบสองชุดจากคนละโมเดล
+            be ->> ollama: chat_stream ด้วย qwen2.5:3b ลดเพดานความยาว
+            ollama -->> be: สตรีม token
+            be -->> spa: ส่งต่อให้หน้าเว็บ
+        else ล้มทั้งสองเจ้า หรือล้มหลังส่งตัวอักษรแรกแล้ว
+            Note over be: /chat-web ตอบ HTTP 200 เสมอ ไม่ส่ง 503<br/>เพราะหน้าเว็บอ่านสตรีมเป็นข้อความล้วนแล้วแสดงตรง ๆ<br/>และสถานะ HTTP ออกไปพร้อมไบต์แรกแล้ว เปลี่ยนไม่ได้<br/>จึงส่งข้อความแจ้งเหตุขัดข้องเป็นเนื้อความแทน
+            be -->> spa: ข้อความแจ้งเหตุขัดข้องในสตรีม
+        end
+    end
+
+    be ->> be: คัดหน้าที่รองรับคำตอบจริง<br/>answer_evidence.py + answer_claims.py
+    be -->> spa: ต่อท้ายรายการที่มาเป็น token ก้อนสุดท้าย แล้วจบสตรีม
+    be ->> db: เปิด session ใหม่ บันทึกบทสนทนา _persist<br/>และเก็บแคชถ้า p.cacheable = True
+    spa -->> user: แสดงคำตอบพร้อมป้ายอ้างอิงเอกสาร / เลขหน้า มคอ.2

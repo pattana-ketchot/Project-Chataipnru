@@ -1,0 +1,5 @@
+# ย้อนการตรึงอิมเมจ backend กลับเป็น release ตัวนับ (16 ต.ค. 2569)
+# ใช้แทน compose.pin-backend-groupfix2.yml ตอน rollback — ไฟล์ -f ตัวหลังชนะตัวหน้า
+services:
+  backend:
+    image: course-advisor-system-backend:counter-2569-10-16

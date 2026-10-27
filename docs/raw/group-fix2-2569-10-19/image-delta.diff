@@ -1,0 +1,8 @@
+48c48
+< 5d7bb7caa3708a71242944c40134d0a0  ./backend/app/services/chat.py
+---
+> 1e2497aa4f0156f32b7337f5564a1625  ./backend/app/services/chat.py
+70c70
+< cd31a585cc0dc574fdcf055b4568f165  ./backend/app/services/subjects.py
+---
+> 78e02ebc8cdc05be625f2a0dfc849658  ./backend/app/services/subjects.py

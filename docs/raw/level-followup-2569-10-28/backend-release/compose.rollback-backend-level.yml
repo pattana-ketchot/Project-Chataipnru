@@ -1,0 +1,4 @@
+# ย้อนอิมเมจ backend กลับเป็นของ release 27 ต.ค. 2569
+services:
+  backend:
+    image: course-advisor-system-backend:level-2569-10-27

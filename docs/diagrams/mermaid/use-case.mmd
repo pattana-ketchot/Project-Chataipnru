@@ -1,0 +1,90 @@
+%% Use Case — ระบบแนะนำหลักสูตร SCI Advisor
+%% ฉบับ Mermaid สำหรับนำเข้า lucid.app (Lucid รับ Mermaid แต่ไม่รับ PlantUML)
+%% ซอร์สต้นทาง: docs/diagrams/use-case.puml
+%% ---
+%% Mermaid ไม่มีชนิด use case diagram จึงวาดเป็น flowchart
+%% actor = กล่องขอบมน  ·  use case = กล่องสี่เหลี่ยม  ·  กรอบ = ขอบเขตสิทธิ์
+%% ---
+%% ข้อมูลประกอบที่ Mermaid ไม่มีที่วาง (PlantUML ใส่ไว้ในบล็อก legend):
+%%   สิทธิ์มาจาก role คู่กับ status เสมอ ไม่ใช่ role เดี่ยว ๆ
+%%   ผู้ที่ status=pending หรือ rejected เข้าส่วนผู้ดูแลไม่ได้ แม้ role จะเป็น editor
+%%   จำนวนบัญชีนับจากฐานข้อมูล production เมื่อ 16 ต.ค. 2569
+%%   เพดานความถี่: แชต 20 ครั้ง/นาที 200/ชม. ต่อ IP · เข้าสู่ระบบ 10 ครั้ง/นาที 60/ชม. ต่อ IP
+
+flowchart LR
+    guest(["ผู้เยี่ยมชม Guest<br/>ไม่มีบัญชี"])
+    user(["ผู้ใช้ที่สมัครแล้ว User<br/>role=user, approved<br/>204 บัญชี pending 1"])
+    editor(["ผู้ดูแลเนื้อหา Editor<br/>role=editor, approved<br/>ยังไม่มีบัญชีจริง 0"])
+    admin(["ผู้ดูแลระบบ Admin<br/>role=admin, approved<br/>1 บัญชี"])
+
+    subgraph PUB["ความสามารถสาธารณะ — ไม่ต้องล็อกอิน"]
+        UC_LIST["ดูรายการสาขาทั้งหมด"]
+        UC_DETAIL["ดูรายละเอียดสาขา"]
+        UC_NEWS["ดูข่าวของคณะ"]
+        UC_CHAT["ถาม AI ในหน้าแชต<br/>POST /api/chat"]
+        UC_COMPARE["เปรียบเทียบสองสาขา<br/>POST /api/compare-courses"]
+        UC_RECO["ให้ระบบแนะนำสาขา<br/>POST /api/recommend-major"]
+        UC_FACTS["ดูข้อมูลสรุปหลักสูตร<br/>GET /api/course-facts"]
+        UC_AUTH["สมัครบัญชี / เข้าสู่ระบบ"]
+    end
+
+    subgraph MEM["ความสามารถของสมาชิก — ตรวจ JWT ของระบบเอง"]
+        UC_PROFILE["จัดการโปรไฟล์ตัวเอง"]
+        UC_PWD["เปลี่ยนรหัสผ่าน / ออกจากระบบ"]
+        UC_REQ["บันทึกเงื่อนไขที่ต้องการ"]
+        UC_CHATAUTH["ถาม AI แบบเก็บประวัติ<br/>POST /chat, /chat/stream"]
+    end
+
+    subgraph EDT["ผู้ดูแลเนื้อหา — require_staff แก้ได้ ลบไม่ได้"]
+        UC_EDIT_C["เพิ่ม / แก้ไขสาขา"]
+        UC_EDIT_N["เพิ่ม / แก้ไขข่าว"]
+        UC_EDIT_K["เพิ่ม / แก้ไขคลังความรู้"]
+        UC_AI["ตั้งค่าโมเดล AI"]
+        UC_UPLOAD["อัปโหลดรูป / ไฟล์"]
+    end
+
+    subgraph ADM["ผู้ดูแลระบบ — require_admin_role ลบและจัดการบัญชี"]
+        UC_DEL["ลบสาขา / ข่าว / คลังความรู้"]
+        UC_USERS["ดูรายชื่อผู้ใช้ทั้งระบบ"]
+        UC_ROLE["เปลี่ยน role / อนุมัติบัญชีผู้อื่น"]
+        UC_RESET["ออกลิงก์ตั้งรหัสใหม่ให้ผู้อื่น"]
+    end
+
+    guest --> UC_LIST
+    guest --> UC_DETAIL
+    guest --> UC_NEWS
+    guest --> UC_CHAT
+    guest --> UC_COMPARE
+    guest --> UC_RECO
+    guest --> UC_FACTS
+    guest --> UC_AUTH
+
+    user --> UC_PROFILE
+    user --> UC_PWD
+    user --> UC_REQ
+    user --> UC_CHATAUTH
+
+    editor --> UC_EDIT_C
+    editor --> UC_EDIT_N
+    editor --> UC_EDIT_K
+    editor --> UC_AI
+    editor --> UC_UPLOAD
+
+    admin --> UC_DEL
+    admin --> UC_USERS
+    admin --> UC_ROLE
+    admin --> UC_RESET
+
+    user -. "สืบทอดสิทธิ์" .-> guest
+    editor -. "สืบทอดสิทธิ์" .-> user
+    admin -. "สืบทอดสิทธิ์" .-> editor
+
+    N1["หน้าเว็บที่ deploy ไม่ได้เรียกเส้นทางนี้<br/>หน้าแชตเรียก /api/chat ซึ่ง Caddy ส่งไปที่<br/>/chat-web ที่ไม่ต้องล็อกอิน<br/>เส้นทางนี้ใช้โดยชุดประเมินและนักพัฒนา"]
+    N2["editor ลบไม่ได้<br/>หน้าเว็บซ่อนปุ่มลบไว้ก็จริง<br/>แต่ด่านจริงอยู่ที่ backend<br/>deps.py::require_admin_role"]
+    UC_CHATAUTH --- N1
+    UC_DEL --- N2
+
+    classDef note fill:#FFF9E8,stroke:#C8A000,color:#333
+    classDef actor fill:#FDFDFD,stroke:#333,stroke-width:2px
+    class N1,N2 note
+    class guest,user,editor,admin actor

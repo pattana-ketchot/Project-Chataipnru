@@ -1,0 +1,157 @@
+%% ER — ฐานข้อมูล course_advisor (schema public และ web)
+%% ฉบับ Mermaid สำหรับนำเข้า lucid.app  ·  ซอร์สต้นทาง: docs/diagrams/er.puml
+%% ---
+%% erDiagram ของ Mermaid ไม่มี package/subgraph จึงใส่ชื่อ schema ไว้หน้าชื่อตาราง
+%%   ไม่มีคำนำหน้า = schema public   ·   web_ = schema web   ·   mko_ = schema mko
+%% ชื่อคอลัมน์ต้องเป็นอักษรละติน ข้อความไทยจึงอยู่ในเครื่องหมายคำพูดท้ายบรรทัด
+%% ---
+%% ข้อมูลประกอบที่ Mermaid ไม่มีที่วาง (PlantUML ใส่ไว้ในบล็อก legend):
+%%   3 schema · 42 ตาราง + 10 view (ไม่รวมตารางสำรอง 2 ตาราง)
+%%   schema web ไม่มี Foreign Key เลย — เส้นประคือการจับคู่ด้วยข้อความในโค้ด
+%%     ไม่ใช่ข้อบังคับของฐานข้อมูล
+%%   ไม่ได้วาดตารางสำรอง 2 ตาราง: public.migration_007_user_backup (202 แถว)
+%%     และ web.news_image_url_backup_20261012 (3 แถว ไม่มี PK)
+%%   จำนวนแถวนับจากฐานข้อมูล production เมื่อ 16 ต.ค. 2569
+%%   รายละเอียดของ schema mko อยู่ในไฟล์ er-mko.mmd
+
+erDiagram
+    users {
+        uuid id PK "206 แถว"
+        citext email UK "unique"
+        text password_hash
+        text role "admin | editor | user"
+        text status "pending | approved | rejected"
+        boolean is_active
+        int failed_login_count
+        timestamptz locked_until
+    }
+    user_profiles {
+        uuid user_id PK "เป็น FK ด้วย · 11 แถว"
+        text education_level
+        text field_of_study
+        text skills
+        text interests
+    }
+    user_requirements {
+        uuid id PK "10 แถว"
+        uuid user_id FK
+        text req_type
+        text req_value
+        int priority
+    }
+    auth_sessions {
+        uuid id PK "35 แถว"
+        uuid user_id FK
+        text token_hash UK "sha256"
+        timestamptz expires_at
+        timestamptz revoked_at
+    }
+    auth_tokens {
+        uuid id PK "2 แถว"
+        uuid user_id FK
+        text purpose "password_reset | email_verify"
+        text token_hash "sha256"
+    }
+    chat_sessions {
+        uuid id PK "4393 แถว"
+        uuid user_id FK
+    }
+    chat_messages {
+        uuid id PK "8332 แถว"
+        uuid session_id FK
+        text role "user | assistant | system"
+        text content
+    }
+    recommendations {
+        uuid id PK "53 แถว"
+        uuid user_id FK
+        uuid course_id FK
+        uuid session_id FK
+    }
+    courses {
+        uuid id PK "24 แถว · 1 สาขาที่มี 2 ฉบับ = 2 แถว"
+        text title
+        boolean is_active
+    }
+    course_documents {
+        uuid id PK "31 แถว"
+        uuid course_id FK
+        uuid uploaded_by FK "ไปที่ users แบบ NO ACTION"
+        text original_filename
+        text file_sha256
+        text storage_path
+    }
+    course_chunks {
+        uuid id PK "9039 แถว"
+        uuid course_id FK
+        uuid document_id FK
+        text content
+        vector embedding "vector(1024) — เปลี่ยนขนาดไม่ได้"
+    }
+    chat_answer_cache {
+        text question_key PK "182 แถว · PK เป็นข้อความ ไม่ใช่ uuid"
+        text corpus_version "มี 8 รุ่นในตาราง · แถวรุ่นเก่าไม่ถูกหยิบมาใช้"
+        text status
+        text reply
+        jsonb citations
+        int hits
+        timestamptz last_used_at
+    }
+    llm_usage_daily {
+        date day PK "เพิ่มเมื่อ 16 ต.ค. 2569 migration 008"
+        text event PK "นับว่าคำตอบมาจากโมเดลตัวไหน"
+        bigint n
+        timestamptz updated_at
+    }
+    web_site_courses {
+        uuid id PK "12 แถว"
+        uuid course_id "NULL ทั้ง 12 แถว · ไม่มี FK"
+        text title
+        text title_en
+        text description
+        jsonb detail
+        uuid created_by "ไม่มี FK บังคับ"
+        uuid updated_by "ไม่มี FK บังคับ"
+    }
+    web_news {
+        uuid id PK "3 แถว"
+    }
+    web_external_news {
+        uuid id PK "15 แถว · ดึงจากเว็บคณะ"
+        text slug
+        timestamptz published_at
+        timestamptz synced_at
+    }
+    web_knowledge_articles {
+        uuid id PK "0 แถว"
+    }
+    web_ai_settings {
+        smallint id PK "บังคับ = 1 · 1 แถว"
+        text model
+        uuid updated_by "ชี้ไปผู้ใช้ที่มีอยู่ไม่ได้"
+        timestamptz updated_at
+    }
+    mko_schema {
+        text tables "22 ตาราง + 10 view — รายละเอียดใน er-mko.mmd"
+        text pipeline "publications to published_values 501 / published_subjects 82"
+        text evidence "document_pages 4129 to evidence 787 — FK ผสม 2 ชุด"
+        text curricula "curricula 24 to field_values 403"
+        text read_path "ระบบถาม-ตอบอ่านผ่าน view v_live_values / v_live_subjects"
+    }
+
+    users ||--o| user_profiles : "CASCADE"
+    users ||--o{ user_requirements : "CASCADE"
+    users ||--o{ auth_sessions : "CASCADE"
+    users ||--o{ auth_tokens : "CASCADE"
+    users ||--o{ chat_sessions : "CASCADE"
+    users ||--o{ recommendations : "CASCADE"
+    chat_sessions ||--o{ chat_messages : "CASCADE"
+    courses ||--o{ course_documents : "CASCADE"
+    courses ||--o{ course_chunks : "CASCADE"
+    course_documents ||--o{ course_chunks : "CASCADE"
+    users ||..o{ course_documents : "uploaded_by NO ACTION"
+    courses ||--o{ recommendations : "CASCADE"
+    courses }o..o{ mko_schema : "เอกสารเล่มเดียวกัน อ้างด้วย course_id"
+    web_site_courses }o..o| courses : "ไม่มี FK — course_id NULL ทั้ง 12 แถว จับคู่ด้วยชื่อสาขาผ่าน normalise_title ในโค้ด"
+    web_site_courses }o..o| users : "created_by / updated_by ชี้ได้จริงแต่ไม่มี FK บังคับ"
+    web_ai_settings }o..o| users : "updated_by ชี้ไปผู้ใช้ที่มีอยู่ไม่ได้"

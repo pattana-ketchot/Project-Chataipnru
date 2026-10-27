@@ -1,0 +1,43 @@
+flowchart TB
+  U(["ผู้ใช้ (เบราว์เซอร์)"])
+
+  subgraph SERVER["เครื่องแม่ข่าย Oracle Cloud · stpnru-advisor.duckdns.org"]
+    direction TB
+    CADDY["<b>Caddy</b> — ตัวรับคำขอและกระจายเส้นทาง<br/>จัดการ HTTPS และเสิร์ฟไฟล์หน้าเว็บจาก /srv/web"]
+    FE["<b>หน้าเว็บ</b> React + Vite<br/>ไฟล์นิ่งที่ build แล้วใน /srv/web"]
+    API["<b>FastAPI</b> (backend)<br/>/api/chat → /chat-web<br/>/api/compare-courses · /api/recommend-major<br/>/api/course-facts · /api/documents/{id}/pdf"]
+    WEBAPI["<b>Node webapi</b><br/>/api/sci-connect-news<br/>/api/sci-connect-news-detail<br/>/api/admin/*"]
+    OLL["<b>Ollama</b> bge-m3<br/>สร้างเวกเตอร์ 1,024 มิติ"]
+    PG[("<b>PostgreSQL 16 + pgvector</b><br/>schema public 10 ตาราง<br/>schema mko 18 ตาราง และ 6 วิว<br/>course_chunks 9,039 · evidence 787")]
+    PDF[["<b>/srv/documents</b><br/>เอกสาร มคอ.2 แบบ PDF 30 เล่ม<br/>ต่อเข้าคอนเทนเนอร์แบบอ่านอย่างเดียว"]]
+  end
+
+  subgraph EXT["บริการภายนอก"]
+    direction TB
+    SB[("<b>Supabase</b> — PostgreSQL บริการคลาวด์<br/>7 ตาราง · RLS 32 นโยบาย<br/>courses · news · external_news<br/>user_profiles · ai_settings<br/>rag_documents · knowledge_articles")]
+    GEM["<b>Gemini</b> 3.5-flash-lite<br/>และโมเดลสำรองอีก 3 ตัว"]
+  end
+
+  U -->|HTTPS| CADDY
+  CADDY -->|"เส้นทางที่ไม่ขึ้นต้นด้วย /api"| FE
+  CADDY -->|"/api/chat · /api/compare-courses<br/>/api/recommend-major · /api/course-facts<br/>/api/documents"| API
+  CADDY -->|"/api/sci-connect-news*<br/>/api/admin/*"| WEBAPI
+
+  API -->|"แปลงคำถามเป็นเวกเตอร์"| OLL
+  OLL -->|"ค้นด้วยระยะโคไซน์"| PG
+  API -->|"อ่านข้อมูลที่เผยแพร่แล้ว<br/>ค้นเวกเตอร์ · บันทึกผลเทียบ"| PG
+  API -->|"ส่งไฟล์ต้นฉบับ"| PDF
+  API -->|"เรียบเรียงคำตอบ เฉพาะเส้นทาง RAG"| GEM
+  WEBAPI -->|"อ่านและเขียนข่าว คลังความรู้ และสิทธิ์"| SB
+  FE -.->|"เบราว์เซอร์เรียกตรง<br/>ข้อมูลหลักสูตร ข่าว และหน้าแอดมิน"| SB
+
+  classDef user fill:#FFF2CC,stroke:#BF8F00,color:#000
+  classDef web fill:#DDEBF7,stroke:#2E75B6,color:#000
+  classDef app fill:#E2EFDA,stroke:#548235,color:#000
+  classDef db fill:#FBE5D6,stroke:#C55A11,color:#000
+  classDef ai fill:#E4DFEC,stroke:#7030A0,color:#000
+  class U user
+  class CADDY,FE web
+  class API,WEBAPI app
+  class PG,SB,PDF db
+  class GEM,OLL ai

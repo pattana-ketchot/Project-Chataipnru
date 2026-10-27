@@ -134,13 +134,18 @@ def _narrow_by_degree(ids: list[uuid.UUID], titles: dict[uuid.UUID, str], questi
     ทรัพยากรชุมชน พ.ศ. 2568 มีทั้งปริญญาโทและปริญญาเอก) ชื่อเฉพาะของทั้งสองเล่มเท่ากัน และปีก็เท่ากัน
     ตัวกรองเดิมจึงแยกไม่ได้ ผู้ใช้ที่พิมพ์ "วิทยาศาสตรมหาบัณฑิต" มาจะได้เล่มปริญญาเอก
 
-    ถ้าระดับที่ระบุไม่ตรงกับเล่มใดเลย ให้คงรายการเดิมไว้ ด้วยเหตุผลเดียวกับการกรองปี
+    **ถ้าระดับที่ระบุไม่ตรงกับเล่มใดเลย ต้องคืนรายการว่าง ไม่ใช่คงรายการเดิม**
+
+    ต่างจากการกรองปีโดยเจตนา · เดิมเขียน `matched or ids` เหมือนกันทั้งคู่ แล้ววัดเจอ
+    เมื่อ 13 ต.ค. 2569: ถาม "หลักสูตรปริญญาโทการจัดการเทคโนโลยีการเกษตรเรียนกี่หน่วยกิต"
+    ได้คำตอบของ **ปริญญาตรี** 130 หน่วยกิต ทั้งที่ปริญญาโทคือ 36 — การถอยไปใช้รายการ
+    เดิมคือการตอบคนละระดับปริญญาโดยไม่มีสัญญาณเตือน ซึ่งผิดมากกว่าการไม่ตอบ
+    ผู้เรียกต้องเห็นรายการว่างแล้วไปบอกผู้ใช้ว่าไม่มีข้อมูลระดับนั้น
     """
     level = requested_degree_level(question)
     if level is None:
         return ids
-    matched = [cid for cid in ids if degree_level_of(degree_of_title(titles.get(cid, ""))) == level]
-    return matched or ids
+    return [cid for cid in ids if degree_level_of(degree_of_title(titles.get(cid, ""))) == level]
 
 
 def _narrow_by_year(
@@ -164,9 +169,77 @@ def _narrow_by_year(
     return matched or ids
 
 
+# คำที่บอกว่าผู้ใช้ตั้งใจถามถึงหลายฉบับ — เจอคำเหล่านี้แล้วห้ามตัดเหลือฉบับเดียว
+#
+# "ฉบับเก่ากับฉบับใหม่ต่างกันอย่างไร" ต้องเห็นทั้งสองเล่มจึงจะตอบได้
+# ไม่ใส่คำว่า "ใหม่" เดี่ยว ๆ เพราะ "หลักสูตรใหม่มีวิชาอะไรบ้าง" คือการถามถึงฉบับล่าสุด
+# ซึ่งตัวกรองนี้ให้คำตอบที่ถูกอยู่แล้ว
+_MULTI_EDITION_WORDS = re.compile(
+    r"ฉบับ|ปรับปรุง|เก่า|ย้อนหลัง|ทุกปี|แต่ละปี|ทุกฉบับ|ต่างกันอย่างไร"
+)
+
+
+def _year_of_title(title: str) -> int | None:
+    """ปีการศึกษาของเล่ม อ่านจากวงเล็บท้ายชื่อหลักสูตร คืน None ถ้าชื่อไม่มีปี"""
+    m = re.search(r"25\d{2}", title)
+    return int(m.group(0)) if m else None
+
+
+def _narrow_to_latest_edition(
+    ids: list[uuid.UUID], titles: dict[uuid.UUID, str], question: str
+) -> list[uuid.UUID]:
+    """
+    ถ้าคำถาม **ไม่ได้** ระบุปี ให้เหลือเฉพาะเล่มฉบับล่าสุดของหลักสูตรนั้น
+
+    ทำไมต้องมี
+    ----------
+    คลังนี้เก็บหลักสูตรเดียวกันไว้หลายฉบับ และหลายสาขาฉบับเก่ามีเนื้อหาในคลัง
+    **มากกว่า** ฉบับปัจจุบัน (วัดเมื่อ 26 ต.ค. 2569)
+
+        วิทยาการคอมพิวเตอร์     2561 = 420 ชิ้น   2566 = 220 ชิ้น
+        คณิตศาสตร์              2564 = 325 ชิ้น   2569 =  92 ชิ้น
+        คอมพิวเตอร์แอนิเมชัน      2564 = 404 ชิ้น   2569 = 100 ชิ้น
+
+    เมื่อผู้ใช้ถามลอย ๆ ว่า "สนใจวิทยาการคอมพิวเตอร์" การค้นจะไปเจอชิ้นของฉบับเก่า
+    มากกว่า คำตอบจึงอ้างที่มาเป็น cs61.pdf ซึ่งเป็นฉบับที่ถูกแทนที่ไปแล้ว
+    เนื้อหาคำตอบอาจไม่ผิด แต่ผู้ใช้ที่เปิดไปอ่านจะได้โครงสร้างหลักสูตรเก่า
+    (เจอจริงจากการใช้งานบนหน้าเว็บเมื่อ 26 ต.ค. 2569)
+
+    ทำไมไม่แก้ด้วยการจัดอันดับ
+    -------------------------
+    การดันคะแนนของเล่มใหม่ไม่รับประกันผล เพราะจำนวนชิ้นต่างกันถึงสี่เท่าในบางสาขา
+    การตัดขอบเขตก่อนค้นให้ผลที่คาดเดาได้และอธิบายได้
+
+    ขอบเขตของการตัด
+    ---------------
+    - ตัดเฉพาะตอนคำถามไม่ระบุปี ถ้าระบุปี `_narrow_by_year` จัดการไปแล้ว
+    - ไม่ตัดเมื่อคำถามส่อว่าต้องการหลายฉบับ (เช่น "ฉบับเก่ากับใหม่ต่างกันอย่างไร")
+    - ถ้าไม่มีเล่มใดอ่านปีได้เลย คงรายการเดิมไว้ ดีกว่าตัดจนไม่เหลืออะไรค้น
+    - เล่มที่ปีเท่ากันแต่คนละระดับปริญญาจะเหลือทั้งคู่ แล้วให้ `_narrow_by_degree` เลือกต่อ
+    """
+    if _year_in(question) is not None:
+        return ids
+    if _MULTI_EDITION_WORDS.search(question):
+        return ids
+    years = {cid: _year_of_title(titles.get(cid, "")) for cid in ids}
+    known = [y for y in years.values() if y is not None]
+    if not known:
+        return ids
+    newest = max(known)
+    return [cid for cid in ids if years.get(cid) == newest] or ids
+
+
 def _narrow(ids: list[uuid.UUID], titles: dict[uuid.UUID, str], question: str) -> list[uuid.UUID]:
-    """จำกัดขอบเขตด้วยสิ่งที่คำถามระบุ: ปีการศึกษาก่อน แล้วจึงระดับปริญญา"""
-    return _narrow_by_degree(_narrow_by_year(ids, titles, question), titles, question)
+    """
+    จำกัดขอบเขตด้วยสิ่งที่คำถามระบุ
+
+    ลำดับ: ปีที่ระบุ -> ฉบับล่าสุดเมื่อไม่ระบุปี -> ระดับปริญญา
+    ขั้นกลางต้องอยู่ก่อนขั้นระดับปริญญา เพราะหลักสูตรที่มีทั้งโทและเอกในปีเดียวกัน
+    ต้องเหลือทั้งคู่ไว้ให้ขั้นระดับปริญญาเลือก
+    """
+    scoped = _narrow_by_year(ids, titles, question)
+    scoped = _narrow_to_latest_edition(scoped, titles, question)
+    return _narrow_by_degree(scoped, titles, question)
 
 
 def resolve_scope(db: Session, question: str) -> CourseScope | None:
@@ -195,10 +268,10 @@ def resolve_scope(db: Session, question: str) -> CourseScope | None:
     for alias, full in ALIASES.items():
         if not _alias_present(alias, lowered):
             continue
-        for name in by_name:
-            if name and name in full:
-                # ตัดคำย่อออกจากคำถามแทนชื่อเต็ม เพราะในคำถามมีแค่คำย่อ
-                ids = _narrow(by_name[name], titles, question)
+        for name in _names_for_alias(alias, full, by_name):
+            # ตัดคำย่อออกจากคำถามแทนชื่อเต็ม เพราะในคำถามมีแค่คำย่อ
+            ids = _narrow(by_name[name], titles, question)
+            if ids:
                 return _build(ids, name, question, strip=alias)
     return None
 
@@ -230,16 +303,191 @@ def resolve_scopes(db: Session, question: str) -> list[CourseScope]:
     for alias, full in ALIASES.items():
         if not _alias_present(alias, remaining):
             continue
-        for name in by_name:
-            if name and name in full and all(name != f for f, _ in found):
+        for name in _names_for_alias(alias, full, by_name):
+            if all(name != f for f, _ in found):
                 found.append((name, alias))
         remaining = re.sub(rf"(?<![a-z0-9]){re.escape(alias.lower())}(?![a-z0-9])", " ", remaining)
 
     search_text = _search_text(question, [target for _, target in found])
-    return [
+    scopes = [
         CourseScope(course_ids=_narrow(by_name[name], titles, question), matched_name=name, search_text=search_text)
         for name, _ in found
     ]
+    # ขอบเขตที่ไม่มีเล่มเหลือเลย เกิดจากคำถามระบุระดับปริญญาที่หลักสูตรนั้นไม่มี
+    # (ดู _narrow_by_degree) — ทิ้งไป ดีกว่าส่งขอบเขตว่างให้ผู้เรียกไปค้นทั้งคลัง
+    return [sc for sc in scopes if sc.course_ids]
+
+
+def _names_for_alias(alias: str, full: str, by_name: dict[str, list[uuid.UUID]]) -> list[str]:
+    """
+    ชื่อเฉพาะทุกชื่อที่คำย่อนี้ควรหมายถึง — เรียงชื่อยาวก่อนเพื่อให้ตัวที่เฉพาะกว่ามาก่อน
+
+    ตารางคำย่อชี้ไปที่ชื่อเต็ม **เล่มเดียว** ซึ่งไม่พอเมื่อคณะมีหลายหลักสูตรที่ชื่อมีคำนั้น
+    วัดเจอเมื่อ 13 ต.ค. 2569: ALIASES["เกษตร"] ชี้ไปที่ "การจัดการเทคโนโลยีการเกษตร
+    สมัยใหม่" (ปริญญาตรี) เท่านั้น คำถามที่พิมพ์ "เกษตร" จึงไม่เคยเห็นเล่มปริญญาโทและ
+    ปริญญาเอกที่ชื่อ "การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน" เลย
+
+    จึงรับสองทาง
+      1. ชื่อที่เป็นส่วนหนึ่งของชื่อเต็มที่ตารางชี้ไว้ (พฤติกรรมเดิม)
+      2. ชื่อที่ **มีคำย่อนั้นอยู่ในตัวเอง** — ทำให้คำย่อกว้าง ๆ เห็นทุกหลักสูตรในตระกูล
+         เดียวกัน แล้วให้ตัวกรองปีและระดับปริญญาเลือกเล่มที่ถูกต่อไป
+    """
+    direct = [n for n in by_name if n and n in full]
+    family = [n for n in by_name if n and alias in n and n not in direct]
+    return sorted(direct, key=len, reverse=True) + sorted(family, key=len, reverse=True)
+
+
+def missing_degree_level(db: Session, question: str) -> tuple[str, str] | None:
+    """
+    คำถามระบุระดับปริญญาที่หลักสูตรนั้น **ไม่มี** หรือไม่ · คืน (ชื่อหลักสูตร, ระดับที่ขอ)
+
+    มีไว้ให้ผู้เรียกบอกผู้ใช้ตรง ๆ ว่าไม่มีข้อมูลระดับนั้น แทนการเดาเล่มอื่นมาตอบ
+    คืน None เมื่อไม่ได้ระบุระดับ หรือระบุแล้วมีเล่มระดับนั้นจริง หรือไม่เอ่ยถึงหลักสูตรใดเลย
+    """
+    level = requested_degree_level(question)
+    if level is None:
+        return None
+    courses = db.scalars(select(Course).where(Course.is_active.is_(True))).all()
+    titles = {c.id: c.title for c in courses}
+    by_name: dict[str, list[uuid.UUID]] = {}
+    for c in courses:
+        by_name.setdefault(_distinctive_name(c.title), []).append(c.id)
+
+    lowered = question.lower()
+    candidates: list[str] = [n for n in sorted(by_name, key=len, reverse=True)
+                             if n and n.lower() in lowered]
+    if not candidates:
+        for alias, full in ALIASES.items():
+            if _alias_present(alias, lowered):
+                candidates = _names_for_alias(alias, full, by_name)
+                break
+    if not candidates:
+        return None
+
+    ids = [cid for name in candidates for cid in by_name[name]]
+    have = degree_levels_of(ids, titles)
+    if level in have:
+        return None
+    return candidates[0], level
+
+
+def _candidate_names(question: str, by_name: dict[str, list[uuid.UUID]]) -> list[str]:
+    """ชื่อหลักสูตรที่คำถามนี้เอ่ยถึง — ชื่อเต็มก่อน ถ้าไม่มีจึงลองคำย่อ"""
+    lowered = question.lower()
+    found = [n for n in sorted(by_name, key=len, reverse=True) if n and n.lower() in lowered]
+    if found:
+        return found
+    for alias, full in ALIASES.items():
+        if _alias_present(alias, lowered):
+            return _names_for_alias(alias, full, by_name)
+    return []
+
+
+def _year_of_title(title: str) -> int | None:
+    m = re.search(r"25\d{2}", title)
+    return int(m.group(0)) if m else None
+
+
+def missing_edition_year(db: Session, question: str) -> tuple[str, int, list[int]] | None:
+    """
+    คำถามระบุปีฉบับที่ยัง **ไม่มี** ในข้อมูลหรือไม่ · คืน (ชื่อหลักสูตร, ปีที่ขอ, ปีที่มี)
+
+    มีไว้ให้ผู้เรียกบอกตรง ๆ ว่ายังไม่พบฉบับปีนั้นพร้อมบอกปีที่มี แทนการตกไปเส้นทาง
+    เอกสารซึ่งต้องพึ่งโมเดล ทั้งที่รายการฉบับเป็นข้อมูลที่ระบบรู้แน่นอนที่สุด
+
+    คืน None เมื่อ: คำถามไม่ได้ระบุปี · ระบุหลายปี (เป็นคำถามเทียบฉบับ ไม่ใช่ถามฉบับเดียว)
+    · ไม่เอ่ยถึงหลักสูตรใด · หรือมีฉบับปีนั้นอยู่จริง
+    """
+    years = sorted({int(m.group(0)) for m in re.finditer(r"(?<!\d)25\d{2}(?!\d)", question)})
+    if len(years) != 1:
+        return None
+    asked = years[0]
+
+    courses = db.scalars(select(Course).where(Course.is_active.is_(True))).all()
+    by_name: dict[str, list[uuid.UUID]] = {}
+    titles: dict[uuid.UUID, str] = {}
+    for c in courses:
+        by_name.setdefault(_distinctive_name(c.title), []).append(c.id)
+        titles[c.id] = c.title
+
+    candidates = _candidate_names(question, by_name)
+    if not candidates:
+        return None
+
+    ids = [cid for name in candidates[:1] for cid in by_name[name]]
+    # ถ้าคำถามระบุระดับปริญญาด้วย ให้ดูเฉพาะเล่มระดับนั้น ไม่งั้นจะบอกปีของอีกระดับ
+    ids = _narrow_by_degree(ids, titles, question) or ids
+    have = sorted({y for cid in ids if (y := _year_of_title(titles[cid])) is not None})
+    if not have or asked in have:
+        return None
+    return candidates[0], asked, have
+
+
+# คำที่ถ้าตามหลังชื่อหลักสูตร แปลว่า "ชื่อจบแล้ว" ส่วนที่ตามมาเป็นตัวคำถาม
+#
+# ใช้กับ more_specific_unknown_name() เท่านั้น · ภาษาไทยไม่เว้นวรรคระหว่างคำ การดู
+# ว่ามีอักษรไทยต่อท้ายชื่อจึงแยกไม่ออกเองว่าเป็น "ชื่อที่ยาวกว่า" หรือ "คำถามที่ต่อมา"
+_CONTINUES_QUESTION = (
+    "มี", "เรียน", "ต้อง", "จบ", "ของ", "กับ", "และ", "ที่", "ใน", "คือ", "เป็น",
+    "ไหม", "หรือ", "กี่", "แล้ว", "ด้วย", "นี้", "นั้น", "สอน", "ใช้", "ค่า", "หน่วย",
+    "วิชา", "หลักสูตร", "สาขา", "ปี", "พ", "ทำงาน", "รับ", "เปิด", "อะไร", "ยัง",
+    "ไป", "มา", "ดี", "เหมาะ", "แนะนำ", "ต่าง", "เท่า", "เทียบ", "ระดับ", "ปริญญา",
+    "ฉบับ", "ภาค", "คณะ", "ตอน", "ถ้า", "ช่วย", "ขอ", "อยาก", "ควร",
+)
+
+# คำที่บอกว่าคำถามนี้เป็นการ "เทียบสองฝั่ง"
+_COMPARES = re.compile(r"ต่างกัน|ต่าง|เท่ากัน|เหมือน|เทียบ|มากกว่า|น้อยกว่า|\bvs\b", re.I)
+_SIDE_JOINER = re.compile(r"\s*(?:กับ|และ|หรือ|vs\.?|versus)\s*", re.I)
+
+
+def more_specific_unknown_name(db: Session, question: str) -> str | None:
+    """
+    คำถามเทียบที่เอ่ยชื่อ "เจาะจงกว่า" ชื่อที่ระบบมี -> คืนชื่อนั้น · ไม่ใช่ก็คืน None
+
+    ทำไมต้องมี — ชุด 37 ข้อ ข้อ a1-04 เมื่อ 14 ต.ค. 2569:
+        "คณิตศาสตร์ กับ คณิตศาสตร์ประยุกต์ ต่างกันไหม"
+    คณะไม่มีหลักสูตร "คณิตศาสตร์ประยุกต์" แต่ด่านเอ่ยชื่อสาขาที่ไม่มีไม่ทำงาน เพราะ
+    "คณิตศาสตร์ประยุกต์" มีคำว่า "คณิตศาสตร์" ที่มีจริงเป็นสตริงย่อยอยู่ข้างใน
+    ตัวจับชื่อจึงถือว่าเจอหลักสูตรแล้ว · ผลคือคำถามไหลไปเส้นทางเอกสารแล้วตอบว่า
+    "ไม่พบข้อมูล" ทั้งที่คำตอบที่ถูกคือบอกว่ายังไม่พบหลักสูตรนั้นในข้อมูลของระบบ
+
+    จำกัดให้ทำงานเฉพาะคำถามเทียบ เพราะที่นั่นเท่านั้นที่ผู้ใช้ตั้งใจเอ่ยสองชื่อ
+    และการเดาผิดในคำถามแบบอื่นมีราคาสูงกว่าประโยชน์
+    """
+    if not _COMPARES.search(question):
+        return None
+    sides = [s for s in _SIDE_JOINER.split(question) if s.strip()]
+    if len(sides) < 2:
+        return None
+
+    courses = db.scalars(select(Course).where(Course.is_active.is_(True))).all()
+    names = sorted({_distinctive_name(c.title) for c in courses} - {""}, key=len, reverse=True)
+    lowered_names = {n.lower() for n in names}
+
+    for side in sides:
+        for name in names:
+            for m in re.finditer(re.escape(name), side):
+                tail = side[m.end():]
+                extra = re.match(r"[ก-๎]+", tail)
+                if not extra or len(extra.group(0)) < 3:
+                    continue
+                if extra.group(0).startswith(_CONTINUES_QUESTION):
+                    continue
+                candidate = name + extra.group(0)
+                # ต้องไม่ใช่ชื่อที่ระบบมี และไม่ใช่ส่วนหัวของชื่อที่ระบบมี
+                if candidate.lower() in lowered_names:
+                    continue
+                if any(candidate.lower() in n for n in lowered_names):
+                    continue
+                return candidate
+    return None
+
+
+_LEVEL_LABEL = {"bachelor": "ปริญญาตรี", "master": "ปริญญาโท", "doctoral": "ปริญญาเอก"}
+
+
+def degree_level_label(level: str) -> str:
+    return _LEVEL_LABEL.get(level, level)
 
 
 def _build(ids: list[uuid.UUID], name: str, question: str, strip: str | None = None) -> CourseScope:

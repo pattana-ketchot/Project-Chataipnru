@@ -1,0 +1,83 @@
+@startuml dfd-level1a
+' =====================================================================
+' DFD Level 1 (ก2) — เส้นทางของผู้ดูแลและงานตั้งเวลา
+' ระบบแนะนำหลักสูตร SCI Advisor · สร้าง 25 ต.ค. 2569
+'
+' แยกออกมาจาก dfd-level1 (ก1) เพราะฉบับรวมกว้าง 2,637 px ย่อลงหน้า A4 แล้วตัวอักษร
+' เหลือสูงราว 1.2 มม. อ่านไม่ออก — ดูเหตุผลเต็มในหัวไฟล์ dfd-level1.puml
+'
+' หลักฐาน (ตรวจ 25 ต.ค. 2569 แบบอ่านอย่างเดียว):
+'   P4 backend/app/api/routes/auth.py, users.py และ backend/app/api/deps.py:29-73
+'   P5 backend/app/api/routes/site_admin.py, uploads.py และ services/file_store.py
+'   P6 backend/app/jobs/sync_sci_news.py และ services/sci_news.py
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+skinparam ArrowFontSize 11
+skinparam defaultFontSize 13
+
+rectangle "ผู้ดูแล\n(เนื้อหา / ระบบ)" as staff
+rectangle "เว็บไซต์คณะ" as faculty
+
+usecase "P4\nจัดการบัญชี\nและตรวจสิทธิ์" as P4
+usecase "P5\nจัดการเนื้อหา\nและไฟล์หน้าเว็บ" as P5
+usecase "P6\nดึงข่าว\nSCI Connect" as P6
+
+database "D1 บัญชีและเซสชัน" as D1
+database "D5 เนื้อหาหน้าเว็บ" as D5
+database "D7 ไฟล์บนดิสก์" as D7
+
+staff --> P4 : อีเมลและรหัสผ่าน
+P4 --> staff : โทเคน + role และ status
+D1 --> P4 : ระเบียนผู้ใช้ · สถานะการล็อก
+P4 --> D1 : เซสชันใหม่ · ตัวนับครั้งที่ล้มเหลว
+
+P4 --> P5 : ผลการตรวจสิทธิ์
+
+staff --> P5 : เนื้อหาหลักสูตร ข่าว ไฟล์แนบ
+P5 --> staff : ผลการบันทึก
+P5 --> D5 : ระเบียนเนื้อหาที่แก้ไขแล้ว
+P5 --> D7 : ไฟล์รูปและไฟล์แนบ
+
+faculty --> P6 : เนื้อหาข่าว SCI Connect
+P6 --> D5 : ระเบียนข่าวจากภายนอก
+
+@enduml

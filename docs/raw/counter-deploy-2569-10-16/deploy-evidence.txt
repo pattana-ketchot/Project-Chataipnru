@@ -1,0 +1,25 @@
+=== IMAGE ID ===
+ใหม่: sha256:cd47595542759dbaa3deab2586b3fd2cc141ddc5eef8ef65854bf1207b45f548
+เดิม: sha256:62ff8b1c5642bafaaa23b2b409e74c56ac1b90e701303a9ea70e56f8d64f742e
+
+=== ไฟล์ที่ต่างระหว่างสองอิมเมจ ===
+./backend/app/main.py
+./backend/app/services/llm_client.py
+./backend/app/services/llm_usage.py
+./llm/gemini.py
+
+=== md5 ในคอนเทนเนอร์ที่รันอยู่ ===
+bb4ee26ca39d8315b95c2b8820f8baa7  /app/backend/app/main.py
+9746a8e0877acd062f472e3cfff8b7e1  /app/backend/app/services/llm_usage.py
+34f40a7415ac293e8c7d67568ddd96a8  /app/backend/app/services/llm_client.py
+5660ed41ca6048b5d43f21b26abb9a02  /app/llm/gemini.py
+
+=== log ตอนสตาร์ต ===
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:course_advisor:embedding dim = 1024 ตรงกับ bge-m3
+INFO:course_advisor:เปิดตัวนับการใช้โมเดล เขียนทุก 30 วินาที
+INFO:course_advisor:เปิด warmup ทุก 20 นาที
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"

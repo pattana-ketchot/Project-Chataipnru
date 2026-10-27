@@ -1,0 +1,6 @@
+# ตรึงอิมเมจ backend เป็นอิมเมจของ release GROUP_QUESTION_FIX2 (19 ต.ค. 2569)
+# operational artifact ของการ deploy ไม่ใช่ source ที่ commit และไม่มีค่าลับใด
+# ใช้ต่อท้าย compose-args ชุดเดิมทั้งหมด และต้องสั่ง --no-build
+services:
+  backend:
+    image: course-advisor-system-backend:groupfix2-2569-10-19

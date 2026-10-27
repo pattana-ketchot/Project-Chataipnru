@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -49,6 +50,25 @@ def _facts() -> dict[str, dict]:
     return {normalise_title(k): v for k, v in raw.items()}
 
 
+# ปี พ.ศ. ของฉบับ ที่เขียนไว้ในชื่อหลักสูตร เช่น "…สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569)"
+_EDITION = re.compile(r"\(\s*พ\s*\.?\s*ศ\s*\.?\s*(25\d\d)\s*\)")
+
+
+def _edition_key(course_title: str) -> str | None:
+    """
+    คีย์เฉพาะฉบับ เช่น "คณิตศาสตร์2569" — ใช้เมื่อฉบับหนึ่งมีค่าต่างจากฉบับอื่นจริง
+
+    ค่าส่วนใหญ่ของหลักสูตรเดียวกันเหมือนกันทุกฉบับ จึงใช้คีย์รวม (ไม่มีปี) เป็นหลัก
+    แต่บางหลักสูตรแก้จำนวนหน่วยกิตตอนปรับปรุง เช่น คณิตศาสตร์ 2564 = 130 หน่วยกิต
+    ส่วนฉบับ 2569 = 124 หน่วยกิต · ถ้าใช้ค่าร่วมค่าเดียว หน้าเว็บจะแสดงเลขของอีกฉบับ
+    ข้างเอกสารที่ลิงก์ไว้ (ตรวจพบ 15 ต.ค. 2569)
+    """
+    found = _EDITION.search(course_title or "")
+    if not found:
+        return None
+    return normalise_title(f"{course_title} {found.group(1)}")
+
+
 def program_facts(course_title: str) -> dict:
     """
     ข้อมูลสรุปของหลักสูตรสำหรับหน้ารายละเอียด — ประกอบจากสามแหล่งที่ตรวจแล้ว
@@ -64,7 +84,12 @@ def program_facts(course_title: str) -> dict:
     """
     from app.services.tuition import describe, fee_for
 
-    facts = _facts().get(normalise_title(course_title))
+    # ฉบับที่ระบุปีไว้ชนะคีย์รวม เพื่อให้ตัวเลขตรงกับเล่มที่หน้านั้นลิงก์ไว้
+    table = _facts()
+    edition_key = _edition_key(course_title)
+    facts = (table.get(edition_key) if edition_key else None)
+    if facts is None:
+        facts = table.get(normalise_title(course_title))
     if facts is None:
         return {}
 

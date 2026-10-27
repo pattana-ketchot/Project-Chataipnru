@@ -79,6 +79,24 @@ class Settings(BaseSettings):
     # ตอบว่าไม่พบเสมอ ส่วนคิวและการอนุมัติยังทำงานได้ — สวิตช์เดียวกับ documents_dir
     crawl_staging_dir: str = Field("", alias="CRAWL_STAGING_DIR")
 
+    # --- ไฟล์ที่ผู้ดูแลอัปโหลด: โลโก้หลักสูตร รูปข่าว ไฟล์คลังความรู้ ---
+    # ที่อยู่ใหม่ของสิ่งที่เคยอยู่ใน Supabase Storage (Phase 4)
+    # ค่าว่าง = ปิดการอัปโหลด เส้นทางอัปโหลดจะตอบ 503 ส่วนการอ่านข้อมูลอื่นยังทำงานปกติ
+    uploads_dir: str = Field("", alias="UPLOADS_DIR")
+    # ขนาดไฟล์สูงสุดต่อหนึ่งไฟล์ (ไบต์) — 10 MB
+    upload_max_bytes: int = Field(10 * 1024 * 1024, alias="UPLOAD_MAX_BYTES")
+
+    # --- ส่งอีเมล (รีเซ็ตรหัสผ่าน / ยืนยันอีเมล) ---
+    # ไม่ตั้งค่า = ส่งอีเมลไม่ได้ เส้นทางที่ต้องส่งจะตอบ 503 พร้อมบอกให้ติดต่อผู้ดูแล
+    # **ไม่ใช่** การเขียน token ลง log ซึ่งห้ามเด็ดขาด
+    smtp_host: str = Field("", alias="SMTP_HOST")
+    smtp_port: int = Field(587, alias="SMTP_PORT")
+    smtp_user: str = Field("", alias="SMTP_USER")
+    smtp_password: str = Field("", alias="SMTP_PASSWORD")
+    smtp_from: str = Field("", alias="SMTP_FROM")
+    # ที่อยู่เว็บสำหรับประกอบลิงก์ในอีเมล
+    public_base_url: str = Field("", alias="PUBLIC_BASE_URL")
+
 
 @lru_cache
 def get_settings() -> Settings:

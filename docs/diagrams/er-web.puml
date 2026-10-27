@@ -1,0 +1,119 @@
+@startuml er-web
+set separator none
+' =====================================================================
+' ER Diagram — schema web ของฐาน course_advisor
+' สร้าง 25 ต.ค. 2569 โดยแยกออกมาจาก er.puml
+'
+' แยกออกมาเพราะวาดรวมกับ schema public แล้วภาพกว้าง 3,772 px
+' ย่อลงหน้า A4 แล้วตัวอักษรเหลือสูงราว 0.9 มม. ซึ่งอ่านไม่ออกในฉบับพิมพ์
+'
+' ข้อมูลตรวจจากฐาน production เมื่อ 25 ต.ค. 2569 แบบอ่านอย่างเดียว
+'   FK ของ schema web มีทั้งหมด 8 ข้อ และวาดไว้ในภาพนี้ **ครบทั้ง 8 ข้อ**
+'   ทุกข้อเป็น ON DELETE SET NULL และคอลัมน์ทุกตัว null ได้
+'   จึงใช้สัญลักษณ์ |o--o{ ทั้งหมด (ลูกอาจไม่มีแม่)
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam sequenceGroupBackgroundColor white
+skinparam sequenceGroupBorderColor black
+skinparam sequenceGroupHeaderFontColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam titleBackgroundColor white
+skinparam legendBackgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — ลบบรรทัดนี้บรรทัดเดียวก็กลับเป็นภาพสี
+skinparam shadowing false
+skinparam defaultFontSize 13
+hide circle
+
+package "schema public (เฉพาะตารางที่ถูกอ้างถึง)" {
+  entity "public.users" as users {
+    id : uuid <<PK>>
+  }
+  entity "public.courses" as courses {
+    id : uuid <<PK>>
+  }
+}
+
+package "schema web" {
+  entity "site_courses" as sc {
+    id : uuid <<PK>>
+    --
+    course_id : uuid <<FK, null ได้>>
+    title, title_en, description
+    detail : jsonb
+    created_by : uuid <<FK, null ได้>>
+    updated_by : uuid <<FK, null ได้>>
+  }
+  entity "news" as news {
+    id : uuid <<PK>>
+    --
+    created_by : uuid <<FK, null ได้>>
+    updated_by : uuid <<FK, null ได้>>
+  }
+  entity "knowledge_articles" as kb {
+    id : uuid <<PK>>
+    --
+    created_by : uuid <<FK, null ได้>>
+    updated_by : uuid <<FK, null ได้>>
+  }
+  entity "ai_settings" as ai {
+    id : smallint <<PK>>
+    --
+    model : text
+    updated_by : uuid <<FK, null ได้>>
+    updated_at : timestamptz
+  }
+  entity "external_news" as enews {
+    id : uuid <<PK>>
+    --
+    slug, published_at, synced_at
+  }
+  entity "news_image_url_backup_20261012" as wbak {
+    (ไม่มี PK และไม่มี FK)
+  }
+}
+
+users |o--o{ sc : created_by / updated_by
+users |o--o{ news : created_by / updated_by
+users |o--o{ kb : created_by / updated_by
+users |o--o{ ai : updated_by
+courses |o--o{ sc : course_id
+
+@enduml

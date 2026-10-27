@@ -1,0 +1,81 @@
+@startuml architecture
+' สถาปัตยกรรมระบบ SCI Advisor — ฉบับเต็ม
+' แสดงคอนเทนเนอร์ที่รันอยู่จริงครบ 7 ตัว และลำดับการจัดเส้นทางของ Caddy ครบ 6 ลำดับ
+' ข้อมูลตรวจจากเซิร์ฟเวอร์ production 25 ต.ค. 2569 (docker ps, docker inspect, Caddyfile)
+' คำอธิบายใต้ภาพอยู่ในหัวข้อ 3.1 ของ SCI_ADVISOR_DIAGRAMS.md
+set separator none
+
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 70
+skinparam nodesep 35
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam ArrowFontSize 11
+
+actor "ผู้ใช้ทั่วไป" as user
+actor "ผู้ดูแล" as admin
+
+rectangle "เซิร์ฟเวอร์เดียว — Docker Compose" {
+
+  rectangle "1. caddy\nเปิดพอร์ต 80 / 443" as caddy
+  rectangle "2. backend\nFastAPI พอร์ต 8000" as be
+  database "3. postgres\npgvector pg16" as pg
+  rectangle "4. ollama\nbge-m3 / qwen2.5:3b" as ol
+  rectangle "5. webapi\nNode พอร์ต 3001" as webapi
+  rectangle "6. frontend\nNext.js พอร์ต 3000" as oldfe
+  rectangle "7. db-viewer\nadminer 127.0.0.1\nเข้าผ่าน SSH tunnel" as adminer
+
+  folder "หน้าเว็บ (ไฟล์นิ่ง)\nไม่ใช่คอนเทนเนอร์" as web
+  folder "เอกสาร มคอ.2\nและไฟล์อัปโหลด" as files
+  rectangle "ingest-worker\nไม่ได้รันอยู่\nผู้ดูแลเซิร์ฟเวอร์สั่งรันเอง" as worker
+}
+
+rectangle "Google Gemini API" as gemini
+rectangle "เว็บไซต์คณะ" as faculty
+rectangle "Supabase\n(ระบบเดิม)" as supa
+
+user -[#black]-> caddy : HTTPS
+admin -[#black]-> caddy : HTTPS
+
+caddy --> be : ลำดับ 1  /api/chat\nลำดับ 4  /api/* อื่น
+caddy --> webapi : ลำดับ 2  /api/sci-connect-news*\nลำดับ 3  /api/admin/*
+caddy --> web : ลำดับ 5  /assets/*\nลำดับ 6  ที่เหลือ
+
+be --> pg
+be --> ol
+be --> files
+be --> gemini
+be --> faculty
+
+webapi --> pg
+webapi --> supa
+oldfe --> be
+adminer --> pg
+
+worker --> pg
+worker --> ol
+worker --> files
+
+@enduml

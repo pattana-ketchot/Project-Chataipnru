@@ -198,12 +198,21 @@ def match_by_title(db: Session, sent: list[dict]) -> tuple[list[tuple[dict, Cour
 
     เมื่อสาขาหนึ่งมีเอกสารสองฉบับ เลือกฉบับปีล่าสุด เพราะเป็นหลักสูตรที่ใช้อยู่จริง
 
+    **ยกเว้นผู้เรียกระบุปีมาในชื่อ** เช่น "…สาขาวิชาคณิตศาสตร์ (พ.ศ. 2564)" — กรณีนั้น
+    ต้องได้เล่มปีนั้นเท่านั้น เพราะค่าบางอย่างต่างกันจริงระหว่างฉบับ (คณิตศาสตร์
+    2564 = 130 หน่วยกิต · 2569 = 124 หน่วยกิต) การถอยไปใช้ฉบับล่าสุดทั้งที่ผู้เรียก
+    ระบุปีไว้ ทำให้ได้ตัวเลขของอีกเล่มโดยไม่มีอะไรบอก (พบจากการตรวจ 16 ต.ค. 2569)
+
+    ถ้าระบุปีมาแล้วไม่มีเล่มของปีนั้น จะถือว่า "จับคู่ไม่ได้" ไม่ใช่ถอยไปเล่มอื่นเงียบๆ
+
     คืนทั้งรายการที่จับคู่ได้และไม่ได้ ผู้เรียกต้องบอกผู้ใช้ว่าสาขาไหนไม่มีเอกสาร
     ไม่ใช่เงียบๆ แล้วตอบเฉพาะที่เหลือ
     """
     latest: dict[str, Course] = {}
+    by_edition: dict[tuple[str, int], Course] = {}
     for c in db.scalars(select(Course).where(Course.is_active)).all():
         key = normalise_title(c.title)
+        by_edition[(key, _edition_year(c.title))] = c
         seen = latest.get(key)
         if seen is None or _edition_year(c.title) > _edition_year(seen.title):
             latest[key] = c
@@ -211,7 +220,14 @@ def match_by_title(db: Session, sent: list[dict]) -> tuple[list[tuple[dict, Cour
     matched: list[tuple[dict, Course]] = []
     unmatched: list[dict] = []
     for item in sent:
-        hit = next((latest[k] for k in _keys_for(item.get("title", "")) if k in latest), None)
+        title = item.get("title", "")
+        year = _edition_year(title)
+        if year:
+            # ระบุปีมา → หาเฉพาะเล่มปีนั้น ไม่มีก็ถือว่าจับคู่ไม่ได้
+            hit = next((by_edition[(k, year)] for k in _keys_for(title)
+                        if (k, year) in by_edition), None)
+        else:
+            hit = next((latest[k] for k in _keys_for(title) if k in latest), None)
         if hit is not None:
             matched.append((item, hit))
         else:

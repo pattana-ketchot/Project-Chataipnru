@@ -1,0 +1,67 @@
+erDiagram
+  AUTH__USERS |o--o{ PUBLIC__AI_SETTINGS : "updated_by"
+  AUTH__USERS |o--o{ PUBLIC__COURSES : "created_by"
+  AUTH__USERS |o--o{ PUBLIC__KNOWLEDGE_ARTICLES : "created_by"
+  AUTH__USERS |o--o{ PUBLIC__KNOWLEDGE_ARTICLES : "updated_by"
+  AUTH__USERS |o--o{ PUBLIC__NEWS : "created_by"
+  PUBLIC__USER_PROFILES |o--o{ PUBLIC__COURSES : "updated_by"
+  PUBLIC__USER_PROFILES |o--o{ PUBLIC__NEWS : "updated_by"
+
+  PUBLIC__AI_SETTINGS {
+    integer id PK
+    varchar_255 model
+    uuid updated_by FK
+    more คอลัมน์อื่นอีก_1_รายการ
+  }
+  PUBLIC__COURSES {
+    uuid id PK
+    varchar_255 title
+    varchar_255 title_en
+    text[] careers
+    jsonb detail
+    uuid created_by FK
+    uuid updated_by FK
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__EXTERNAL_NEWS {
+    uuid id PK
+    varchar_255 title
+    text detail_url
+    varchar_100 source
+    varchar_255 slug
+    more คอลัมน์อื่นอีก_7_รายการ
+  }
+  PUBLIC__KNOWLEDGE_ARTICLES {
+    uuid id PK
+    varchar_255 title
+    text file_name
+    bigint file_size
+    uuid created_by FK
+    uuid updated_by FK
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__NEWS {
+    uuid id PK
+    varchar_255 title
+    varchar_100 category
+    date date
+    varchar_50 status
+    uuid created_by FK
+    uuid updated_by FK
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__RAG_DOCUMENTS {
+    uuid id PK
+    varchar_50 source_type
+    uuid source_id
+    integer chunk_index
+    vector embedding
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__USER_PROFILES {
+    uuid id PK
+    varchar_50 role
+    text email
+    varchar_50 status
+    more คอลัมน์อื่นอีก_4_รายการ
+  }

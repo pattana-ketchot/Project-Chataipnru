@@ -1,0 +1,60 @@
+@startuml er-supabase
+set separator none
+' ฝั่ง Supabase (ระบบเดิม) — เป็นคนละฐานข้อมูลกับของระบบ ไม่มีข้อบังคับใดเชื่อมกัน
+' ตารางสี่ตารางยืนยันชื่อได้จากโค้ด webapi (grep ".from('...')")
+' โครงสร้างภายในไม่ได้ตรวจ เพราะต้องใช้คีย์ของโปรเจกต์ Supabase
+' รายละเอียดและระดับความเชื่อถืออยู่ในหัวข้อ 3.3 และ 6 ของ SCI_ADVISOR_DIAGRAMS.md
+
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam sequenceGroupBackgroundColor white
+skinparam sequenceGroupBorderColor black
+skinparam sequenceGroupHeaderFontColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam titleBackgroundColor white
+skinparam legendBackgroundColor white
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+hide circle
+
+rectangle "คอนเทนเนอร์ webapi" as webapi
+
+package "ฐานข้อมูล Supabase (ระบบเดิม)" {
+  entity "external_news" as enews
+  entity "user_profiles" as sprof
+  entity "ai_settings" as sai
+  entity "rag_documents" as srag
+}
+
+package "สิ่งที่มาแทนในฐานของระบบเอง" {
+  entity "public.users\npublic.auth_sessions" as nusers
+  entity "web.external_news" as nnews
+  entity "web.ai_settings" as nai
+  entity "public.course_chunks" as nchunks
+}
+
+webapi --> enews
+webapi --> sprof
+webapi --> sai
+webapi --> srag
+
+enews ..> nnews : ย้ายแล้ว
+sprof ..> nusers : ย้ายแล้ว
+sai ..> nai : ย้ายแล้ว
+srag ..> nchunks : ย้ายแล้ว
+
+@enduml

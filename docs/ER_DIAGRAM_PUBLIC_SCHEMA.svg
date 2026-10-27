@@ -1,0 +1,383 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1570" height="1075" viewBox="0 0 1570 1075" font-family="'Tahoma','Segoe UI','Leelawadee UI',sans-serif">
+<rect width="1570" height="1075" fill="#ffffff"/>
+<rect x="0" y="0" width="1570" height="74" fill="#17365d"/>
+<text x="785.0" y="34" text-anchor="middle" font-size="26" font-weight="bold" fill="#ffffff">ER Diagram — PostgreSQL schema public (10 ตาราง)</text>
+<text x="785.0" y="60" text-anchor="middle" font-size="14" fill="#c8dcf5">โครงสร้างฐานข้อมูลระบบ SCI Advisor (ตรวจจากฐานข้อมูล production วันที่ 24 กันยายน 2569)</text>
+<polyline points="285,190 465,190" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="285" cy="190" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="465" cy="190" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="755,210 880,210" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="755" cy="210" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="880" cy="210" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="1135,210 1250,210" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="1135" cy="210" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="1250" cy="210" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="600,132 600,118 1330,118 1330,132" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="600" cy="132" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="1330" cy="132" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="100,340 100,435 150,435" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="100" cy="340" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="150" cy="435" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="60,340 60,737 150,737" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="60" cy="340" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="150" cy="737" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="200,340 200,362 452,362 452,465 1050,465 1050,529" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="200" cy="340" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="1050" cy="529" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="452,465 452,557 560,557" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="452" cy="465" r="3.4" fill="#1f3d6b"/>
+<circle cx="560" cy="557" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="650,619 650,689" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="650" cy="619" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="650" cy="689" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="795,587 975,587" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="795" cy="587" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="975" cy="587" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<polyline points="1420,445 1420,587 1265,587" fill="none" stroke="#1f3d6b" stroke-width="1.6" stroke-linejoin="round"/>
+<circle cx="1420" cy="445" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="1265" cy="587" r="3.6" fill="#ffffff" stroke="#1f3d6b" stroke-width="1.6"/>
+<rect x="30" y="132" width="255" height="208" rx="9" fill="#f2fcf7" stroke="#2f9e68" stroke-width="2"/>
+<path d="M30,164 v-23 a9,9 0 0 1 9,-9 h237 a9,9 0 0 1 9,9 v23 z" fill="#d5f2e3"/>
+<line x1="30" y1="164" x2="285" y2="164" stroke="#2f9e68" stroke-width="1.4"/>
+<text x="42" y="153" font-size="14.5" font-weight="bold" fill="#123">public.users (8)</text>
+<text x="42" y="179" font-size="12.5" font-weight="bold" fill="#1a1a2e">id</text>
+<text x="168.97500000000002" y="179" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="273" y="179" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="31.5" y="185.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="42" y="200" font-size="12.5" font-weight="bold" fill="#1a1a2e">email</text>
+<text x="168.97500000000002" y="200" font-size="12.5" fill="#5a6470">citext</text>
+<text x="273" y="200" font-size="11.5" font-weight="bold" text-anchor="end" fill="#c2185b">UQ</text>
+<text x="42" y="221" font-size="12.5" fill="#1a1a2e">password_hash</text>
+<text x="168.97500000000002" y="221" font-size="12.5" fill="#5a6470">text</text>
+<rect x="31.5" y="227.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="42" y="242" font-size="12.5" fill="#1a1a2e">full_name</text>
+<text x="168.97500000000002" y="242" font-size="12.5" fill="#5a6470">text</text>
+<text x="42" y="263" font-size="12.5" fill="#1a1a2e">is_active</text>
+<text x="168.97500000000002" y="263" font-size="12.5" fill="#5a6470">boolean</text>
+<rect x="31.5" y="269.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="42" y="284" font-size="12.5" fill="#1a1a2e">is_admin</text>
+<text x="168.97500000000002" y="284" font-size="12.5" fill="#5a6470">boolean</text>
+<text x="42" y="305" font-size="12.5" fill="#1a1a2e">created_at</text>
+<text x="168.97500000000002" y="305" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="31.5" y="311.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="42" y="326" font-size="12.5" fill="#1a1a2e">updated_at</text>
+<text x="168.97500000000002" y="326" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="465" y="132" width="290" height="250" rx="9" fill="#f2f8fe" stroke="#2478cd" stroke-width="2"/>
+<path d="M465,164 v-23 a9,9 0 0 1 9,-9 h272 a9,9 0 0 1 9,9 v23 z" fill="#d7e9fb"/>
+<line x1="465" y1="164" x2="755" y2="164" stroke="#2478cd" stroke-width="1.4"/>
+<text x="477" y="153" font-size="14.5" font-weight="bold" fill="#123">public.course_documents (10)</text>
+<text x="477" y="179" font-size="12.5" font-weight="bold" fill="#1a1a2e">id</text>
+<text x="623.05" y="179" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="743" y="179" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="466.5" y="185.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="477" y="200" font-size="12.5" font-weight="bold" fill="#1a1a2e">course_id</text>
+<text x="623.05" y="200" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="743" y="200" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<text x="477" y="221" font-size="12.5" fill="#1a1a2e">original_filename</text>
+<text x="623.05" y="221" font-size="12.5" fill="#5a6470">text</text>
+<rect x="466.5" y="227.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="477" y="242" font-size="12.5" fill="#1a1a2e">file_sha256</text>
+<text x="623.05" y="242" font-size="12.5" fill="#5a6470">text</text>
+<text x="477" y="263" font-size="12.5" fill="#1a1a2e">storage_path</text>
+<text x="623.05" y="263" font-size="12.5" fill="#5a6470">text</text>
+<rect x="466.5" y="269.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="477" y="284" font-size="12.5" fill="#1a1a2e">page_count</text>
+<text x="623.05" y="284" font-size="12.5" fill="#5a6470">integer</text>
+<text x="477" y="305" font-size="12.5" fill="#1a1a2e">extraction_status</text>
+<text x="623.05" y="305" font-size="12.5" fill="#5a6470">text</text>
+<rect x="466.5" y="311.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="477" y="326" font-size="12.5" fill="#1a1a2e">extraction_error</text>
+<text x="623.05" y="326" font-size="12.5" fill="#5a6470">text</text>
+<text x="477" y="347" font-size="12.5" font-weight="bold" fill="#1a1a2e">uploaded_by</text>
+<text x="623.05" y="347" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="743" y="347" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<rect x="466.5" y="353.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="477" y="368" font-size="12.5" fill="#1a1a2e">uploaded_at</text>
+<text x="623.05" y="368" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="880" y="132" width="255" height="250" rx="9" fill="#f7f3fd" stroke="#7645bd" stroke-width="2"/>
+<path d="M880,164 v-23 a9,9 0 0 1 9,-9 h237 a9,9 0 0 1 9,9 v23 z" fill="#e5daf7"/>
+<line x1="880" y1="164" x2="1135" y2="164" stroke="#7645bd" stroke-width="1.4"/>
+<text x="892" y="153" font-size="14.5" font-weight="bold" fill="#123">public.course_chunks (10)</text>
+<text x="892" y="179" font-size="12.5" font-weight="bold" fill="#1a1a2e">id</text>
+<text x="1018.975" y="179" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="1123" y="179" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="881.5" y="185.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="892" y="200" font-size="12.5" font-weight="bold" fill="#1a1a2e">course_id</text>
+<text x="1018.975" y="200" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="1123" y="200" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<text x="892" y="221" font-size="12.5" font-weight="bold" fill="#1a1a2e">document_id</text>
+<text x="1018.975" y="221" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="1123" y="221" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<rect x="881.5" y="227.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="892" y="242" font-size="12.5" fill="#1a1a2e">chunk_index</text>
+<text x="1018.975" y="242" font-size="12.5" fill="#5a6470">integer</text>
+<text x="892" y="263" font-size="12.5" fill="#1a1a2e">page_number</text>
+<text x="1018.975" y="263" font-size="12.5" fill="#5a6470">integer</text>
+<rect x="881.5" y="269.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="892" y="284" font-size="12.5" fill="#1a1a2e">content</text>
+<text x="1018.975" y="284" font-size="12.5" fill="#5a6470">text</text>
+<text x="892" y="305" font-size="12.5" fill="#1a1a2e">token_count</text>
+<text x="1018.975" y="305" font-size="12.5" fill="#5a6470">integer</text>
+<rect x="881.5" y="311.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="892" y="326" font-size="12.5" fill="#1a1a2e">embedding</text>
+<text x="1018.975" y="326" font-size="12.5" fill="#5a6470">vector(1024)</text>
+<text x="892" y="347" font-size="12.5" fill="#1a1a2e">metadata</text>
+<text x="1018.975" y="347" font-size="12.5" fill="#5a6470">jsonb</text>
+<rect x="881.5" y="353.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="892" y="368" font-size="12.5" fill="#1a1a2e">created_at</text>
+<text x="1018.975" y="368" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="1250" y="132" width="270" height="313" rx="9" fill="#fffaed" stroke="#d79a1c" stroke-width="2"/>
+<path d="M1250,164 v-23 a9,9 0 0 1 9,-9 h252 a9,9 0 0 1 9,9 v23 z" fill="#fdefc9"/>
+<line x1="1250" y1="164" x2="1520" y2="164" stroke="#d79a1c" stroke-width="1.4"/>
+<text x="1262" y="153" font-size="14.5" font-weight="bold" fill="#123">public.courses (13)</text>
+<text x="1262" y="179" font-size="12.5" font-weight="bold" fill="#1a1a2e">id</text>
+<text x="1397.15" y="179" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="1508" y="179" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="1251.5" y="185.5" width="267" height="21" fill="#000000" opacity="0.022"/>
+<text x="1262" y="200" font-size="12.5" font-weight="bold" fill="#1a1a2e">code</text>
+<text x="1397.15" y="200" font-size="12.5" fill="#5a6470">text</text>
+<text x="1508" y="200" font-size="11.5" font-weight="bold" text-anchor="end" fill="#c2185b">UQ</text>
+<text x="1262" y="221" font-size="12.5" fill="#1a1a2e">title</text>
+<text x="1397.15" y="221" font-size="12.5" fill="#5a6470">text</text>
+<rect x="1251.5" y="227.5" width="267" height="21" fill="#000000" opacity="0.022"/>
+<text x="1262" y="242" font-size="12.5" fill="#1a1a2e">provider</text>
+<text x="1397.15" y="242" font-size="12.5" fill="#5a6470">text</text>
+<text x="1262" y="263" font-size="12.5" fill="#1a1a2e">summary</text>
+<text x="1397.15" y="263" font-size="12.5" fill="#5a6470">text</text>
+<rect x="1251.5" y="269.5" width="267" height="21" fill="#000000" opacity="0.022"/>
+<text x="1262" y="284" font-size="12.5" fill="#1a1a2e">mode</text>
+<text x="1397.15" y="284" font-size="12.5" fill="#5a6470">text</text>
+<text x="1262" y="305" font-size="12.5" fill="#1a1a2e">duration_weeks</text>
+<text x="1397.15" y="305" font-size="12.5" fill="#5a6470">numeric</text>
+<rect x="1251.5" y="311.5" width="267" height="21" fill="#000000" opacity="0.022"/>
+<text x="1262" y="326" font-size="12.5" fill="#1a1a2e">price</text>
+<text x="1397.15" y="326" font-size="12.5" fill="#5a6470">numeric</text>
+<text x="1262" y="347" font-size="12.5" fill="#1a1a2e">currency</text>
+<text x="1397.15" y="347" font-size="12.5" fill="#5a6470">text</text>
+<rect x="1251.5" y="353.5" width="267" height="21" fill="#000000" opacity="0.022"/>
+<text x="1262" y="368" font-size="12.5" fill="#1a1a2e">tags</text>
+<text x="1397.15" y="368" font-size="12.5" fill="#5a6470">jsonb</text>
+<text x="1262" y="389" font-size="12.5" fill="#1a1a2e">is_active</text>
+<text x="1397.15" y="389" font-size="12.5" fill="#5a6470">boolean</text>
+<rect x="1251.5" y="395.5" width="267" height="21" fill="#000000" opacity="0.022"/>
+<text x="1262" y="410" font-size="12.5" fill="#1a1a2e">created_at</text>
+<text x="1397.15" y="410" font-size="12.5" fill="#5a6470">timestamptz</text>
+<text x="1262" y="431" font-size="12.5" fill="#1a1a2e">updated_at</text>
+<text x="1397.15" y="431" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="150" y="382" width="290" height="250" rx="9" fill="#fef4f7" stroke="#d94a76" stroke-width="2"/>
+<path d="M150,414 v-23 a9,9 0 0 1 9,-9 h272 a9,9 0 0 1 9,9 v23 z" fill="#fbdbe6"/>
+<line x1="150" y1="414" x2="440" y2="414" stroke="#d94a76" stroke-width="1.4"/>
+<text x="162" y="403" font-size="14.5" font-weight="bold" fill="#123">public.user_profiles (10)</text>
+<text x="162" y="429" font-size="12.5" font-weight="bold" fill="#1a1a2e">user_id</text>
+<text x="308.05" y="429" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="428" y="429" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK, FK</text>
+<rect x="151.5" y="435.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="162" y="450" font-size="12.5" fill="#1a1a2e">education_level</text>
+<text x="308.05" y="450" font-size="12.5" fill="#5a6470">text</text>
+<text x="162" y="471" font-size="12.5" fill="#1a1a2e">field_of_study</text>
+<text x="308.05" y="471" font-size="12.5" fill="#5a6470">text</text>
+<rect x="151.5" y="477.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="162" y="492" font-size="12.5" fill="#1a1a2e">current_role</text>
+<text x="308.05" y="492" font-size="12.5" fill="#5a6470">text</text>
+<text x="162" y="513" font-size="12.5" fill="#1a1a2e">career_goal</text>
+<text x="308.05" y="513" font-size="12.5" fill="#5a6470">text</text>
+<rect x="151.5" y="519.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="162" y="534" font-size="12.5" fill="#1a1a2e">skills</text>
+<text x="308.05" y="534" font-size="12.5" fill="#5a6470">jsonb</text>
+<text x="162" y="555" font-size="12.5" fill="#1a1a2e">interests</text>
+<text x="308.05" y="555" font-size="12.5" fill="#5a6470">jsonb</text>
+<rect x="151.5" y="561.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="162" y="576" font-size="12.5" fill="#1a1a2e">language_preference</text>
+<text x="308.05" y="576" font-size="12.5" fill="#5a6470">text</text>
+<text x="162" y="597" font-size="12.5" fill="#1a1a2e">metadata</text>
+<text x="308.05" y="597" font-size="12.5" fill="#5a6470">jsonb</text>
+<rect x="151.5" y="603.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="162" y="618" font-size="12.5" fill="#1a1a2e">updated_at</text>
+<text x="308.05" y="618" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="150" y="667" width="246" height="166" rx="9" fill="#f1fbfa" stroke="#1f9e93" stroke-width="2"/>
+<path d="M150,699 v-23 a9,9 0 0 1 9,-9 h228 a9,9 0 0 1 9,9 v23 z" fill="#d0efec"/>
+<line x1="150" y1="699" x2="396" y2="699" stroke="#1f9e93" stroke-width="1.4"/>
+<text x="162" y="688" font-size="14.5" font-weight="bold" fill="#123">public.user_requirements (6)</text>
+<text x="162" y="714" font-size="12.5" font-weight="bold" fill="#1a1a2e">id</text>
+<text x="284.07000000000005" y="714" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="384" y="714" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="151.5" y="720.5" width="243" height="21" fill="#000000" opacity="0.022"/>
+<text x="162" y="735" font-size="12.5" font-weight="bold" fill="#1a1a2e">user_id</text>
+<text x="284.07000000000005" y="735" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="384" y="735" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<text x="162" y="756" font-size="12.5" fill="#1a1a2e">req_type</text>
+<text x="284.07000000000005" y="756" font-size="12.5" fill="#5a6470">text</text>
+<rect x="151.5" y="762.5" width="243" height="21" fill="#000000" opacity="0.022"/>
+<text x="162" y="777" font-size="12.5" fill="#1a1a2e">req_value</text>
+<text x="284.07000000000005" y="777" font-size="12.5" fill="#5a6470">text</text>
+<text x="162" y="798" font-size="12.5" fill="#1a1a2e">priority</text>
+<text x="284.07000000000005" y="798" font-size="12.5" fill="#5a6470">smallint</text>
+<rect x="151.5" y="804.5" width="243" height="21" fill="#000000" opacity="0.022"/>
+<text x="162" y="819" font-size="12.5" fill="#1a1a2e">created_at</text>
+<text x="284.07000000000005" y="819" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="560" y="495" width="235" height="124" rx="9" fill="#f1f9fe" stroke="#2f97d9" stroke-width="2"/>
+<path d="M560,527 v-23 a9,9 0 0 1 9,-9 h217 a9,9 0 0 1 9,9 v23 z" fill="#d3ebf9"/>
+<line x1="560" y1="527" x2="795" y2="527" stroke="#2f97d9" stroke-width="1.4"/>
+<text x="572" y="516" font-size="14.5" font-weight="bold" fill="#123">public.chat_sessions (4)</text>
+<text x="572" y="542" font-size="12.5" font-weight="bold" fill="#1a1a2e">id</text>
+<text x="688.075" y="542" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="783" y="542" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="561.5" y="548.5" width="232" height="21" fill="#000000" opacity="0.022"/>
+<text x="572" y="563" font-size="12.5" font-weight="bold" fill="#1a1a2e">user_id</text>
+<text x="688.075" y="563" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="783" y="563" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<text x="572" y="584" font-size="12.5" fill="#1a1a2e">started_at</text>
+<text x="688.075" y="584" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="561.5" y="590.5" width="232" height="21" fill="#000000" opacity="0.022"/>
+<text x="572" y="605" font-size="12.5" fill="#1a1a2e">ended_at</text>
+<text x="688.075" y="605" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="560" y="689" width="235" height="145" rx="9" fill="#fff7ee" stroke="#d98125" stroke-width="2"/>
+<path d="M560,721 v-23 a9,9 0 0 1 9,-9 h217 a9,9 0 0 1 9,9 v23 z" fill="#fce4c8"/>
+<line x1="560" y1="721" x2="795" y2="721" stroke="#d98125" stroke-width="1.4"/>
+<text x="572" y="710" font-size="14.5" font-weight="bold" fill="#123">public.chat_messages (5)</text>
+<text x="572" y="736" font-size="12.5" font-weight="bold" fill="#1a1a2e">id</text>
+<text x="688.075" y="736" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="783" y="736" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="561.5" y="742.5" width="232" height="21" fill="#000000" opacity="0.022"/>
+<text x="572" y="757" font-size="12.5" font-weight="bold" fill="#1a1a2e">session_id</text>
+<text x="688.075" y="757" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="783" y="757" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<text x="572" y="778" font-size="12.5" fill="#1a1a2e">role</text>
+<text x="688.075" y="778" font-size="12.5" fill="#5a6470">text</text>
+<rect x="561.5" y="784.5" width="232" height="21" fill="#000000" opacity="0.022"/>
+<text x="572" y="799" font-size="12.5" fill="#1a1a2e">content</text>
+<text x="688.075" y="799" font-size="12.5" fill="#5a6470">text</text>
+<text x="572" y="820" font-size="12.5" fill="#1a1a2e">created_at</text>
+<text x="688.075" y="820" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="975" y="529" width="290" height="229" rx="9" fill="#f4f2fd" stroke="#5f4dd6" stroke-width="2"/>
+<path d="M975,561 v-23 a9,9 0 0 1 9,-9 h272 a9,9 0 0 1 9,9 v23 z" fill="#dcd7f8"/>
+<line x1="975" y1="561" x2="1265" y2="561" stroke="#5f4dd6" stroke-width="1.4"/>
+<text x="987" y="550" font-size="14.5" font-weight="bold" fill="#123">public.recommendations (9)</text>
+<text x="987" y="576" font-size="12.5" font-weight="bold" fill="#1a1a2e">id</text>
+<text x="1133.05" y="576" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="1253" y="576" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="976.5" y="582.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="987" y="597" font-size="12.5" font-weight="bold" fill="#1a1a2e">user_id</text>
+<text x="1133.05" y="597" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="1253" y="597" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<text x="987" y="618" font-size="12.5" font-weight="bold" fill="#1a1a2e">course_id</text>
+<text x="1133.05" y="618" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="1253" y="618" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<rect x="976.5" y="624.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="987" y="639" font-size="12.5" font-weight="bold" fill="#1a1a2e">session_id</text>
+<text x="1133.05" y="639" font-size="12.5" fill="#5a6470">uuid</text>
+<text x="1253" y="639" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">FK</text>
+<text x="987" y="660" font-size="12.5" fill="#1a1a2e">score</text>
+<text x="1133.05" y="660" font-size="12.5" fill="#5a6470">numeric</text>
+<rect x="976.5" y="666.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="987" y="681" font-size="12.5" fill="#1a1a2e">rationale</text>
+<text x="1133.05" y="681" font-size="12.5" fill="#5a6470">text</text>
+<text x="987" y="702" font-size="12.5" fill="#1a1a2e">retrieved_chunk_ids</text>
+<text x="1133.05" y="702" font-size="12.5" fill="#5a6470">uuid[]</text>
+<rect x="976.5" y="708.5" width="287" height="21" fill="#000000" opacity="0.022"/>
+<text x="987" y="723" font-size="12.5" fill="#1a1a2e">model_used</text>
+<text x="1133.05" y="723" font-size="12.5" fill="#5a6470">text</text>
+<text x="987" y="744" font-size="12.5" fill="#1a1a2e">created_at</text>
+<text x="1133.05" y="744" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="1285" y="645" width="255" height="208" rx="9" fill="#fef4f7" stroke="#d94a76" stroke-width="2"/>
+<path d="M1285,677 v-23 a9,9 0 0 1 9,-9 h237 a9,9 0 0 1 9,9 v23 z" fill="#fbdbe6"/>
+<line x1="1285" y1="677" x2="1540" y2="677" stroke="#d94a76" stroke-width="1.4"/>
+<text x="1297" y="666" font-size="14.5" font-weight="bold" fill="#123">public.chat_answer_cache (8)</text>
+<text x="1297" y="692" font-size="12.5" font-weight="bold" fill="#1a1a2e">question_key</text>
+<text x="1423.975" y="692" font-size="12.5" fill="#5a6470">text</text>
+<text x="1528" y="692" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">PK</text>
+<rect x="1286.5" y="698.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="1297" y="713" font-size="12.5" fill="#1a1a2e">corpus_version</text>
+<text x="1423.975" y="713" font-size="12.5" fill="#5a6470">text</text>
+<text x="1297" y="734" font-size="12.5" fill="#1a1a2e">status</text>
+<text x="1423.975" y="734" font-size="12.5" fill="#5a6470">text</text>
+<rect x="1286.5" y="740.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="1297" y="755" font-size="12.5" fill="#1a1a2e">reply</text>
+<text x="1423.975" y="755" font-size="12.5" fill="#5a6470">text</text>
+<text x="1297" y="776" font-size="12.5" fill="#1a1a2e">citations</text>
+<text x="1423.975" y="776" font-size="12.5" fill="#5a6470">jsonb</text>
+<rect x="1286.5" y="782.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="1297" y="797" font-size="12.5" fill="#1a1a2e">hits</text>
+<text x="1423.975" y="797" font-size="12.5" fill="#5a6470">integer</text>
+<text x="1297" y="818" font-size="12.5" fill="#1a1a2e">created_at</text>
+<text x="1423.975" y="818" font-size="12.5" fill="#5a6470">timestamptz</text>
+<rect x="1286.5" y="824.5" width="252" height="21" fill="#000000" opacity="0.022"/>
+<text x="1297" y="839" font-size="12.5" fill="#1a1a2e">last_used_at</text>
+<text x="1423.975" y="839" font-size="12.5" fill="#5a6470">timestamptz</text>
+<text x="375" y="182" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">uploaded_by</text>
+<text x="375" y="197" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#c62828">(NO ACTION)</text>
+<text x="290" y="182" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="455" y="182" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="817" y="202" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">document_id</text>
+<text x="817" y="217" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#1565c0">(CASCADE)</text>
+<text x="760" y="202" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="871" y="202" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="1192" y="202" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">course_id</text>
+<text x="1192" y="217" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#1565c0">(CASCADE)</text>
+<text x="1141" y="202" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="1241" y="202" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="965" y="94" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">course_id</text>
+<text x="965" y="109" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#1565c0">(CASCADE)</text>
+<text x="590" y="130" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="1340" y="130" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="96" y="466" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">user_id</text>
+<text x="96" y="481" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#1565c0">(CASCADE)</text>
+<text x="110" y="352" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="140" y="427" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="78" y="768" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">user_id</text>
+<text x="78" y="783" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#1565c0">(CASCADE)</text>
+<text x="70" y="352" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="140" y="729" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="830" y="451" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">user_id</text>
+<text x="830" y="466" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#1565c0">(CASCADE)</text>
+<text x="210" y="352" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="1060" y="521" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="478" y="592" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">user_id</text>
+<text x="478" y="607" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#1565c0">(CASCADE)</text>
+<text x="508" y="549" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="551" y="549" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="668" y="647" font-size="11.5" font-weight="bold" text-anchor="start" fill="#17365d">session_id</text>
+<text x="668" y="662" font-size="11.5" font-weight="bold" text-anchor="start" fill="#1565c0">(CASCADE)</text>
+<text x="640" y="631" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="640" y="681" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="885" y="613" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#17365d">session_id</text>
+<text x="885" y="628" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#c62828">(SET NULL)</text>
+<text x="801" y="579" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="965" y="579" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<text x="1408" y="505" font-size="11.5" font-weight="bold" text-anchor="end" fill="#17365d">course_id</text>
+<text x="1408" y="520" font-size="11.5" font-weight="bold" text-anchor="end" fill="#1565c0">(CASCADE)</text>
+<text x="1430" y="457" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">1</text>
+<text x="1275" y="579" font-size="12" font-weight="bold" text-anchor="middle" fill="#17365d">N</text>
+<rect x="30" y="880" width="500" height="178" rx="9" fill="#f2f7fc" stroke="#7fa8d4" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="46" y="906" font-size="14.5" font-weight="bold" fill="#17365d">สรุปข้อมูล (schema public)</text>
+<text x="46" y="932" font-size="13" fill="#1a1a2e">• จำนวนตาราง: 10 ตาราง</text>
+<text x="46" y="954" font-size="13" fill="#1a1a2e">• จำนวนคอลัมน์รวม: 83 คอลัมน์</text>
+<text x="46" y="976" font-size="13" fill="#1a1a2e">• คีย์นอก (Foreign Key): 11 เส้น</text>
+<text x="46" y="998" font-size="13" fill="#1a1a2e">• ตารางที่ไม่มีคีย์นอก: chat_answer_cache</text>
+<text x="46" y="1020" font-size="13" fill="#1a1a2e">• คีย์เดี่ยวแบบคู่: course_documents (course_id, file_sha256)</text>
+<text x="58" y="1042" font-size="13" fill="#1a1a2e">   และ course_chunks (document_id, chunk_index)</text>
+<rect x="550" y="880" width="490" height="178" rx="9" fill="#fafafa" stroke="#9e9e9e" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="566" y="906" font-size="14.5" font-weight="bold" fill="#17365d">คำอธิบายสัญลักษณ์</text>
+<circle cx="576" cy="932" r="3.6" fill="#fff" stroke="#1f3d6b" stroke-width="1.6"/>
+<line x1="580" y1="932" x2="660" y2="932" stroke="#1f3d6b" stroke-width="1.6"/>
+<circle cx="664" cy="932" r="3.6" fill="#fff" stroke="#1f3d6b" stroke-width="1.6"/>
+<text x="570" y="922" font-size="12" font-weight="bold" fill="#17365d">1</text>
+<text x="664" y="922" font-size="12" font-weight="bold" fill="#17365d">N</text>
+<text x="686" y="937" font-size="13" fill="#1a1a2e">ความสัมพันธ์แบบ 1 ต่อ หลาย (One-to-Many)</text>
+<text x="570" y="960" font-size="12.5" font-weight="bold" fill="#1565c0">(CASCADE)</text>
+<text x="686" y="960" font-size="13" fill="#1a1a2e">ลบข้อมูลต้นทางแล้วลบข้อมูลปลายทางอัตโนมัติ</text>
+<text x="570" y="984" font-size="12.5" font-weight="bold" fill="#c62828">(SET NULL)</text>
+<text x="686" y="984" font-size="13" fill="#1a1a2e">ลบข้อมูลต้นทางแล้วตั้งค่าเป็น NULL</text>
+<text x="570" y="1008" font-size="12.5" font-weight="bold" fill="#c62828">(NO ACTION)</text>
+<text x="686" y="1008" font-size="13" fill="#1a1a2e">ลบข้อมูลต้นทางไม่ได้ ถ้ายังมีข้อมูลอ้างอิงอยู่</text>
+<text x="570" y="1032" font-size="12.5" font-weight="bold" fill="#1565c0">PK / FK / UQ</text>
+<text x="686" y="1032" font-size="13" fill="#1a1a2e">คีย์หลัก / คีย์นอก / ค่าห้ามซ้ำ</text>
+<rect x="1060" y="880" width="480" height="178" rx="9" fill="#f7f5fd" stroke="#9b8ed6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="1076" y="906" font-size="14.5" font-weight="bold" fill="#17365d">หมายเหตุ</text>
+<text x="1076" y="932" font-size="12.5" fill="#1a1a2e">• แผนภาพนี้แสดงเฉพาะ schema public ของ PostgreSQL</text>
+<text x="1076" y="954" font-size="12.5" fill="#1a1a2e">• PostgreSQL ทั้งหมดมี 28 ตาราง (public 10 + mko 18) และ 6 views</text>
+<text x="1076" y="976" font-size="12.5" fill="#1a1a2e">• Supabase ใช้ฐานข้อมูลคนละชุด มี 7 ตาราง ไม่รวมในแผนภาพนี้</text>
+<text x="1076" y="998" font-size="12.5" fill="#1a1a2e">• course_chunks.embedding เก็บเวกเตอร์ 1024 มิติ (pgvector)</text>
+<text x="1076" y="1020" font-size="12.5" fill="#1a1a2e">• มีดัชนี ivfflat แบบ vector_cosine_ops (lists = 100)</text>
+<text x="1076" y="1042" font-size="12.5" fill="#1a1a2e">• เงื่อนไข NOT NULL และ CHECK ดูที่พจนานุกรมข้อมูลในเล่มรายงาน</text>
+</svg>

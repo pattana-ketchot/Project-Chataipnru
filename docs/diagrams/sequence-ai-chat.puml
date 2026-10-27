@@ -1,0 +1,131 @@
+@startuml sequence-ai-chat
+' ขั้นตอนถาม-ตอบ AI — POST /api/chat (เส้นทางที่หน้าเว็บใช้จริง)
+' เขียนใหม่ 25 ต.ค. 2569 หลังพบว่าฉบับก่อนมี group/alt เปิดไว้แต่ไม่มี end
+'
+' หลักฐาน อ่านจากซอร์สในอิมเมจที่ deploy จริง counter-2569-10-16
+'   routes/web_compat.py:173            POST /chat-web
+'   routes/web_compat.py:205-220        ดึงเหตุการณ์ meta ก่อนสร้าง StreamingResponse
+'   routes/web_compat.py:121-169        _source_headers()
+'   services/chat.py:488-493            Prepared.source ว่างสำหรับคำตอบสาย RAG
+'   services/chat.py::prepare_answer    ด่านเรียงกันแบบคืนค่าทันทีเมื่อตอบได้
+'   services/chat.py:1912               _with_rag_sources() คัดที่มาหลังรู้คำตอบทั้งหมด
+'   services/chat.py:2226               เก็บแคชหลังสตรีมจบ
+'   services/vector_search.py:17-34     ค้นแบบ ANN ด้วย ivfflat
+' คำอธิบายใต้ภาพอยู่ในหัวข้อ 3.5 ของ SCI_ADVISOR_DIAGRAMS.md
+
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam sequenceGroupBackgroundColor white
+skinparam sequenceGroupBorderColor black
+skinparam sequenceGroupHeaderFontColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam titleBackgroundColor white
+skinparam legendBackgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam sequenceMessageAlign left
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam sequenceGroupBodyBackgroundColor white
+skinparam sequenceLifeLineBorderColor black
+
+actor "ผู้ใช้" as user
+participant "หน้าเว็บ" as spa
+participant "Caddy" as caddy
+participant "Backend" as be
+database "PostgreSQL" as db
+participant "Ollama" as ol
+participant "Gemini" as gm
+
+user -> spa : พิมพ์คำถาม
+spa -> caddy : POST /api/chat
+caddy -> be : POST /chat-web
+
+group ด่าน 1 ตอบจากข้อมูลที่ตรวจรับแล้ว
+  be -> db : อ่าน mko.v_live_*
+  db --> be : ค่าที่ตรวจรับแล้ว
+  alt ฐานตอบได้
+    be --> spa : คำตอบสำเร็จรูป
+  else ตอบไม่ได้
+    be -> be : ส่งต่อด่านถัดไป
+  end
+end
+
+group ด่าน 2 ตรวจแคชคำตอบ
+  be -> db : question_key + corpus_version
+  alt พบในแคช
+    db --> be : คำตอบเดิม + รายการที่มา
+    be --> spa : คำตอบจากแคช
+  else ไม่พบ
+    be -> be : ส่งต่อด่านถัดไป
+  end
+end
+
+group ด่าน 3 แนะนำสาขา หรือถามกลับ
+  be -> db : ตรวจเงื่อนไขสาขา
+  alt ตัดสินได้
+    be --> spa : คำแนะนำ หรือคำถามกลับ
+  else ตัดสินไม่ได้
+    be -> be : ส่งต่อด่านถัดไป
+  end
+end
+
+group ด่าน 4 ค้นเอกสาร (RAG)
+  be -> ol : สร้างเวกเตอร์ของคำถาม
+  ol --> be : เวกเตอร์ 1024 มิติ
+  be -> db : ค้นแบบ ANN บน course_chunks
+  db --> be : ชิ้นส่วนเอกสาร ไม่เกิน 25 ชิ้น
+  opt มีประวัติ หรือคำถามเป็นภาษาอังกฤษ
+    be -> gm : เรียบเรียงคำถามใหม่
+    gm --> be : คำถามที่เรียบเรียงแล้ว
+    be -> db : ค้นซ้ำ
+    db --> be : ชิ้นส่วนเอกสารชุดใหม่
+  end
+  be -> gm : ตรวจว่าตอบจากเอกสารนี้ได้ไหม
+  gm --> be : เหตุผล แล้วคำตัดสิน
+end
+
+be -> be : เตรียม header จากเอกสารฉบับเดียว
+be --> spa : HTTP 200 + X-Source-Document / X-Source-Page
+
+group ส่งข้อความคำตอบ
+  alt คำตอบเตรียมไว้แล้ว
+    be --> spa : ส่งเป็นก้อนเดียว
+  else Gemini เขียนได้ตามปกติ
+    be -> gm : ขอให้เขียนคำตอบ
+    gm --> be : ข้อความทีละส่วน
+    be --> spa : ส่งต่อทันที
+  else Gemini ล้มก่อนส่งตัวอักษรแรก
+    be -> ol : ขอให้เขียนคำตอบแทน
+    ol --> be : ข้อความทีละส่วน
+    be --> spa : ส่งต่อทันที
+  else ล้มทั้งสองเจ้า
+    be --> spa : ข้อความแจ้งเหตุขัดข้อง
+  end
+end
+
+be -> db : ขอข้อความทั้งหน้าของหน้าที่จะอ้าง
+db --> be : ข้อความทั้งหน้า
+be -> be : ตัดหน้าที่ไม่รองรับข้ออ้างออก
+be --> spa : ต่อท้ายรายการที่มา แล้วจบสตรีม
+
+be -> db : บันทึกบทสนทนา
+be -> db : เก็บแคชเมื่อไม่มีประวัติ
+be -> db : นับสถิติการเรียกโมเดล
+
+spa -> user : แสดงคำตอบพร้อมที่มา
+
+@enduml

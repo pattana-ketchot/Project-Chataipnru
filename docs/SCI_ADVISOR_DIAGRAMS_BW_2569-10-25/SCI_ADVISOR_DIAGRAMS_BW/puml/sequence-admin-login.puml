@@ -1,0 +1,95 @@
+@startuml sequence-admin-login
+' =====================================================================
+' Sequence Diagram — การเข้าสู่ระบบของผู้ดูแล
+'
+' หลักฐาน (ตรวจเมื่อ 25 ต.ค. 2569 แบบอ่านอย่างเดียว):
+'   handoff/05-frontend/pages-and-routes.md   /admin/login -> pages/Admin/Login.jsx
+'                                             src/lib/apiAuth.js เก็บ token และต่ออายุ
+'   Caddyfile                                 /api/* -> ตัด /api ออก -> backend:8000
+'   backend/app/api/routes/auth.py:131-170    ตัวจัดการ POST /auth/login
+'   backend/app/api/routes/auth.py:92-100     _issue() ออก access + refresh token
+'   backend/app/api/deps.py:84-101            login_rate_limiter
+'   backend/app/api/deps.py:_LOGIN_IP_LIMITS  10 ครั้ง/นาที · 60 ครั้ง/ชม. ต่อ IP
+'   backend/app/core/security.py:46-48        bcrypt (ของ Supabase เดิม) และ bcrypt_sha256
+'   backend/app/services/auth_service.py:141  เขียน public.auth_sessions (เก็บ sha256 ของ token)
+'
+' ** render ด้วย kroki.io เท่านั้น ** planttext.com และ plantuml.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+
+actor "ผู้ดูแล\n(editor / admin)" as staff
+participant "หน้าเว็บ SPA\nAdmin/Login.jsx\nlib/apiAuth.js" as spa
+participant "Caddy" as caddy
+participant "backend\nroutes/auth.py" as be
+participant "auth_service.py\ncore/security.py" as svc
+database "PostgreSQL\npublic.users\npublic.auth_sessions" as db
+
+staff -> spa : กรอกอีเมลและรหัสผ่าน
+spa -> caddy : POST /api/auth/login\n{email, password}
+caddy -> be : ตัด /api ออก -> POST /auth/login
+
+alt เกินเพดานความถี่ของ IP
+  be --> spa : <b>429</b> Too Many Requests + Retry-After
+else ยังไม่เกิน
+  be -> db : SELECT ... FROM users WHERE email = :email
+  db --> be : แถวผู้ใช้ หรือไม่พบ
+
+  be -> svc : verify_password(รหัสที่กรอก, hash, scheme)
+  svc --> be : ผ่าน / ไม่ผ่าน
+
+  alt บัญชีถูกล็อกชั่วคราว
+    be --> spa : <b>429</b> "บัญชีถูกล็อกชั่วคราว ลองใหม่ในอีก N นาที"
+  else รหัสผิด หรือไม่พบบัญชี หรือบัญชีถูกปิด
+    be -> db : record_login_failure() เพิ่ม failed_login_count\nและตั้ง locked_until เมื่อถึงเกณฑ์
+    be --> spa : <b>401</b> ข้อความเดียวกันทุกกรณี\n(ไม่บอกว่าอีเมลผิดหรือรหัสผิด)
+  else ผ่าน
+    opt รหัสผ่านยังเก็บแบบเดิมของ Supabase
+      be -> svc : hash_password() ด้วยรูปแบบของระบบนี้
+      be -> db : อัปเกรด password_hash และ password_scheme
+    end
+    be -> db : record_login_success() ล้างตัวนับและปลดล็อก
+    be -> svc : create_access_token(user_id, {role, status})\ncreate_refresh_token(user_id)
+    svc --> be : access token + refresh token
+    be -> db : INSERT public.auth_sessions\n(user_id, <b>sha256 ของ refresh token</b>, user_agent, expires_at)
+    be --> spa : <b>200</b> {access_token, refresh_token, user: {role, status, ...}}
+    spa -> spa : เก็บ token · แจ้งทุกหน้าว่าสถานะเปลี่ยน\nตรวจว่า role/status เข้าส่วนผู้ดูแลได้ไหม (lib/adminAuth.js)
+    spa --> staff : เข้าหน้า /admin/dashboard
+  end
+end
+
+@enduml

@@ -33,7 +33,7 @@ import re
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -42,7 +42,8 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.services.course_scope import degree_level_of, degree_of_title
 from app.services.curriculum_facts import ANSWERED, FactsResult, lookup
-from app.services.structured_intent import STRUCTURED, detect
+from app.services.structured_intent import (STRUCTURED, comparison_sides, detect,
+                                            matched_fields, only_field)
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,19 @@ SERVED_STRUCTURED, SERVED_RAG = "structured", "rag"
 
 # field ที่คำตอบจากฐานข้อมูลตอบผู้ใช้ได้ในโหมด on — ระบุทีละ field โดยตั้งใจ ไม่ใช่ "ทุก field ยกเว้น"
 # field ที่ routing รองรับเพิ่มในอนาคตจึงยังตอบด้วย RAG จนกว่าจะเพิ่มชื่อไว้ที่นี่
-# admission ไม่อยู่ในรายการ: คำตอบแสดงเฉพาะหัวข้อคุณสมบัติผู้เข้าศึกษาใน มคอ.2 โดยไม่บอกขอบเขต ขณะที่เล่มเดียวกันมีเกณฑ์อื่น
-# (docs/MKO_PHASE2_FINAL_SHADOW_VALIDATION.md ข้อ B) จึงยังตอบด้วย RAG
-USER_FACING_FIELDS = frozenset({"total_credits", "edition_year", "careers", "objectives"})
+#
+# admission เพิ่มเข้ามาเมื่อ 14 ต.ค. 2569 — เดิมถูกกันไว้ด้วยเหตุผลเรื่องขอบเขตของคำตอบ ไม่ใช่ข้อมูลผิด
+# (docs/MKO_PHASE2_FINAL_SHADOW_VALIDATION.md ข้อ B): รายการคุณสมบัติจากหัวข้อเดียวของ มคอ.2 อ่านได้ว่าเป็น
+# เงื่อนไขครบถ้วนในการสมัคร ขณะที่เล่มเดียวกันมีเกณฑ์อื่นอยู่หัวข้ออื่นด้วย · ข้อนั้นถูกปิดด้วยสองอย่างใน
+# curriculum_facts._compose: (1) ต่อท้ายด้วยหมายเหตุบอกขอบเขตว่าเป็นหัวข้อหนึ่งของเล่มหลักสูตร ไม่ใช่
+# ประกาศรับสมัครของปีปัจจุบัน และมหาวิทยาลัยอาจมีเงื่อนไขเพิ่ม (2) ตอบแยกทุกฉบับที่มีข้อมูลเมื่อไม่ระบุปี
+# พร้อมบอกฉบับที่ยังไม่มีข้อมูลที่ผ่านการตรวจ
+#
+# เหตุที่ย้ายมาเส้นทางฐานข้อมูลดีกว่าปล่อยให้ RAG ตอบ: วัดเมื่อ 14 ต.ค. 2569 (ข้อ r1-07 ของชุด 37 ข้อ
+# 13 รอบ) คำตอบจาก RAG ไม่ครบ 3/13 รอบ และ 1/13 รอบดึงเงื่อนไขจากภาคผนวกข้อบังคับมหาวิทยาลัย
+# (it66.pdf หน้า 161 เรื่องประวัติอาชญากรรม) มาตอบแทนคุณสมบัติของหลักสูตร · ข้อมูลที่ตรวจรับแล้ว
+# ของ IT 2566 มีครบ 3 ข้อจาก it66.pdf หน้า 16 โดยผู้ตรวจเป็นคน (human:project-owner)
+USER_FACING_FIELDS = frozenset({"total_credits", "edition_year", "careers", "objectives", "admission"})
 
 _MAX_PENDING = 32
 _SERVED_NO_ANSWER = ("not_found", "out_of_scope")
@@ -175,6 +186,10 @@ class ServedAnswer:
     answer: str
     document_id: str | None = None
     page_start: int | None = None
+    # ที่มาของทุกฉบับที่คำตอบนี้อ้างถึง ต่างจาก document_id/page_start ด้านบนที่มีค่า
+    # เฉพาะคำตอบฉบับเดียว (ปุ่มเปิดเอกสารแสดงได้ปุ่มเดียว) รายการนี้มีครบทุกฉบับ
+    # จึงใช้ตรวจความถูกต้องของแหล่งอ้างอิงได้แม้คำตอบครอบหลายฉบับ
+    sources: tuple[dict, ...] = ()
 
 
 def _source_of(result) -> tuple[str | None, int | None]:
@@ -193,6 +208,30 @@ def _source_of(result) -> tuple[str | None, int | None]:
     return source.document_id, source.page_start
 
 
+def _sources_of(result) -> tuple[dict, ...]:
+    """
+    ที่มาของทุกฉบับที่คำตอบนี้อ้างถึง — เรียงตามลำดับที่ปรากฏในคำตอบ
+
+    มีไว้ให้ตรวจสอบแหล่งอ้างอิงได้ ไม่ได้ใช้ตัดสินหรือเปลี่ยนข้อความคำตอบ
+    คำตอบที่อ้างถึงสองฉบับจะได้สองรายการ ต่างจาก _source_of ที่คืน None ในกรณีนั้น
+    ใส่ course_id และชื่อหลักสูตรมาด้วย เพราะชื่อไฟล์อย่างเดียวแยกฉบับที่หน่วยกิต
+    เท่ากันไม่ได้ (วิทยาการคอมพิวเตอร์ 2561 กับ 2566 เป็น 130 เท่ากันทั้งคู่)
+    """
+    out = []
+    for f in result.facts:
+        if f.source is None:
+            continue
+        out.append({
+            "course_id": f.course_id,
+            "course_title": f.course_title,
+            "file": f.source.file,
+            "page_start": f.source.page_start,
+            "page_end": f.source.page_end,
+            "document_id": f.source.document_id,
+        })
+    return tuple(out)
+
+
 def servable_result(db: Session, asked: str):
     """ผลจากฐานข้อมูลที่ใช้ตอบผู้ใช้ได้ (FactsResult) หรือ None = ต้องใช้ RAG"""
     intent = detect(db, asked)
@@ -204,12 +243,176 @@ def servable_result(db: Session, asked: str):
     return result
 
 
+def admission_gap(db: Session, asked: str) -> str | None:
+    """
+    คำถามคุณสมบัติผู้เข้าศึกษาที่ชั้นข้อมูลที่ตรวจรับแล้วตอบไม่ได้ -> ข้อความที่ระบุชัด หรือ None
+
+    ทำไมไม่ปล่อยให้เส้นทางเอกสารตอบเหมือนหัวข้ออื่น
+    ------------------------------------------------
+    เล่ม มคอ.2 เย็บภาคผนวกข้อบังคับของมหาวิทยาลัยไว้ท้ายเล่ม (เรื่องผู้มีสิทธิ์สมัคร
+    ประวัติอาชญากรรม โรคติดต่อ) ซึ่งใช้กับทุกหลักสูตร ไม่ใช่คุณสมบัติของหลักสูตรนี้
+    การค้นเอกสารหยิบหน้าเหล่านั้นมาได้โดยชอบเพราะอยู่ในเล่มเดียวกัน แล้วคำตอบจะกลายเป็น
+    เงื่อนไขทั่วไปที่ดูเหมือนเป็นของหลักสูตร — วัดจริงเมื่อ 14 ต.ค. 2569 (ข้อ r1-07
+    13 รอบ): 1 รอบดึง it66.pdf หน้า 161 มาตอบ และ 3 รอบตอบไม่ครบ
+    (docs/MKO_PHASE2_FINAL_SHADOW_VALIDATION.md ข้อ A2/A3/A4 ยืนยันว่าหน้าภาคผนวกชุดนี้
+    อยู่ใน 8 ของ 10 เล่มปริญญาตรี)
+
+    หัวข้อนี้เป็นเงื่อนไขที่ผู้ใช้เอาไปตัดสินใจสมัคร การบอกว่า "ยังไม่พบในข้อมูลของระบบ"
+    จึงถูกต้องกว่าการตอบด้วยเงื่อนไขของมหาวิทยาลัยที่ไม่ได้ผูกกับหลักสูตร · ด่านนี้ทำงาน
+    เฉพาะเมื่อระบุหลักสูตรได้แล้วเท่านั้น คำถามลอย ๆ ยังไหลไปด่านถามกลับตามเดิม
+    """
+    intent = detect(db, asked)
+    if intent.field != "admission":
+        return None
+    # ชื่อสาขาที่มีทั้งปริญญาโทและเอก: routing ไม่เลือกระดับแทนผู้ใช้ (reason=multiple_degree_levels)
+    # เดิมไหลไปเส้นทางเอกสารซึ่งหยิบเล่มใดเล่มหนึ่งมาตอบ · ถามกลับตรง ๆ ดีกว่าเดาให้
+    if intent.reason == "multiple_degree_levels":
+        return ("ชื่อสาขานี้มีหลายระดับปริญญาในข้อมูลของระบบครับ "
+                "ระบุระดับ (ปริญญาตรี ปริญญาโท หรือปริญญาเอก) แล้วผมจะตอบคุณสมบัติผู้เข้าศึกษาของระดับนั้นให้")
+    if intent.route != STRUCTURED or not intent.course_ids:
+        return None
+    result = lookup(db, intent)
+    if result.status == ANSWERED and (result.answer or "").strip():
+        return None   # ตอบได้อยู่แล้ว — ด่านตอบจากฐานจัดการไปก่อนหน้านี้
+    note = (result.note or "").strip()
+    programme = intent.programme or "หลักสูตรนี้"
+    if "หลายระดับปริญญา" in note:
+        return f"{note}ครับ แล้วผมจะตอบคุณสมบัติผู้เข้าศึกษาของระดับนั้นให้"
+    if note.startswith("ไม่มีหลักสูตรฉบับ"):
+        return (f"{note} ในข้อมูลของระบบครับ "
+                f"ระบุปีของฉบับที่มีอยู่ หรือถามโดยไม่ระบุปีเพื่อดูฉบับที่ระบบมีข้อมูล")
+    # ระบุฉบับที่ถามให้ชัด และบอกฉบับที่ระบบมีข้อมูล — ไม่ให้เข้าใจว่าทั้งสาขาไม่มีข้อมูลเลย
+    # (IT ฉบับ 2561 ยังไม่มี แต่ฉบับ 2566 มีครบสามข้อ)
+    edition = f" ฉบับ พ.ศ. {intent.year_be}" if intent.year_be else ""
+    hint = ""
+    if intent.year_be is not None:
+        wider = lookup(db, replace(intent, year_be=None))
+        have = [f.course_title for f in wider.facts if f.items] if wider.status == ANSWERED else []
+        if have:
+            hint = " ฉบับที่ระบบมีข้อมูลคือ " + " และ ".join(have) + " ถามฉบับนั้นได้ · "
+    return (f"ยังไม่พบข้อมูลคุณสมบัติผู้เข้าศึกษาของ{programme}{edition} ที่ผ่านการตรวจในข้อมูลของระบบครับ\n"
+            f"ผมไม่ตอบจากข้อบังคับทั่วไปของมหาวิทยาลัยที่แนบไว้ท้ายเล่มหลักสูตร "
+            f"เพราะนั่นไม่ใช่คุณสมบัติเฉพาะของหลักสูตรนี้ ·{hint or ' '}"
+            f"สอบถามฝ่ายวิชาการของคณะหรือดูประกาศรับสมัครของมหาวิทยาลัยได้")
+
+
+# ชื่อหัวข้อที่ผู้ใช้อ่านรู้เรื่อง ใช้บอกว่าส่วนไหนของคำถามยังตอบจากข้อมูลไม่ได้
+_FIELD_LABEL = {
+    "total_credits": "จำนวนหน่วยกิต",
+    "edition_year": "ปีของหลักสูตร",
+    "careers": "อาชีพหลังสำเร็จการศึกษา",
+    "objectives": "วัตถุประสงค์ของหลักสูตร",
+    "admission": "คุณสมบัติผู้สมัคร",
+}
+
+
+def servable_results(db: Session, asked: str) -> tuple[list[FactsResult], list[str]]:
+    """
+    ผลจากฐานข้อมูลของคำถามนี้ · คืน (ผลที่ตอบได้เรียงตามที่ถาม, หัวข้อที่ตอบจากฐานไม่ได้)
+
+    คำถามหัวข้อเดียวได้ผลหนึ่งรายการเหมือนเดิมทุกประการ
+
+    คำถามหลายหัวข้อของหลักสูตรเดียว ("เรียนกี่หน่วยกิต และจบไปทำงานอะไรได้บ้าง")
+    เดิม detect() คืน multiple_fields แล้วส่งทั้งคำถามไปเส้นทางเอกสาร ทั้งที่ข้อมูล
+    ที่ตรวจรับแล้วมีครบทั้งสองหัวข้อ ผลคือคำถามแบบนี้พึ่งโมเดลทั้งหมด
+    ที่นี่จึงถามฐานทีละหัวข้อโดยตัดวลีของหัวข้ออื่นออก แล้วต่อคำตอบเข้าด้วยกัน
+
+    หัวข้อที่ตอบไม่ได้จะถูกคืนออกไปให้ผู้เรียกบอกผู้ใช้ชัด ๆ ไม่ใช่หายไปเงียบ ๆ
+    ถ้ามีหัวข้อที่ไม่เปิดให้ตอบจากฐานปนอยู่ (หัวข้อที่ไม่อยู่ใน USER_FACING_FIELDS เช่น
+    รายวิชาหรือโครงสร้างหลักสูตร) จะไม่ตอบจากฐานเลย เพื่อไม่ให้ผู้ใช้ได้คำตอบครึ่งเดียว
+    โดยไม่รู้ว่าอีกครึ่งถูกข้าม
+    """
+    intent = detect(db, asked)
+    if intent.route == STRUCTURED:
+        if intent.field not in USER_FACING_FIELDS:
+            return [], []
+        result = lookup(db, intent)
+        if result.status != ANSWERED or not (result.answer or "").strip():
+            return [], []
+        return [result], []
+
+    if intent.reason != "multiple_fields":
+        return [], []
+
+
+    fields = matched_fields(db, asked)
+    if len(fields) < 2 or any(f not in USER_FACING_FIELDS for f in fields):
+        return [], []
+
+    got: list[FactsResult] = []
+    missing: list[str] = []
+    for field in fields:
+        sub = only_field(asked, field)
+        sub_intent = detect(db, sub)
+        # ยืนยันด้วย detect() อีกครั้ง ไม่เชื่อการตัดวลีลอย ๆ — ถ้าตัดแล้วชั้นข้อมูล
+        # ยังไม่รับ หรือได้หัวข้ออื่น ให้ถือว่าหัวข้อนี้ตอบจากฐานไม่ได้
+        if sub_intent.route != STRUCTURED or sub_intent.field != field:
+            missing.append(field)
+            continue
+        result = lookup(db, sub_intent)
+        if result.status != ANSWERED or not (result.answer or "").strip():
+            missing.append(field)
+            continue
+        got.append(result)
+    return (got, missing) if got else ([], [])
+
+
+def compare_results(db: Session, asked: str) -> tuple[str, list[FactsResult]] | None:
+    """
+    คำตอบเทียบข้อเท็จจริงสองฝั่งจากฐาน · คืน (ข้อความคำตอบ, ผลแต่ละฝั่ง) หรือ None
+
+    ทำไมต้องมี: "ฉบับ 2561 กับ 2566 หน่วยกิตต่างกันไหม" ฐานมีค่าทั้งสองฝั่งครบ แต่
+    detect() ติดคำเชิงเทียบ (_NARRATIVE) และ multiple_years จึงไม่รับ แล้วเส้นทาง
+    เอกสารตอบว่าไม่พบข้อมูล — วัดจากชุด 37 ข้อ (c1-02) เมื่อ 14 ต.ค. 2569
+
+    **ห้ามสรุปว่าหลักสูตรเหมือนกันเพราะหน่วยกิตเท่ากัน** คำตอบจึงบอกเท่าที่เทียบได้
+    (ค่าของหัวข้อที่ถาม) แล้วกำกับไว้ว่าเท่ากันเฉพาะตัวเลขนี้ ไม่ใช่ทั้งหลักสูตร
+    """
+    sides = comparison_sides(db, asked)
+    if sides is None:
+        return None
+    field, questions = sides
+    if field not in USER_FACING_FIELDS:
+        return None
+
+    results: list[FactsResult] = []
+    for q in questions:
+        intent = detect(db, q)
+        if intent.route != STRUCTURED or intent.field != field:
+            return None
+        result = lookup(db, intent)
+        if result.status != ANSWERED or not (result.answer or "").strip():
+            return None
+        results.append(result)
+    if len(results) != 2:
+        return None
+
+    label = _FIELD_LABEL.get(field, field)
+    lines = [f"เทียบ{label}", ""]
+    lines += [r.answer.strip() for r in results]
+
+    # เทียบได้เป็นตัวเลขก็บอกตรง ๆ ว่าเท่ากันหรือไม่ · ถ้าฝั่งใดมีหลายค่า (เช่นหลายฉบับ
+    # ในฝั่งเดียว) ไม่สรุปตัวเลขให้ เพราะการเลือกค่าใดมาเทียบคือการตัดสินแทนผู้ใช้
+    numbers = [sorted({f.value_int for f in r.facts if f.value_int is not None})
+               for r in results]
+    if all(len(n) == 1 for n in numbers):
+        a, b = numbers[0][0], numbers[1][0]
+        lines.append("")
+        if a == b:
+            lines.append(f"สรุป: {label}เท่ากันทั้งสองฝั่ง ({a})")
+            lines.append("หมายเหตุ: ตัวเลขนี้เท่ากันไม่ได้หมายความว่ารายวิชา โครงสร้าง "
+                         "หรือเนื้อหาของหลักสูตรเหมือนกัน ถามรายวิชาของแต่ละฝั่งแยกได้")
+        else:
+            lines.append(f"สรุป: {label}ต่างกัน {abs(a - b)} (ฝั่งละ {a} และ {b})")
+    return "\n".join(lines), results
+
+
 def servable_answer(db: Session, asked: str) -> str | None:
     """
     คำตอบจากฐานข้อมูลที่ใช้ตอบผู้ใช้ได้ หรือ None = ต้องตอบด้วย RAG
 
     ใช้ detect / lookup ตัวเดียวกับโหมด shadow ไม่ได้ตีความคำถามหรือเรียบเรียงคำตอบใหม่
-    ตรวจ field ก่อน lookup เพื่อให้ field ที่ไม่อยู่ในรายการ (เช่น admission) ไม่ถูกดึงข้อมูลมาตอบเลย
+    ตรวจ field ก่อน lookup เพื่อให้ field ที่ไม่อยู่ใน USER_FACING_FIELDS ไม่ถูกดึงข้อมูลมาตอบเลย
     """
     result = servable_result(db, asked)
     return result.answer if result is not None else None
@@ -228,11 +431,39 @@ def structured_answer(*, question: str, interpreted: str | None) -> ServedAnswer
             return None
         with SessionLocal() as db:
             try:
-                result = servable_result(db, interpreted or question)
-                if result is None:
-                    return None
-                document_id, page_start = _source_of(result)
-                return ServedAnswer(result.answer, document_id, page_start)
+                asked = interpreted or question
+                # ด่านเทียบสองฝั่งมาก่อน เพราะคำถามเทียบมีหัวข้อเดียวแต่สองฝั่ง
+                # servable_results() จะไม่รับ (detect คืน multiple_years หรือ narrative)
+                compared = compare_results(db, asked)
+                if compared is not None:
+                    answer, results = compared
+                    missing: list[str] = []
+                else:
+                    results, missing = servable_results(db, asked)
+                    if not results:
+                        return None
+                    answer = "\n\n".join(r.answer for r in results)
+                if missing:
+                    # บอกชัดว่าส่วนไหนของคำถามยังไม่ได้ตอบ ไม่ปล่อยให้เข้าใจว่าตอบครบ
+                    #
+                    # ไม่สัญญาว่าจะไปค้นเอกสารให้ถ้าหัวข้อที่ขาดคือคุณสมบัติผู้เข้าศึกษา เพราะด่าน
+                    # admission_gap ไม่ตอบหัวข้อนี้จากเอกสาร (เหตุผลอยู่ในฟังก์ชันนั้น) การสัญญา
+                    # แล้วไม่ทำคือการบอกผู้ใช้ไม่ตรงกับพฤติกรรมจริงของระบบ
+                    labels = " และ ".join(_FIELD_LABEL.get(f, f) for f in missing)
+                    tail = ("สอบถามฝ่ายวิชาการของคณะหรือดูประกาศรับสมัครของมหาวิทยาลัยได้"
+                            if missing == ["admission"] else
+                            "ถามแยกอีกครั้งได้ เดี๋ยวผมค้นจากเอกสารหลักสูตรให้")
+                    answer += f"\n\nยังไม่พบข้อมูล{labels}ที่ผ่านการตรวจของหลักสูตรนี้ในระบบครับ {tail}"
+                document_id, page_start = _source_of(results[0])
+                seen: set[tuple] = set()
+                sources: list[dict] = []
+                for r in results:
+                    for s in _sources_of(r):
+                        key = tuple(sorted(s.items()))
+                        if key not in seen:
+                            seen.add(key)
+                            sources.append(s)
+                return ServedAnswer(answer, document_id, page_start, tuple(sources))
             finally:
                 db.rollback()
     except Exception:  # noqa: BLE001 — ข้อผิดพลาดของ structured ห้ามทำให้ตอบผู้ใช้ไม่ได้

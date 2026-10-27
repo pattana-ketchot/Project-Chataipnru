@@ -1,0 +1,246 @@
+--- a/backend/app/api/routes/web_compat.py  (image ที่ production ใช้อยู่)
++++ b/backend/app/api/routes/web_compat.py  (ซ้อน patch ของรอบนี้)
+@@ -35,6 +35,7 @@
+ from app.services.program_compare import compare_programs
+ from app.services.program_match import build_profile_text, confidence_of, match_programs
+ from app.services.program_names import program_about, program_facts
++from app.services.course_scope import degree_level_of, degree_of_title
+ from app.services.web_compat import canonical_labels, label_of, match_by_title, normalise_title, shared_user
+ 
+ from llm.connector import LLMConnectionError  # noqa: E402
+@@ -83,6 +84,12 @@
+ class WebCourse(BaseModel):
+     id: str
+     title: str = ""
++    # ระดับการศึกษาที่หน้าเว็บส่งมา ("ปริญญาโท" / "ปริญญาเอก" / "ปริญญาตรี")
++    #
++    # จำเป็นเพราะคณะมีสาขาที่ชื่อและปีเดียวกันแต่คนละระดับปริญญา ถ้าไม่มีช่องนี้
++    # match_by_title() จะเลือกเล่มเดียวกันให้ทั้งสองรายการ แล้วเอาเล่มนั้นมาเทียบ
++    # กับตัวเอง · ค่าว่างยังรับได้ ผู้เรียกรุ่นเก่าจึงไม่พัง
++    level: str = ""
+ 
+ 
+ class WebCompareRequest(BaseModel):
+@@ -336,6 +343,11 @@
+     return {"programmes": programmes}
+ 
+ 
++def _rank_key(title: str) -> tuple[str, str | None]:
++    """คีย์เทียบชื่อสาขาที่แยกระดับปริญญาด้วย — ใช้จับคู่อันดับกลับไปที่การ์ดบนหน้าเว็บ"""
++    return normalise_title(title), degree_level_of(degree_of_title(title))
++
++
+ def _row_value(rows, dimension: str, index: int) -> str | None:
+     for row in rows:
+         if row["dimension"] == dimension:
+@@ -358,9 +370,12 @@
+ 
+     if len(matched) < 2:
+         names = ", ".join(c["title"] for c in unmatched) or "ที่เลือกมา"
++        # สาขาที่มีหลายระดับปริญญาแต่ไม่ได้บอกระดับมา จะอยู่ใน unmatched เช่นกัน
++        # ข้อความต้องบอกทางออกให้ด้วย ไม่ใช่บอกแค่ว่าไม่มีเอกสาร ซึ่งไม่จริงในกรณีนี้
+         raise HTTPException(
+             status.HTTP_422_UNPROCESSABLE_ENTITY,
+-            f"ยังไม่มีเอกสารหลักสูตรของสาขา: {names} จึงเปรียบเทียบให้ไม่ได้",
++            f"ยังไม่มีเอกสารหลักสูตรของสาขา: {names} จึงเปรียบเทียบให้ไม่ได้ "
++            f"(ถ้าสาขานั้นเปิดสอนหลายระดับปริญญา ต้องระบุระดับมาด้วย)",
+         )
+ 
+     try:
+@@ -428,12 +443,14 @@
+     # เทียบกลับด้วยชื่อ ไม่ใช่รหัสของหลักสูตร เพราะการจัดอันดับมองเอกสารทุกฉบับรวม
+     # ฉบับเก่า แต่ตารางจับคู่เก็บเฉพาะฉบับล่าสุด — เทียบด้วยรหัสจะทำให้อันดับที่ชนะ
+     # ด้วยเอกสารฉบับเก่าหายไปเงียบๆ
+-    back = {normalise_title(course.title): item["id"] for item, course in matched}
++    # คีย์รวมระดับปริญญาด้วย เพราะ normalise_title() ตัดชื่อปริญญาทิ้ง สาขาที่มีทั้ง
++    # โทและเอกจะได้คีย์เดียวกันแล้วทับกันเหลือใบเดียว
++    back = {_rank_key(course.title): item["id"] for item, course in matched}
+ 
+     ranked: list[tuple[str, object]] = []
+     used: set[str] = set()
+     for m in matches:
+-        web_id = back.get(normalise_title(m.title))
++        web_id = back.get(_rank_key(m.title))
+         # เอกสารสองฉบับของสาขาเดียวกันชี้ไปที่การ์ดใบเดียวกัน แสดงซ้ำไม่ได้
+         if web_id is None or web_id in used:
+             continue
+--- a/backend/app/services/chat.py  (image ที่ production ใช้อยู่)
++++ b/backend/app/services/chat.py  (ซ้อน patch ของรอบนี้)
+@@ -41,6 +41,7 @@
+ from app.services.course_scope import (
+     _distinctive_name,
+     degree_level_label,
++    ambiguous_degree_level,
+     missing_degree_level,
+     missing_edition_year,
+     more_specific_unknown_name,
+@@ -1433,6 +1434,30 @@
+         return replace(_blank(session.id, message, version, history),
+                        status="answered", canned=say, cacheable=False, stages=stages)
+ 
++    # --- 0.7155 มีหลายระดับปริญญาแต่ไม่ได้บอกว่าระดับไหน -> ถามกลับ ไม่เดาให้ ---
++    #
++    # ต่างจาก 0.715 ตรงที่นั่นคือ "ขอระดับที่ไม่มี" ส่วนนี่คือ "ไม่ขอทั้งที่มีให้เลือก"
++    #
++    # ถ้าไม่ถาม ขอบเขตจะเหลือทั้งสองเล่มแล้วส่งต่อให้เส้นทางเอกสาร ซึ่งอาจเอาตัวเลข
++    # ของสองระดับมาปนกัน (โท 36 หน่วยกิต / เอก 48 หน่วยกิต) หรือหยิบเล่มเดียวมาตอบ
++    # โดยไม่บอกว่าระดับไหน — ผู้อ่านแยกไม่ออกว่าได้คำตอบของระดับที่ถามหรือเปล่า
++    #
++    # วัดเมื่อ 27 ต.ค. 2569: ถาม "การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน
++    # เรียนกี่หน่วยกิต" ขอบเขตเหลือทั้งเล่มโทและเอก และ structured_intent คืนเหตุผล
++    # multiple_degree_levels แล้วตกไปเส้นทางเอกสารโดยไม่มีใครบอกผู้ใช้
++    if (amb := ambiguous_degree_level(db, message)) is not None:
++        programme, levels = amb
++        thai_q = written_in_thai(message)
++        names = [degree_level_label(lv) for lv in levels]
++        joined_th = " และ ".join(names)
++        say = (f"หลักสูตร{programme} มีทั้งระดับ{joined_th} "
++               f"ช่วยระบุระดับที่ต้องการด้วยครับ จะได้ตอบจากเล่มที่ถูกระดับ"
++               if thai_q else
++               f"{programme} is offered at more than one level ({', '.join(levels)}). "
++               f"Please say which level you mean.")
++        return replace(_blank(session.id, message, version, history),
++                       status="answered", canned=say, cacheable=False, stages=stages)
++
+     # --- 0.716 ระบุปีฉบับที่ยังไม่มีในข้อมูล -> บอกปีที่มี ไม่เดาฉบับอื่นมาตอบ ---
+     #
+     # เดิมคำถาม "หลักสูตรคณิตศาสตร์ พ.ศ. 2554 เรียนกี่หน่วยกิต" ได้ status=no_data
+--- a/backend/app/services/course_scope.py  (image ที่ production ใช้อยู่)
++++ b/backend/app/services/course_scope.py  (ซ้อน patch ของรอบนี้)
+@@ -267,6 +267,49 @@
+     direct = [n for n in by_name if n and n in full]
+     family = [n for n in by_name if n and alias in n and n not in direct]
+     return sorted(direct, key=len, reverse=True) + sorted(family, key=len, reverse=True)
++
++
++def ambiguous_degree_level(db: Session, question: str) -> tuple[str, list[str]] | None:
++    """
++    คำถามเอ่ยชื่อหลักสูตรที่มีหลายระดับปริญญา แต่ **ไม่ได้บอกว่าระดับไหน** หรือไม่
++    คืน (ชื่อหลักสูตร, รายชื่อระดับที่มี) เรียงจากต่ำไปสูง
++
++    คู่กับ missing_degree_level() ซึ่งดูกรณี "ระบุระดับที่ไม่มี"
++    อันนี้ดูกรณี "ไม่ระบุทั้งที่มีให้เลือกมากกว่าหนึ่ง"
++
++    ทำไมต้องถามกลับแทนที่จะตอบ
++    ---------------------------
++    คลังนี้มีสาขาที่ชื่อสาขาและปีเดียวกันแต่คนละระดับ (การจัดการเทคโนโลยีการเกษตรและ
++    บริหารทรัพยากรชุมชน พ.ศ. 2568 มีทั้งปริญญาโท 36 หน่วยกิต และปริญญาเอก 48 หน่วยกิต)
++    ขอบเขตจะเหลือทั้งสองเล่ม แล้วส่งต่อให้เส้นทางเอกสารเขียนคำตอบจากทั้งคู่
++
++    ผลคือคำตอบอาจเอาตัวเลขของสองระดับมาปนกัน หรือหยิบเล่มใดเล่มหนึ่งมาตอบโดยไม่บอก
++    ว่าเป็นระดับไหน ซึ่งผู้อ่านแยกไม่ออกว่าได้คำตอบของระดับที่ตัวเองถามหรือเปล่า
++    **การถามกลับหนึ่งประโยคถูกกว่าการตอบผิดโดยไม่มีสัญญาณเตือน**
++
++    คืน None เมื่อ: คำถามระบุระดับแล้ว · ไม่เอ่ยถึงหลักสูตรใด · หรือหลักสูตรนั้นมีระดับเดียว
++    (หลักสูตรปริญญาตรีที่มีหลายฉบับปีจึงไม่เข้าเงื่อนไขนี้ เพราะทุกฉบับระดับเดียวกัน)
++    """
++    if requested_degree_level(question) is not None:
++        return None
++
++    courses = db.scalars(select(Course).where(Course.is_active.is_(True))).all()
++    titles = {c.id: c.title for c in courses}
++    by_name: dict[str, list[uuid.UUID]] = {}
++    for c in courses:
++        by_name.setdefault(_distinctive_name(c.title), []).append(c.id)
++
++    candidates = _candidate_names(question, by_name)
++    if not candidates:
++        return None
++
++    ids = [cid for name in candidates for cid in by_name[name]]
++    have = degree_levels_of(ids, titles)
++    if len(have) < 2:
++        return None
++
++    order = {"bachelor": 0, "master": 1, "doctoral": 2}
++    return candidates[0], sorted(have, key=lambda lv: order.get(lv, 99))
+ 
+ 
+ def missing_degree_level(db: Session, question: str) -> tuple[str, str] | None:
+--- a/backend/app/services/web_compat.py  (image ที่ production ใช้อยู่)
++++ b/backend/app/services/web_compat.py  (ซ้อน patch ของรอบนี้)
+@@ -32,6 +32,7 @@
+ from app.models.user import User
+ # ใช้ตัวย่อชื่อตัวเดียวกับที่ตารางค่าเทอมใช้ เพื่อให้การเทียบชื่อสาขาทั้งระบบให้ผล
+ # เหมือนกัน รวมถึงกรณีที่ชื่อสาขาเป็นคำเดียวกับชื่อปริญญา (การแพทย์แผนไทยประยุกต์)
++from app.services.course_scope import degree_level_of, degree_of_title
+ from app.services.tuition import _normalise as normalise_title
+ 
+ # อีเมลของบัญชีกลาง ไม่ได้ใช้ส่งอีเมลจริง เป็นเพียงคีย์ที่หาแถวเดิมเจอทุกครั้ง
+@@ -205,29 +206,70 @@
+ 
+     ถ้าระบุปีมาแล้วไม่มีเล่มของปีนั้น จะถือว่า "จับคู่ไม่ได้" ไม่ใช่ถอยไปเล่มอื่นเงียบๆ
+ 
++    **ระดับปริญญาก็ต้องตรงด้วย** คลังนี้มีสาขาที่ชื่อและปีเดียวกันแต่คนละระดับ
++    (การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน พ.ศ. 2568 มีทั้งโทและเอก)
++    และ normalise_title() ตัดชื่อปริญญาทิ้ง ทั้งสองเล่มจึงได้คีย์เดียวกัน
++    ผู้เรียกส่งระดับมาในช่อง level หรือให้ชื่อขึ้นต้นด้วย "(ปริญญาโท)" ก็ได้
++    ถ้าไม่บอกระดับทั้งที่ชื่อนั้นมีหลายระดับ จะถือว่าจับคู่ไม่ได้ แทนการเดาให้
++
+     คืนทั้งรายการที่จับคู่ได้และไม่ได้ ผู้เรียกต้องบอกผู้ใช้ว่าสาขาไหนไม่มีเอกสาร
+     ไม่ใช่เงียบๆ แล้วตอบเฉพาะที่เหลือ
+     """
+     latest: dict[str, Course] = {}
+     by_edition: dict[tuple[str, int], Course] = {}
++    # ดัชนีที่แยกระดับปริญญา — normalise_title() ตัดชื่อปริญญาทิ้ง เล่มโทกับเล่มเอก
++    # ของสาขาเดียวกันจึงได้คีย์เดียวกัน ถ้าไม่มีดัชนีนี้จะเลือกเล่มเดียวให้ทั้งสองรายการ
++    latest_by_level: dict[tuple[str, str], Course] = {}
++    by_edition_level: dict[tuple[str, int, str], Course] = {}
++    levels_of_key: dict[str, set[str]] = {}
++
+     for c in db.scalars(select(Course).where(Course.is_active)).all():
+         key = normalise_title(c.title)
+-        by_edition[(key, _edition_year(c.title))] = c
++        year = _edition_year(c.title)
++        by_edition[(key, year)] = c
+         seen = latest.get(key)
+-        if seen is None or _edition_year(c.title) > _edition_year(seen.title):
++        if seen is None or year > _edition_year(seen.title):
+             latest[key] = c
++
++        level = degree_level_of(degree_of_title(c.title))
++        if level is not None:
++            levels_of_key.setdefault(key, set()).add(level)
++            by_edition_level[(key, year, level)] = c
++            seen_lv = latest_by_level.get((key, level))
++            if seen_lv is None or year > _edition_year(seen_lv.title):
++                latest_by_level[(key, level)] = c
+ 
+     matched: list[tuple[dict, Course]] = []
+     unmatched: list[dict] = []
+     for item in sent:
+         title = item.get("title", "")
+         year = _edition_year(title)
+-        if year:
++        keys = _keys_for(title)
++        # ระดับที่ผู้เรียกบอก — จากช่อง level ก่อน ถ้าไม่มีจึงอ่านจากชื่อที่ส่งมา
++        # (ชื่อบนหน้าเว็บอาจขึ้นต้นด้วย "(ปริญญาโท)" ซึ่งบอกระดับอยู่ในตัว)
++        want = degree_level_of(item.get("level") or "") or degree_level_of(title)
++
++        if want is not None:
++            if year:
++                hit = next((by_edition_level[(k, year, want)] for k in keys
++                            if (k, year, want) in by_edition_level), None)
++            else:
++                hit = next((latest_by_level[(k, want)] for k in keys
++                            if (k, want) in latest_by_level), None)
++        elif any(len(levels_of_key.get(k, ())) > 1 for k in keys):
++            # ชื่อนี้มีหลายระดับปริญญา แต่ผู้เรียกไม่ได้บอกว่าระดับไหน
++            #
++            # **ถือว่าจับคู่ไม่ได้ ไม่ใช่หยิบเล่มล่าสุดมาให้**
++            # เดิมหยิบเล่มแรกที่เจอ ผลคือการเปรียบเทียบ "โท vs เอก" ได้เล่มโททั้งสองคอลัมน์
++            # คือเอาเล่มเดียวมาเทียบกับตัวเอง โดยไม่มีอะไรบอกผู้ใช้ (ตรวจพบ 27 ต.ค. 2569)
++            # ผู้เรียกเห็น unmatched แล้วไปบอกผู้ใช้ได้ว่าต้องระบุระดับ
++            hit = None
++        elif year:
+             # ระบุปีมา → หาเฉพาะเล่มปีนั้น ไม่มีก็ถือว่าจับคู่ไม่ได้
+-            hit = next((by_edition[(k, year)] for k in _keys_for(title)
+-                        if (k, year) in by_edition), None)
++            hit = next((by_edition[(k, year)] for k in keys if (k, year) in by_edition), None)
+         else:
+-            hit = next((latest[k] for k in _keys_for(title) if k in latest), None)
++            hit = next((latest[k] for k in keys if k in latest), None)
++
+         if hit is not None:
+             matched.append((item, hit))
+         else:

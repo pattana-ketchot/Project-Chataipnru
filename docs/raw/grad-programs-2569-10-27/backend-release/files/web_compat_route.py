@@ -1,0 +1,493 @@
+"""
+เส้นทางที่หน้าเว็บของทีมออกแบบเรียกอยู่ — รับรูปแบบข้อมูลของหน้าเว็บนั้นตรงๆ
+
+    POST /chat-web            แชท (รับประวัติทั้งก้อน คืนข้อความดิบทีละส่วน)
+    POST /compare-courses     เปรียบเทียบสาขา (ส่งรายการสาขามาพร้อมชื่อ)
+    POST /recommend-major     แนะนำสาขาจากคำตอบแบบสอบถาม
+
+ทำไมไม่ทับเส้นทางเดิม
+--------------------
+`/chat` ของเราใช้อยู่แล้วโดยชุดประเมิน หน้าทดสอบ และเอกสารสำหรับนักพัฒนา และรับ
+คำถามทีละข้อความพร้อม session_id ส่วนหน้าเว็บส่งประวัติทั้งก้อนมาแล้วคาดหวังข้อความดิบ
+กลับไป การเอาสองสัญญามาไว้ที่เส้นทางเดียวกันทำให้ทั้งคู่เปราะ
+
+จึงแยกเป็น `/chat-web` แล้วให้ Caddy เป็นตัวแปลงเส้นทาง `/api/chat` ของหน้าเว็บมาที่นี่
+ส่วนอีกสองเส้นทางไม่ชนกับของเดิมจึงใช้ชื่อตามที่หน้าเว็บเรียกได้เลย
+
+ทั้งสามเส้นทางไม่ต้องเข้าสู่ระบบ เพราะหน้าเว็บเปิดให้นักเรียนทั่วไปใช้โดยไม่ต้องสมัคร
+เบื้องหลังใช้บัญชีกลางบัญชีเดียว (ดูเหตุผลและข้อแลกเปลี่ยนใน services/web_compat.py)
+"""
+import base64
+import json
+import logging
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.api.deps import web_rate_limiter
+from app.db.session import get_db
+from app.services.chat import PriorTurn, stream_answer
+from app.services.curriculum_facts import LIST_FIELDS
+from app.services.program_compare import compare_programs
+from app.services.program_match import build_profile_text, confidence_of, match_programs
+from app.services.program_names import program_about, program_facts
+from app.services.course_scope import degree_level_of, degree_of_title
+from app.services.web_compat import canonical_labels, label_of, match_by_title, normalise_title, shared_user
+
+from llm.connector import LLMConnectionError  # noqa: E402
+from llm.prompts import NO_EVIDENCE_MARKER  # noqa: E402
+
+router = APIRouter(tags=["web-compat"])
+logger = logging.getLogger("course_advisor")
+
+BUSY = "ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
+
+# แถวจากตารางเปรียบเทียบที่นำไปแสดงเป็นข้อดีของแต่ละสาขา เรียงตามที่นักเรียนอยากรู้ก่อน
+_PROS_ROWS = ["เรียนอะไรบ้าง", "ทักษะที่ได้รับ", "จบแล้วทำงานอะไร", "จำนวนหน่วยกิต", "ค่าเทอม"]
+_BEST_FOR_ROW = "คุณสมบัติผู้เข้าศึกษา"
+_MISSING_PREFIX = "ไม่พบข้อมูล"
+
+# ชนิดของรายการ "อาชีพ" ใน mko.v_live_list_items — อ้างจากที่เดียวกับที่ชั้นคำตอบใช้
+# เพื่อไม่ให้สองที่หลุดจากกันเมื่อชื่อชนิดเปลี่ยน
+_CAREER_ITEM_TYPE = LIST_FIELDS["careers"]
+
+# หน้าเว็บแสดงสาขาแนะนำ 1 อันดับหลัก กับอีกไม่เกิน 2 อันดับสำรอง แต่ต้องขอมาเผื่อมาก
+# เพราะอันดับที่หลังบ้านคืนมาต้องมีอยู่ในรายการสาขาที่หน้าเว็บส่งมาด้วยจึงจะแสดงได้
+# ฐานข้อมูลสองฝั่งมีสาขาไม่ตรงกันทั้งหมด ขอมาน้อยแล้วเหลือรอดไม่ถึงสามใบได้ง่าย
+#
+# เคยตั้งไว้ที่ 6 เพราะยิ่งขอมาเยอะ เหตุผลประกอบยิ่งขาดหาย แต่สาเหตุจริงของอาการนั้น
+# คือเพดานความยาวคำตอบที่ไม่ได้กำหนดไว้ ซึ่งแก้ไปแล้ว จึงขยับกลับขึ้นมาได้
+_MATCH_LIMIT = 10
+_MAX_ALTERNATIVES = 2
+
+NO_REASON = "ระบบจัดอันดับจากความใกล้เคียงกับเนื้อหาในเอกสารหลักสูตรแล้ว แต่ยังเขียนคำอธิบายประกอบให้ไม่ได้ในขณะนี้"
+
+# ต่างจาก NO_REASON ตรงที่อันนั้นคือ "เขียนคำอธิบายไม่ได้ตอนนี้" (โมเดลล่ม)
+# ส่วนอันนี้คือ "เอกสารไม่มีข้อมูลให้เขียน" ซึ่งเป็นข้อเท็จจริงเกี่ยวกับเอกสาร ไม่ใช่
+# ความขัดข้องชั่วคราว ผู้อ่านควรแยกสองอย่างนี้ออกจากกันได้
+NO_EVIDENCE_REASON = "เอกสารหลักสูตรของสาขานี้ไม่ได้ระบุข้อมูลที่เชื่อมโยงกับสิ่งที่คุณเลือกไว้โดยตรง"
+
+
+class WebMessage(BaseModel):
+    role: str
+    content: str
+
+
+class WebChatRequest(BaseModel):
+    messages: list[WebMessage] = Field(min_length=1)
+
+
+class WebCourse(BaseModel):
+    id: str
+    title: str = ""
+    # ระดับการศึกษาที่หน้าเว็บส่งมา ("ปริญญาโท" / "ปริญญาเอก" / "ปริญญาตรี")
+    #
+    # จำเป็นเพราะคณะมีสาขาที่ชื่อและปีเดียวกันแต่คนละระดับปริญญา ถ้าไม่มีช่องนี้
+    # match_by_title() จะเลือกเล่มเดียวกันให้ทั้งสองรายการ แล้วเอาเล่มนั้นมาเทียบ
+    # กับตัวเอง · ค่าว่างยังรับได้ ผู้เรียกรุ่นเก่าจึงไม่พัง
+    level: str = ""
+
+
+class WebCompareRequest(BaseModel):
+    courses: list[WebCourse] = Field(min_length=2)
+
+
+class WebRecommendRequest(BaseModel):
+    answers: dict[str, Any] = Field(default_factory=dict)
+    courses: list[WebCourse] = Field(min_length=1)
+
+
+def _parse_event(event: str) -> tuple[str | None, dict | None]:
+    """แกะเหตุการณ์ SSE หนึ่งก้อน — รูปแบบ: event: <ชื่อ> ขึ้นบรรทัดใหม่ data: <json>"""
+    kind = data = None
+    for line in event.split(chr(10)):
+        if line.startswith("event:"):
+            kind = line[6:].strip()
+        elif line.startswith("data:"):
+            data = line[5:].strip()
+    if not data:
+        return kind, None
+    try:
+        return kind, json.loads(data)
+    except json.JSONDecodeError:
+        return kind, None
+
+
+def _b64(value: str) -> str:
+    """
+    ค่า header ถูกเข้ารหัสเป็น latin-1 ตอนส่งออก ข้อความไทยจึงใส่ตรงๆ ไม่ได้ (UnicodeEncodeError)
+    หุ้มด้วย base64 ของ UTF-8 ซึ่งเป็นวิธีเดียวกับที่หน้าเว็บถอด X-RAG-Sources อยู่แล้ว
+    """
+    return base64.b64encode(value.encode("utf-8")).decode("ascii")
+
+
+def _source_headers(db: Session, source: dict | None) -> dict[str, str]:
+    """
+    header บอกที่มาของคำตอบ ให้หน้าเว็บทำปุ่ม "เปิดเอกสารต้นฉบับ" ได้
+
+    ส่งเฉพาะเมื่อรู้เอกสารจริงเท่านั้น ไม่มี document_id ก็ไม่ส่งอะไรเลย ห้ามเดาหรือส่งค่าว่าง
+    เพราะหน้าเว็บจะสร้างลิงก์ที่เปิดไม่ได้ให้ผู้ใช้กด (ดู docs/FRONTEND_PDF_LINK_INSPECTION.md)
+
+    เลขหน้าเป็นของเสริม ไม่มีก็ยังเปิดเอกสารที่หน้าแรกได้
+
+    ชื่อเอกสารและชื่อหลักสูตรอ่านจากฐานข้อมูลด้วย document_id ที่ได้มาเท่านั้น
+    ไม่ได้เดาจากข้อความที่ AI ตอบ ถ้าหาแถวไม่เจอก็ไม่ส่งสองค่านี้ แต่ยังส่ง
+    X-Source-Document/X-Source-Page ตามเดิม เพื่อไม่ให้พฤติกรรมที่มีอยู่เปลี่ยน
+    """
+    if not isinstance(source, dict):
+        return {}
+    document_id = str(source.get("document_id") or "").strip()
+    if not document_id:
+        return {}
+    headers = {"X-Source-Document": document_id}
+    page = source.get("page_start")
+    if isinstance(page, int) and page > 0:
+        headers["X-Source-Page"] = str(page)
+
+    # ชื่อไฟล์เอกสาร + ชื่อหลักสูตรที่เอกสารนั้นสังกัด มาจาก FK course_documents.course_id
+    # จึงเป็นความจริงจากฐานข้อมูล ไม่ใช่การจับคู่จากข้อความ
+    #
+    # ล้มเหลวตรงนี้ต้องไม่ทำให้ทั้งคำตอบล้ม — คำตอบสำคัญกว่าปุ่มเสริม
+    try:
+        row = db.execute(
+            text(
+                "SELECT d.original_filename, c.title "
+                "FROM course_documents d JOIN courses c ON c.id = d.course_id "
+                "WHERE d.id = :id"
+            ),
+            {"id": document_id},
+        ).mappings().first()
+    except Exception:  # noqa: BLE001
+        logger.exception("อ่านชื่อเอกสาร/หลักสูตรของ %s ไม่สำเร็จ", document_id)
+        return headers
+
+    if row is None:
+        return headers
+    filename = (row["original_filename"] or "").strip()
+    programme = (row["title"] or "").strip()
+    if filename:
+        headers["X-Source-Title"] = _b64(filename)
+    if programme:
+        headers["X-Source-Programme"] = _b64(programme)
+    return headers
+
+
+@router.post("/chat-web", dependencies=[Depends(web_rate_limiter)])
+def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
+    """
+    แชทในรูปแบบที่หน้าเว็บรออยู่ — ส่งกลับเป็นข้อความดิบ ไม่ใช่ Server-Sent Events
+
+    หน้าเว็บอ่านสตรีมแล้วต่อข้อความเข้าไปในกล่องแชทตรงๆ ไม่ได้แยกเหตุการณ์ จึงต้อง
+    แกะเฉพาะเนื้อความออกมาจาก SSE ของ stream_answer() ก่อนส่งออกไป
+
+    รับประวัติมาทั้งก้อนแล้วส่งต่อให้หลังบ้านทั้งหมด เพราะหน้าเว็บไม่ได้เก็บ session_id
+    ไว้ หลังบ้านจึงจำบทสนทนาแทนให้ไม่ได้ — ประวัติที่ใช้ตอบต้องมาจากที่หน้าเว็บส่งมา
+    """
+    message = next((m.content for m in reversed(payload.messages) if m.role == "user"), "")
+    if not message.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ไม่พบคำถามของผู้ใช้")
+
+    # ส่งบทสนทนาก่อนหน้าที่หน้าเว็บแนบมาด้วยเข้าไปให้หลังบ้านใช้
+    #
+    # เดิมหยิบเฉพาะข้อความล่าสุดแล้วเรียกด้วย session_id=None โดยมีคอมเมนต์กำกับว่า
+    # "หลังบ้านจำบทสนทนาเองด้วย session_id อยู่แล้ว" ซึ่งไม่จริง — session_id เป็น None
+    # ทุกครั้ง หลังบ้านจึงสร้างบทสนทนาใหม่ทุกคำถาม ประวัติที่หน้าเว็บอุตส่าห์ส่งมาถูกทิ้ง
+    # ทั้งหมด ผลคือถามต่อว่า "แล้วจบไปทำงานอะไรได้บ้าง" หลังถามถึงวิทยาการคอมพิวเตอร์
+    # จะได้คำถามกลับว่าสนใจสาขาไหน ทั้งที่เพิ่งคุยกันไป
+    #
+    # หน้าเว็บไม่ได้เก็บ session_id ไว้ จึงรับประวัติจากที่มันส่งมาแทนการอ่านฐานข้อมูล
+    # ตัดข้อความสุดท้ายออกเพราะนั่นคือคำถามปัจจุบัน ไม่ใช่ประวัติ
+    prior = [
+        PriorTurn(role="assistant" if m.role == "assistant" else "user", content=m.content)
+        for m in payload.messages[:-1]
+        if m.content.strip()
+    ]
+
+    user_id = shared_user(db).id
+
+    # ดึงเหตุการณ์แรก (meta) ออกมาก่อน เพื่ออ่านที่มาของคำตอบไปใส่เป็น header
+    #
+    # ต้องทำก่อนสร้าง StreamingResponse เพราะ header ถูกส่งไปพร้อมสถานะ HTTP ตั้งแต่ไบต์แรก
+    # meta มาก่อน token เสมอ (ดู services/chat.py::stream_answer) การดึงหนึ่งเหตุการณ์จึงไม่ทำให้
+    # เสียตัวอักษรของคำตอบ เนื้อความที่ผู้ใช้เห็นเหมือนเดิมทุกตัว
+    #
+    # ข้อผิดพลาดระหว่างดึง meta ต้องยังตอบเป็นข้อความสถานะ 200 เหมือนเดิม ไม่ใช่ 500
+    # เพราะหน้าเว็บอ่านสตรีมเป็นข้อความล้วนแล้วแสดงให้ผู้ใช้ตรงๆ
+    source_headers: dict[str, str] = {}
+    prelude: str | None = None
+    stream = iter(())
+    try:
+        stream = stream_answer(db, user_id=user_id, session_id=None, message=message, prior=prior)
+        kind, parsed = _parse_event(next(stream, ""))
+        if kind == "meta" and parsed:
+            source_headers = _source_headers(db, parsed.get("source"))
+    except LLMConnectionError as e:
+        # ส่งต่อเฉพาะข้อความที่ "เขียนไว้ให้ผู้ใช้" ไม่ใช่ str(exc) ซึ่งมีรายละเอียด
+        # วินิจฉัยและอาจพาเนื้อหาจากปลายทางออกมา (ดู LLMConnectionError.user_text)
+        prelude = (getattr(e, "user_text", None) or "").strip() or BUSY
+    except Exception:  # noqa: BLE001
+        logger.exception("chat-web ล้มตั้งแต่ก่อนเริ่มสตรีม")
+        prelude = BUSY
+
+    def text_only():
+        if prelude is not None:
+            yield prelude
+            return
+        try:
+            for event in stream:
+                kind, parsed = _parse_event(event)
+                if parsed is None:
+                    continue
+                if kind == "token" and parsed.get("t"):
+                    yield parsed["t"]
+                elif kind == "error":
+                    # ส่งเป็นตัวอักษรต่อท้าย เพราะสถานะ HTTP ถูกส่งไปตั้งแต่ตัวอักษรแรกแล้ว
+                    yield "\n\n" + parsed.get("detail", BUSY)
+        except LLMConnectionError as e:
+            # ส่งเหตุผลให้ผู้ใช้เมื่อตัวเชื่อมต่อเขียนไว้ให้ (user_text) เพื่อไม่ให้ผู้ใช้
+            # เห็นแค่ "ระบบตอบไม่ได้ในขณะนี้" ทั้งที่ระบบตั้งใจไม่ตอบและมีเหตุผลอยู่
+            # แต่ไม่ส่ง str(exc) ต่อ เพราะข้อความวินิจฉัยไม่ได้เขียนให้ผู้ใช้อ่าน
+            # และอาจพาเนื้อหาจากปลายทางออกมา — เจอจาก n1-05 เมื่อ 14 ต.ค. 2569
+            yield "\n\n" + ((getattr(e, "user_text", None) or "").strip() or BUSY)
+        except Exception:
+            logger.exception("chat-web ล้มกลางคัน")
+            yield "\n\n" + BUSY
+
+    return StreamingResponse(
+        text_only(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", **source_headers},
+    )
+
+
+@router.get("/course-facts")
+def course_facts_web(title: str, db: Session = Depends(get_db)) -> dict:
+    """
+    ข้อมูลสรุปของหลักสูตรหนึ่ง สำหรับเติมช่องที่ว่างในหน้ารายละเอียดของหน้าเว็บ
+
+    หน้าเว็บดึงข้อมูลชุดนี้จากฐานข้อมูลของตัวเองซึ่งยังไม่มีใครกรอก จึงขึ้นว่า
+    "ไม่ระบุ" ทุกช่อง ทั้งที่เอกสาร มคอ.2 ระบุไว้ครบ
+
+    รับชื่อสาขาเป็นข้อความ ไม่ใช่รหัส เพราะฐานข้อมูลสองฝั่งใช้รหัสคนละชุดกัน
+
+    คืน {} เมื่อไม่มีเอกสารของสาขานั้น ผู้เรียกต้องคงค่าเดิมของตัวเองไว้
+    """
+    matched, _ = match_by_title(db, [{"id": "", "title": title}])
+    if not matched:
+        return {}
+    course_title = matched[0][1].title
+    return {**program_facts(course_title), **program_about(course_title)}
+
+
+@router.get("/career-lists")
+def career_lists_web(db: Session = Depends(get_db)) -> dict:
+    """
+    รายการอาชีพของทุกหลักสูตรที่ผ่านการตรวจและเผยแพร่แล้ว — ให้หน้า "อาชีพหลังจบ" ของหน้าเว็บใช้
+
+    ทำไมต้องมีเส้นทางนี้
+    -------------------
+    หน้าเว็บเก็บอาชีพไว้ในคอลัมน์ `careers` ของฐานข้อมูลตัวเอง ซึ่งยังว่างทุกแถว หน้านั้นจึง
+    ขึ้นว่า "ยังไม่มีข้อมูลหลักสูตร" ทั้งที่เอกสาร มคอ.2 ระบุอาชีพไว้และเราตรวจกับเอกสาร
+    แล้วเผยแพร่เก็บไว้ใน schema mko เรียบร้อย
+
+    อ่านจาก `mko.v_live_list_items` ตรงๆ **ไม่เรียกโมเดลภาษา** จึงได้ผลเดิมทุกครั้งและเร็วพอ
+    ให้หน้าเว็บขอครั้งเดียวตอนเปิดหน้า ต่างจาก /compare-courses ที่ให้โมเดลสกัดข้อความจาก
+    เอกสารทีละหัวข้อ — ซึ่งช้าและไม่คงที่ จึงใช้ทำหน้ารวมไม่ได้
+
+    คืนเฉพาะหลักสูตรที่ **มีรายการอาชีพที่ผ่านการตรวจแล้วจริง** หลักสูตรที่ยังไม่มีจะไม่อยู่ใน
+    ผลลัพธ์เลย ผู้เรียกต้องแสดงสถานะของตัวเอง ห้ามเดาแทน (เหตุผลเดียวกับ _source_headers)
+
+    ทุกรายการมีไฟล์และหน้าของเอกสารต้นทางมาด้วย เพื่อให้หน้าเว็บทำปุ่มเปิดเอกสารได้
+    """
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT course_title, seq, text AS item, source_filename, page_start, page_end, document_id
+                  FROM mko.v_live_list_items
+                 WHERE item_type = :item_type
+                 ORDER BY course_title, seq
+                """
+            ),
+            {"item_type": _CAREER_ITEM_TYPE},
+        ).mappings().all()
+    except Exception:  # noqa: BLE001
+        # ยังไม่ได้ลง migration ของ schema mko หรืออ่านไม่ได้ — หน้าเว็บต้องยังเปิดได้
+        logger.exception("อ่านรายการอาชีพที่เผยแพร่แล้วไม่สำเร็จ")
+        return {"programmes": []}
+
+    grouped: dict[str, list] = {}
+    for row in rows:
+        grouped.setdefault(row["course_title"], []).append(row)
+
+    programmes = []
+    for course_title, items in grouped.items():
+        first = items[0]
+        source: dict[str, Any] = {
+            "file": first["source_filename"],
+            "page_start": min(i["page_start"] for i in items),
+            "page_end": max(i["page_end"] for i in items),
+        }
+        # ส่ง document_id เฉพาะเมื่อรู้จริง เพราะหน้าเว็บเอาไปทำลิงก์ /documents/{id}/pdf
+        if first["document_id"]:
+            source["document_id"] = str(first["document_id"])
+        programmes.append({
+            "course_title": course_title,
+            "careers": [i["item"] for i in items],
+            "source": source,
+        })
+    return {"programmes": programmes}
+
+
+def _rank_key(title: str) -> tuple[str, str | None]:
+    """คีย์เทียบชื่อสาขาที่แยกระดับปริญญาด้วย — ใช้จับคู่อันดับกลับไปที่การ์ดบนหน้าเว็บ"""
+    return normalise_title(title), degree_level_of(degree_of_title(title))
+
+
+def _row_value(rows, dimension: str, index: int) -> str | None:
+    for row in rows:
+        if row["dimension"] == dimension:
+            value = row["values"][index]
+            return None if value.startswith(_MISSING_PREFIX) else value
+    return None
+
+
+@router.post("/compare-courses", dependencies=[Depends(web_rate_limiter)])
+def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db)) -> dict:
+    """
+    เปรียบเทียบสาขาในรูปแบบที่หน้าเว็บรออยู่
+
+    ช่อง cons ส่งกลับเป็นรายการว่างเสมอ เพราะเอกสาร มคอ.2 ไม่ได้เขียนข้อเสียของ
+    หลักสูตรตัวเองไว้ การให้โมเดลคิดข้อเสียขึ้นมาเองคือการแต่งข้อมูล ซึ่งเป็นสิ่งที่
+    ระบบนี้ตั้งใจไม่ทำ หน้าเว็บตรวจความยาวก่อนแสดงอยู่แล้ว บล็อกนั้นจึงไม่ขึ้นเอง
+    """
+    sent = [c.model_dump() for c in payload.courses]
+    matched, unmatched = match_by_title(db, sent)
+
+    if len(matched) < 2:
+        names = ", ".join(c["title"] for c in unmatched) or "ที่เลือกมา"
+        # สาขาที่มีหลายระดับปริญญาแต่ไม่ได้บอกระดับมา จะอยู่ใน unmatched เช่นกัน
+        # ข้อความต้องบอกทางออกให้ด้วย ไม่ใช่บอกแค่ว่าไม่มีเอกสาร ซึ่งไม่จริงในกรณีนี้
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"ยังไม่มีเอกสารหลักสูตรของสาขา: {names} จึงเปรียบเทียบให้ไม่ได้ "
+            f"(ถ้าสาขานั้นเปิดสอนหลายระดับปริญญา ต้องระบุระดับมาด้วย)",
+        )
+
+    try:
+        result = compare_programs(db, [c.id for _, c in matched])
+    except LLMConnectionError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e) or BUSY) from e
+
+    rows = [r if isinstance(r, dict) else r.model_dump() for r in result["rows"]]
+    courses = []
+    for index, (item, _) in enumerate(matched):
+        pros = [
+            f"{dim}: {value}"
+            for dim in _PROS_ROWS
+            if (value := _row_value(rows, dim, index)) is not None
+        ]
+        courses.append({
+            "courseId": item["id"],
+            "bestFor": _row_value(rows, _BEST_FOR_ROW, index) or "",
+            "pros": pros,
+            "cons": [],
+        })
+
+    note = ""
+    if unmatched:
+        missing = ", ".join(c["title"] for c in unmatched)
+        note = f" (ยังไม่มีเอกสารหลักสูตรของ {missing} จึงไม่ได้นำมาเปรียบเทียบ)"
+
+    return {
+        "summary": (result.get("summary") or "") + note,
+        "courses": courses,
+        "verdict": "ข้อมูลทั้งหมดสรุปจากเอกสารหลักสูตร (มคอ.2) ของแต่ละสาขา ยกเว้นค่าเทอมที่มาจากประกาศของคณะ",
+    }
+
+
+@router.post("/recommend-major", dependencies=[Depends(web_rate_limiter)])
+def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_db)) -> dict:
+    """
+    แนะนำสาขาในรูปแบบที่หน้าเว็บรออยู่
+
+    ชื่อช่องในแบบสอบถามของหน้าเว็บไม่ตรงกับของเรา (skills/goals/track) จึงแปลงก่อน
+    """
+    a = payload.answers
+    # แปลรหัสตัวเลือกเป็นข้อความไทยที่ผู้ใช้เห็นก่อนเสมอ — หน้าเว็บส่งรหัสอย่าง "tech"
+    # หรือ "career-growth" มา ซึ่งแทบไม่มีความหมายให้เทียบกับเอกสารภาษาไทย
+    # (ดูเหตุผลและตารางใน services/web_compat.py)
+    #
+    # ข้อที่เลือกได้หลายข้อต้องผ่าน canonical_labels เพื่อให้คำตอบชุดเดียวกันได้คะแนนเดียวกัน
+    # ไม่ว่าผู้ใช้จะกดเลือกลำดับไหน
+    answers = {
+        "study_track": label_of("track", a["track"]) if a.get("track") else None,
+        # ข้อวิชาที่ชอบส่งเป็นชื่อวิชาภาษาไทยอยู่แล้ว label_of จึงคืนค่าเดิมไป
+        "favorite_subjects": canonical_labels("subjects", a.get("subjects")),
+        "interests": canonical_labels("interests", a.get("interests")),
+        "aptitudes": canonical_labels("skills", a.get("skills")),
+        "career_goal": canonical_labels("goals", a.get("goals")),
+        "work_environment": [label_of("environment", a["environment"])] if a.get("environment") else [],
+    }
+
+    try:
+        matches = match_programs(db, answers, limit=_MATCH_LIMIT)
+    except LLMConnectionError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e) or BUSY) from e
+
+    matched, _ = match_by_title(db, [c.model_dump() for c in payload.courses])
+    # เทียบกลับด้วยชื่อ ไม่ใช่รหัสของหลักสูตร เพราะการจัดอันดับมองเอกสารทุกฉบับรวม
+    # ฉบับเก่า แต่ตารางจับคู่เก็บเฉพาะฉบับล่าสุด — เทียบด้วยรหัสจะทำให้อันดับที่ชนะ
+    # ด้วยเอกสารฉบับเก่าหายไปเงียบๆ
+    # คีย์รวมระดับปริญญาด้วย เพราะ normalise_title() ตัดชื่อปริญญาทิ้ง สาขาที่มีทั้ง
+    # โทและเอกจะได้คีย์เดียวกันแล้วทับกันเหลือใบเดียว
+    back = {_rank_key(course.title): item["id"] for item, course in matched}
+
+    ranked: list[tuple[str, object]] = []
+    used: set[str] = set()
+    for m in matches:
+        web_id = back.get(_rank_key(m.title))
+        # เอกสารสองฉบับของสาขาเดียวกันชี้ไปที่การ์ดใบเดียวกัน แสดงซ้ำไม่ได้
+        if web_id is None or web_id in used:
+            continue
+        used.add(web_id)
+        ranked.append((web_id, m))
+
+    if not ranked:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "ยังไม่มีเอกสารหลักสูตรของสาขาที่เปิดสอนอยู่ จึงแนะนำให้ไม่ได้",
+        )
+
+    def card(entry):
+        web_id, m = entry
+        reason = (m.rationale or "").strip()
+        # เครื่องหมายที่โมเดลใช้บอกว่าเอกสารไม่มีข้อมูลรองรับ เป็นภาษาของระบบภายใน
+        # ต้องไม่หลุดไปถึงหน้าจอ แปลงเป็นข้อความที่ผู้ใช้อ่านรู้เรื่องแทน
+        if not reason or NO_EVIDENCE_MARKER in reason:
+            reason = NO_EVIDENCE_REASON if NO_EVIDENCE_MARKER in reason else NO_REASON
+        return {
+            "courseId": web_id,
+            "matchScore": m.match_percent,
+            "reason": reason,
+        }
+
+    low = confidence_of(matches) == "low"
+    summary = (
+        "คะแนนของหลายสาขาใกล้เคียงกันมาก แนะนำให้ดูทุกสาขาที่แสดงประกอบกัน "
+        "ไม่ควรยึดอันดับ 1 อย่างเดียว — ผลนี้คำนวณจากเอกสารหลักสูตรจริงของแต่ละสาขา"
+        if low else
+        "ผลนี้คำนวณจากความใกล้เคียงระหว่างคำตอบของคุณกับเนื้อหาจริงในเอกสารหลักสูตรของแต่ละสาขา"
+    )
+
+    return {
+        "primary": card(ranked[0]),
+        "alternatives": [card(e) for e in ranked[1:1 + _MAX_ALTERNATIVES]],
+        "summary": summary,
+        # เปิดไว้ให้ตรวจสอบได้ว่าระบบเข้าใจคำตอบของนักเรียนว่าอย่างไร
+        "profileText": build_profile_text(answers),
+    }

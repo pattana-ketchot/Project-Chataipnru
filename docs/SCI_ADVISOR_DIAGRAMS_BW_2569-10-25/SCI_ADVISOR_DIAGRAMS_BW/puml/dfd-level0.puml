@@ -1,0 +1,89 @@
+@startuml dfd-level0
+' =====================================================================
+' DFD Level 0 (Context Diagram) — ระบบแนะนำหลักสูตร SCI Advisor
+' ปรับปรุง 25 ต.ค. 2569 ตามผลตรวจทาน
+'
+' สิ่งที่แก้จากฉบับก่อน
+'   - ใช้สัญลักษณ์มาตรฐาน: วงรี = process · สี่เหลี่ยม = external entity
+'   - ตั้งชื่อเส้นด้วย "ชื่อข้อมูล" ไม่ใช่คำว่าอ่าน/เขียน
+'   - แยกคำขอกับข้อมูลตอบกลับเป็นคนละเส้น
+'   - ตัด Ollama ออกจากผู้กระทำภายนอก เพราะเป็นคอนเทนเนอร์ในระบบเอง ไม่ใช่ภายนอก
+'     (ของเดิมไม่ได้ใส่อยู่แล้ว แต่ Level 1 เคยใส่ จึงไม่สอดคล้องกัน — แก้ให้ตรงกันแล้ว)
+'   - ย้ายคำอธิบายยาวไปไว้ใต้ภาพใน SCI_ADVISOR_DIAGRAMS.md
+'
+' ผู้กระทำภายนอกในภาพนี้ต้องตรงกับที่ปรากฏใน dfd-level1 และ dfd-level1b รวมกัน
+'   นักเรียน/ผู้สนใจ · ผู้ดูแล · ผู้ดูแลเซิร์ฟเวอร์ · Google Gemini API · เว็บไซต์คณะ
+'
+' หลักฐาน (ตรวจ 25 ต.ค. 2569 แบบอ่านอย่างเดียว):
+'   Caddyfile · backend/app/main.py · handoff/05-frontend/pages-and-routes.md
+'   docker ps · docker exec <container> env
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+skinparam ArrowFontSize 12
+skinparam defaultFontSize 14
+
+rectangle "นักเรียน / ผู้สนใจ" as student
+rectangle "ผู้ดูแล\n(เนื้อหา / ระบบ)" as staff
+rectangle "ผู้ดูแลเซิร์ฟเวอร์" as ops
+rectangle "Google Gemini API" as gemini
+rectangle "เว็บไซต์คณะ" as faculty
+
+usecase "0\nระบบแนะนำหลักสูตร\nSCI Advisor" as sys
+
+' Level 0 รวมกระแสข้อมูลของผู้กระทำแต่ละรายเป็นเส้นเข้าหนึ่งเส้นและออกหนึ่งเส้น
+' ตามธรรมเนียมของแผนภาพบริบท รายละเอียดแยกเส้นอยู่ใน DFD Level 1
+student --> sys : คำถามภาษาไทย · คำตอบแบบสอบถาม\nคำขอดูหลักสูตรและข่าว
+sys --> student : คำตอบ + ชื่อไฟล์ มคอ.2 และเลขหน้า\nรายการหลักสูตร · ผลแนะนำสาขา · ข่าว
+
+staff --> sys : อีเมลและรหัสผ่าน\nเนื้อหาหลักสูตร ข่าว ไฟล์แนบ\nคำสั่งอนุมัติไฟล์
+sys --> staff : โทเคน + role และ status\nผลการบันทึก · รายชื่อผู้ใช้
+
+ops --> sys : ไฟล์ มคอ.2 ที่อนุมัติแล้ว\nคำสั่งนำเข้า / เผยแพร่ข้อมูล
+sys --> ops : ผลการตรวจรับ + เลขการเผยแพร่\nสถิติการเรียกโมเดลรายวัน
+
+sys --> gemini : คำถามที่เรียบเรียง + ชิ้นส่วนเอกสาร
+gemini --> sys : ข้อความคำตอบแบบสตรีม
+
+sys --> faculty : คำขอหน้าข่าว (HTTP GET)
+faculty --> sys : เนื้อหาข่าว SCI Connect
+
+@enduml

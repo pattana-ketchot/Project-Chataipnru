@@ -35,13 +35,15 @@ import logging
 import os
 import re
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 
-from llm.connector import ChatMessage, LLMConnectionError
+from llm.connector import (ChatMessage, LLMBudgetExceeded, LLMConnectionError,
+                           budget_left_s, check_budget, http_timeout,
+                           post_json_bounded)
 
 logger = logging.getLogger("llm.gemini")
 
@@ -114,10 +116,45 @@ class _QuotaExhausted(RuntimeError):
     คือสาเหตุที่โมเดลที่ยังใช้ได้ถูกพักทิ้งไปสี่ชั่วโมงเพราะยิงเร็วไปไม่กี่วินาที
     """
 
-    def __init__(self, model: str, cooldown_s: float):
+    def __init__(self, model: str, cooldown_s: float, kind: str | None = None):
         super().__init__(model)
         self.model = model
         self.cooldown_s = cooldown_s
+        # ชนิดของเหตุการณ์สำหรับตัวนับ (services/llm_usage.py) — อ่านจากระยะพักที่
+        # _cooldown_for ตัดสินไว้แล้ว ไม่ไปอ่านเนื้อความของคำตอบซ้ำอีกรอบ เพราะการ
+        # ตัดสินซ้ำแปลว่ามีที่บอกชนิดโควตาสองแห่ง ซึ่งเพี้ยนจากกันได้
+        #
+        # เส้นแบ่งที่ 10 นาทีปลอดภัย: รายวันตั้งไว้ 4 ชั่วโมง ส่วนเพดานต่อนาทีถูกจำกัด
+        # ไม่ให้เกินสองนาทีอยู่แล้ว (_is_daily_limit ถือว่าเกิน 120 วินาทีคือรายวัน)
+        self.kind = kind or ("quota_day" if cooldown_s >= 600 else "quota_minute")
+
+
+# พักโมเดลที่ตอบ 503 ไว้สั้น ๆ เพราะ Google บอกเองว่า "Spikes in demand are usually
+# temporary" — ต่างจากโควตาที่ต้องรอเป็นชั่วโมง ตั้งสั้นไว้เพื่อกลับไปใช้ตัวที่ตั้งค่าไว้
+# ให้เร็วที่สุดเมื่อมันว่าง ตั้งทับได้ด้วย GEMINI_OVERLOAD_COOLDOWN_S
+_OVERLOAD_COOLDOWN_S = float(os.getenv("GEMINI_OVERLOAD_COOLDOWN_S", "60"))
+
+
+class _Overloaded(_QuotaExhausted):
+    """
+    โมเดลหนึ่งตอบ 503 ซ้ำ ๆ — ฝั่งผู้ให้บริการรับไม่ไหว ต้องย้ายไปโมเดลอื่น
+
+    สืบทอดจาก _QuotaExhausted โดยตั้งใจ เพราะวิธีรับมือเหมือนกันทุกอย่าง: พักตัวนี้ไว้
+    แล้วไปลองตัวถัดไปในรายการ ผู้เรียกที่ดักจับ _QuotaExhausted อยู่แล้วจึงทำถูกทันที
+    ต่างกันแค่ระยะเวลาพัก
+
+    ที่มา: 13 ต.ค. 2569 `gemini-3.5-flash-lite` ตอบ 503 ว่า "This model is currently
+    experiencing high demand" ทุกครั้ง 15 ครั้งจาก 15 ครั้ง ขณะที่ `gemini-3.5-flash`
+    และ `gemini-3.6-flash` ในรายการสำรองตอบ 200 ใน 1.3–1.5 วินาที แต่โค้ดเดิมย้ายโมเดล
+    เมื่อเจอ 429 เท่านั้น — 5xx ลองซ้ำตัวเดิมสามครั้งแล้วโยน LLMConnectionError ซึ่งลูป
+    เลือกโมเดลไม่ได้ดักจับ จึงตกไปใช้โมเดลในเครื่องบน CPU ที่ใช้เวลา 27 วินาทีต่อครั้ง
+    ทั้งที่ยังมีโมเดลบนคลาวด์ว่างอยู่
+    """
+
+    def __init__(self, model: str, cooldown_s: float):
+        # ตั้งชนิดให้ตัวนับเอง ไม่ให้ไปเดาจากระยะพัก เพราะ 503 กับเพดานต่อนาทีพักใกล้
+        # เคียงกัน (60 กับ 45 วินาที) แต่เป็นคนละปัญหาและแก้คนละทาง
+        super().__init__(model, cooldown_s, kind="overload")
 
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -125,10 +162,22 @@ _BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 @dataclass
 class GeminiConnector:
-    api_key: str
+    # repr=False สำคัญ: @dataclass สร้าง __repr__ ที่พิมพ์ทุกฟิลด์ ถ้าไม่กันไว้ คีย์จะหลุด
+    # ออกไปทุกที่ที่มีการ repr ตัวเชื่อมต่อ — traceback, logger.exception หรือการ debug
+    # ด้วยมือ · 13 ต.ค. 2569 คีย์หลุดออกมาจริงตอนสั่งพิมพ์โครงสร้างของ _SplitConnector
+    # เพื่อดูชื่อโมเดล · ฟิลด์ _client ถูกกันไว้แล้วแต่ api_key ไม่ได้กัน
+    api_key: str = field(repr=False)
     chat_model: str = "gemini-3.5-flash-lite"
     timeout_s: int = 120
     max_retries: int = 2
+
+    # ตัวรับแจ้งเหตุการณ์สำหรับนับสถิติ — ไม่ตั้งก็ทำงานได้ตามปกติ
+    #
+    # เป็น callback แทนการเรียกตัวนับตรง ๆ เพราะแพ็กเกจ llm/ ต้องไม่รู้จัก backend
+    # ของเรา (ไม่งั้นมันใช้นอกโปรเจกต์นี้ไม่ได้ และผูกกับฐานข้อมูลโดยไม่จำเป็น)
+    # ผู้ประกอบเป็นคนส่ง services/llm_usage.record เข้ามา — ดู services/llm_client.py
+    on_event: Callable[[str], None] | None = field(default=None, repr=False)
+
     _client: httpx.Client = field(init=False, repr=False)
 
     # เพดานความยาวคำตอบ ตั้งสูงกว่าฝั่งโมเดลในเครื่องมากโดยตั้งใจ
@@ -262,6 +311,14 @@ class GeminiConnector:
         # (ซึ่งใช้เวลาเป็นนาทีบนเครื่องที่ไม่มีการ์ดจอ) แพงกว่าการรออีกครึ่งนาทีมาก
         soonest = min(self._exhausted.values())
         wait = soonest - now
+        # เพดานเวลารวมของคำขอมีสิทธิ์ตัดการรอนี้ — รอจนครบ cooldown แล้วผู้ใช้ได้คำตอบ
+        # ช้ากว่าเพดานที่ตั้งไว้ ไม่ต่างจากไม่มีเพดาน
+        left = budget_left_s()
+        if left is not None and wait + 1 >= left:
+            check_budget("รอให้โมเดลพ้นช่วงพัก")
+            raise LLMConnectionError(
+                "ผู้ให้บริการโมเดลขัดข้องและเวลาที่เหลือของคำขอนี้ไม่พอรอให้พ้นช่วงพัก"
+            )
         if wait <= self.max_cooldown_wait_s:
             logger.warning("ทุกโมเดลติดเพดานชั่วคราว รออีก %.0f วินาที", max(wait, 0))
             time.sleep(max(wait, 0) + 1)
@@ -272,6 +329,20 @@ class GeminiConnector:
         # ปฏิเสธทันที เพราะบันทึกนี้เป็นการเดาเวลารีเซ็ต ไม่ใช่ข้อมูลจริงจากผู้ให้บริการ
         self._exhausted.clear()
         return order
+
+    def _note(self, event: str) -> None:
+        """
+        บอกตัวนับว่าเกิดอะไรขึ้น — ห้ามทำให้การตอบคำถามล้มเด็ดขาด
+
+        ตัวนับเป็นของเสริมที่มีไว้ตัดสินใจเรื่องผู้ให้บริการ ไม่ใช่ส่วนหนึ่งของการตอบ
+        ถ้ามันพัง สิ่งที่ควรเสียคือสถิติ ไม่ใช่คำตอบของผู้ใช้ที่กำลังรออยู่
+        """
+        if self.on_event is None:
+            return
+        try:
+            self.on_event(event)
+        except Exception:  # noqa: BLE001
+            logger.debug("ตัวนับภายนอกทำงานไม่ได้", exc_info=True)
 
     def _mark_exhausted(self, model: str, cooldown_s: float | None = None) -> None:
         cooldown = self.exhausted_for_s if cooldown_s is None else cooldown_s
@@ -288,15 +359,23 @@ class GeminiConnector:
         payload = self._to_payload(messages, temperature, json_mode, num_predict)
         last_exc: Exception | None = None
         for model in self._models_to_try():
+            check_budget(f"เรียกโมเดล {model}")
             try:
                 text = self._chat_one_model(model, payload)
                 if model != self.chat_model:
                     logger.info("ตอบด้วยโมเดลสำรอง %s", model)
+                self._note("gemini_ok" if model == self.chat_model else f"gemini_backup:{model}")
                 return text
             except _QuotaExhausted as e:
+                self._note(f"gemini_{e.kind}:{model}")
                 self._mark_exhausted(model, e.cooldown_s)
                 last_exc = e.__cause__ or e
-        raise LLMConnectionError(f"ทุกโมเดลชนโควตา ล่าสุด: {last_exc}") from last_exc
+        self._note("gemini_all_failed")
+        raise LLMConnectionError(
+            f"โมเดล Gemini ทุกตัวใช้ไม่ได้ (โควตาหมดหรือรับไม่ไหว) ล่าสุด: {last_exc}",
+            user_text="ตอนนี้ผู้ให้บริการโมเดลใช้ไม่ได้ทุกตัว (โควตาหมดหรือรับไม่ไหว) "
+                      "รบกวนลองใหม่อีกครั้งในอีกสักครู่ครับ",
+        ) from last_exc
 
     def _chat_one_model(self, model: str, payload: dict[str, Any]) -> str:
         path = f"/models/{model}:generateContent"
@@ -304,9 +383,13 @@ class GeminiConnector:
         last_exc: Exception | None = None
         for attempt in range(1, self.max_retries + 2):
             try:
-                resp = self._client.post(path, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
+                # ตรวจทุกครั้งที่ลองใหม่ ไม่ใช่แค่ก่อนเลือกโมเดล · และจำกัดเวลาของคำขอ
+                # HTTP ครั้งนี้ตามเวลาที่เหลือ ไม่ใช่ timeout เดิมของตัวเชื่อมต่อ
+                # อ่าน body แบบสตรีมพร้อมตรวจเพดานทุกก้อน — ดูเหตุผลใน post_json_bounded
+                data = post_json_bounded(
+                    self._client, path, payload, timeout_s=self.timeout_s,
+                    doing=f"เรียก {model} ครั้งที่ {attempt}",
+                )
                 text = self._text_of(data)
                 if not text:
                     # เกิดได้เมื่อคำตอบถูกตัวกรองความปลอดภัยบล็อก หรือชนเพดานความยาว
@@ -329,8 +412,14 @@ class GeminiConnector:
                 # 4xx อื่นคือเราส่งผิดเอง ลองใหม่ก็ได้ผลเท่าเดิม
                 if e.response.status_code < 500:
                     raise LLMConnectionError(self._explain(e)) from e
-                last_exc = e
-                logger.warning("gemini HTTP %d attempt %d", e.response.status_code, attempt)
+                # 5xx = ฝั่งผู้ให้บริการรับไม่ไหว ย้ายโมเดลทันทีเหมือน 429 ไม่ลองซ้ำตัวเดิม
+                #
+                # วัดเมื่อ 13 ต.ค. 2569: ลองซ้ำตัวเดิมสามครั้งก่อนย้าย ทำให้กรณีที่ทุกโมเดล
+                # ล่มใช้เวลาเป็นสี่เท่าของจำนวนโมเดล โดยไม่เคยเห็นว่าการลองซ้ำตัวเดิมทันที
+                # ช่วยอะไรเลย ส่วนกรณีที่พบจริง (ตัวหลักล่ม ตัวสำรองว่าง) การย้ายทันที
+                # ทำให้ได้คำตอบใน ~1.5 วินาทีแทนที่จะเสียเวลาลองตัวที่รู้แล้วว่าล่ม
+                logger.warning("gemini HTTP %d ที่โมเดล %s", e.response.status_code, model)
+                raise _Overloaded(model, _OVERLOAD_COOLDOWN_S) from e
         raise LLMConnectionError(f"gemini ล้มเหลวหลังลอง {self.max_retries + 1} ครั้ง: {last_exc}") from last_exc
 
     def chat_stream(
@@ -348,6 +437,7 @@ class GeminiConnector:
         """
         last_exc: Exception | None = None
         for model in self._models_to_try():
+            check_budget(f"เรียกโมเดล {model} แบบสตรีม")
             for attempt in range(1, self.max_retries + 2):
                 started = False
                 try:
@@ -356,22 +446,37 @@ class GeminiConnector:
                         yield chunk
                     if model != self.chat_model:
                         logger.info("สตรีมด้วยโมเดลสำรอง %s", model)
+                    self._note("gemini_ok" if model == self.chat_model else f"gemini_backup:{model}")
                     return
                 except _QuotaExhausted as e:
                     # ชนโควตากลางสตรีมหลังส่งข้อความไปแล้ว สลับโมเดลไม่ได้ เพราะผู้ใช้
                     # จะเห็นคำตอบต่อกันจากคนละโมเดล ซึ่งอ่านไม่รู้เรื่องยิ่งกว่าข้อผิดพลาด
                     if started:
+                        self._note("gemini_quota_midstream")
                         raise LLMConnectionError(f"โควตาหมดกลางคำตอบ: {e}") from e
+                    self._note(f"gemini_{e.kind}:{model}")
                     self._mark_exhausted(model, e.cooldown_s)
                     last_exc = e.__cause__ or e
                     break  # ไปโมเดลถัดไป ไม่ลองซ้ำตัวเดิม
+                except LLMBudgetExceeded:
+                    # เกินเพดานเวลารวม — ห้ามลองใหม่ ไม่ว่าจะเหลือ attempt อยู่หรือไม่
+                    # เพราะการลองใหม่คือการใช้เวลาเพิ่มในสิ่งที่หมดเวลาไปแล้ว
+                    raise
                 except LLMConnectionError as e:
                     if started or attempt > self.max_retries:
                         raise
                     last_exc = e
                     logger.warning("gemini stream ลองใหม่ครั้งที่ %d", attempt + 1)
+                    left = budget_left_s()
+                    if left is not None and left <= 2 * attempt:
+                        check_budget("หน่วงเวลาก่อนลองสตรีมใหม่")
                     time.sleep(2 * attempt)
-        raise LLMConnectionError(f"ทุกโมเดลชนโควตา ล่าสุด: {last_exc}") from last_exc
+        self._note("gemini_all_failed")
+        raise LLMConnectionError(
+            f"โมเดล Gemini ทุกตัวใช้ไม่ได้ (โควตาหมดหรือรับไม่ไหว) ล่าสุด: {last_exc}",
+            user_text="ตอนนี้ผู้ให้บริการโมเดลใช้ไม่ได้ทุกตัว (โควตาหมดหรือรับไม่ไหว) "
+                      "รบกวนลองใหม่อีกครั้งในอีกสักครู่ครับ",
+        ) from last_exc
 
     def _stream_once(
         self,
@@ -383,7 +488,10 @@ class GeminiConnector:
         payload = self._to_payload(messages, temperature, json_mode=False, num_predict=num_predict)
         path = f"/models/{model}:streamGenerateContent"
         try:
-            with self._client.stream("POST", path, json=payload, params={"alt": "sse"}) as resp:
+            with self._client.stream(
+                "POST", path, json=payload, params={"alt": "sse"},
+                timeout=http_timeout(self.timeout_s, f"เริ่มสตรีมจาก {model}"),
+            ) as resp:
                 if resp.is_error:
                     # คำตอบแบบ stream ยังไม่ได้อ่านเนื้อความ ถ้าไม่อ่านก่อน _is_daily_limit จะอ่านไม่ได้
                     # แล้วเดาว่าเป็นโควตารายวัน เจอจริงบนเซิร์ฟเวอร์: 429 ต่อนาทีระหว่างเขียนคำตอบ
@@ -391,6 +499,9 @@ class GeminiConnector:
                     resp.read()
                 resp.raise_for_status()
                 for line in resp.iter_lines():
+                    # ต้องตรวจทุกบรรทัด ไม่ใช่พึ่ง read timeout — สตรีมที่ทยอยส่งข้อมูล
+                    # เรื่อย ๆ จะไม่เคยชน read timeout แต่ยืดเวลารวมได้ไม่จำกัด
+                    check_budget(f"อ่านสตรีมจาก {model}")
                     # รูปแบบ SSE: สนใจเฉพาะบรรทัด data: ส่วนบรรทัดว่างคือตัวคั่นเหตุการณ์
                     if not line.startswith("data: "):
                         continue
@@ -399,6 +510,9 @@ class GeminiConnector:
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 raise _QuotaExhausted(model, _cooldown_for(e.response)) from e
+            # 503 ฝั่งผู้ให้บริการรับไม่ไหว — ย้ายโมเดลเหมือน 429 ดูเหตุผลใน _Overloaded
+            if e.response.status_code >= 500:
+                raise _Overloaded(model, _OVERLOAD_COOLDOWN_S) from e
             raise LLMConnectionError(self._explain(e)) from e
         except (httpx.HTTPError, json.JSONDecodeError) as e:
             raise LLMConnectionError(f"gemini stream ล้มเหลว: {type(e).__name__}: {e}"[:200]) from e

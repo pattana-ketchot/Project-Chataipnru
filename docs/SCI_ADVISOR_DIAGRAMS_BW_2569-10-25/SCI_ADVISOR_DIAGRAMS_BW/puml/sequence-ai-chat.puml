@@ -1,0 +1,102 @@
+@startuml sequence-ai-chat
+' =====================================================================
+' Sequence Diagram — ขั้นตอนถาม-ตอบ AI (เส้นทางที่หน้าเว็บใช้จริง)
+' ปรับปรุง 25 ต.ค. 2569 ตามผลตรวจทาน
+'
+' สิ่งที่แก้จากฉบับก่อน
+' --------------------
+' 1. ด่านทั้งหมดเคยวาดเป็น alt/else ก้อนเดียวหลายทาง ซึ่งอ่านได้ว่า "เลือกทางใดทางหนึ่ง"
+'    ของจริงคือ **ด่านเรียงกัน** ด่านที่ตอบไม่ได้จะไหลลงด่านถัดไป (early return ในโค้ด)
+'    โดยเฉพาะกรณีไม่พบในแคช ต้องไหลต่อไปด่านถัดไปจริง ไม่ใช่จบที่นั่น
+'    รอบนี้ใช้ group ซ้อนกันตามลำดับจริง และมีลูกศรกลับหาผู้ใช้เฉพาะด่านที่ตอบได้
+' 2. แยก **ที่มาใน HTTP header** ออกจาก **รายการที่มาท้ายคำตอบ** ซึ่งเป็นคนละชุด
+'    header  = Prepared.source  เอกสารฉบับเดียว ใช้ทำปุ่มเปิดไฟล์ รู้ก่อนเริ่มสตรีม
+'              และ **ว่างสำหรับคำตอบสาย RAG** (chat.py บรรทัด 488-493)
+'    ท้ายข้อความ = _with_rag_sources() คัด **หลัง** รู้ข้อความคำตอบทั้งหมด
+'    ฉบับก่อนวาดรวมกันจนเข้าใจผิดว่า header มีที่มาของคำตอบ
+'
+' หลักฐาน (อ่านจากซอร์สในอิมเมจที่ deploy จริง counter-2569-10-16 เมื่อ 25 ต.ค. 2569)
+'   backend/app/api/routes/web_compat.py:173       POST /chat-web
+'   backend/app/api/routes/web_compat.py:205-220   ดึงเหตุการณ์ meta ก่อนสร้าง StreamingResponse
+'   backend/app/api/routes/web_compat.py:121-169   _source_headers()
+'   backend/app/api/routes/web_compat.py:253-256   headers ถูกส่งพร้อมสถานะ HTTP
+'   backend/app/services/chat.py:488-493           Prepared.source ว่างสำหรับสาย RAG
+'   backend/app/services/chat.py::prepare_answer   ด่านเรียงกันแบบ early return
+'   backend/app/services/chat.py:1912              _with_rag_sources()
+'   backend/app/services/chat.py:1961, 1989        ชั้นตรวจข้ออ้างที่สองและที่สาม
+'   backend/app/services/chat.py:2226              เก็บแคชหลังสตรีมจบ
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+' ขาวดำสำหรับรายงานจบ — ลบบรรทัดนี้บรรทัดเดียวก็กลับเป็นภาพสี
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam defaultFontSize 13
+
+actor "ผู้ใช้" as user
+participant "หน้าเว็บ SPA" as spa
+participant "Caddy" as caddy
+participant "backend" as be
+database "PostgreSQL" as db
+participant "Ollama\nbge-m3" as ollama
+participant "Gemini API" as gemini
+
+user -> spa : พิมพ์คำถาม (ไม่ต้องล็อกอิน)
+spa -> caddy : POST /api/chat
+caddy -> be : เขียน URL ใหม่เป็น POST /chat-web
+
+group ด่าน 0 - 0.7185 — ตอบจากโค้ดหรือจากข้อมูลที่ตรวจรับแล้ว
+  be -> db : อ่าน mko.v_live_*
+  db --> be : ค่าที่ตรวจรับแล้ว
+  alt ฐานมีข้อมูลที่ตอบได้
+    be --> spa : คำตอบสำเร็จรูป (ไม่เรียกโมเดลเลย)
+  else ตอบไม่ได้
+
+alt คำตอบเตรียมไว้แล้ว (จากด่านฐานหรือแคช)
+  be --> spa : ส่งเป็นก้อนเดียวจบ
+else ต้องให้โมเดลเขียนใหม่
+  be -> gemini : chat_stream()
+  alt Gemini ทำงานปกติ
+    gemini --> be : สตรีม token
+    be --> spa : ส่งต่อทันทีทีละส่วน
+  else Gemini ล้ม ก่อน ส่งตัวอักษรแรก
+    be -> ollama : chat_stream() ด้วย qwen2.5:3b
+    ollama --> be : สตรีม token
+    be --> spa : ส่งต่อให้หน้าเว็บ
+  else ล้มทั้งสองเจ้า หรือล้มหลังส่งตัวอักษรแรก
+
+be -> db : บันทึกบทสนทนา · เก็บแคชถ้าไม่มีประวัติ · นับสถิติโมเดล
+spa -> user : แสดงคำตอบพร้อมป้ายอ้างอิงเอกสาร
+
+@enduml

@@ -1,0 +1,227 @@
+--- image/main.py
++++ release/main.py
+@@ -11,6 +11,7 @@
+                             web_compat)
+ from app.core.config import get_settings
+ from app.db.session import engine
++from app.services import llm_usage
+ 
+ from llm.connector import ChatMessage  # noqa: E402  (sys.path ตั้งโดย llm_client)
+ 
+@@ -83,6 +84,13 @@
+ async def lifespan(_: FastAPI):
+     _check_embedding_dim()
+ 
++    # ตัวนับว่าคำตอบมาจากโมเดลตัวไหน — เธรดเบื้องหลังตื่นตามเวลา ไม่ใช่ตามเหตุการณ์
++    #
++    # ต้องผูกกับ lifespan ไม่ใช่ปล่อยให้คำขอของผู้ใช้เป็นคนจุดชนวนการเขียน เพราะ
++    # คำถามของระบบนี้มาเป็นช่วง ๆ แล้วเงียบไปเป็นชั่วโมง ตัวเลขของช่วงท้ายจะค้าง
++    # อยู่ในหน่วยความจำจนกว่าจะมีคนถามอีกครั้งหรือจนกว่าจะปิดระบบ
++    llm_usage.start_flusher()
++
+     task = None
+     if settings.warmup_interval_minutes > 0:
+         task = asyncio.create_task(_keep_models_warm())
+@@ -93,6 +101,9 @@
+     if task is not None:
+         task.cancel()
+ 
++    # เขียนตัวเลขช่วงสุดท้ายก่อนปิด — รอได้อย่างมาก 3 วินาทีแล้วปล่อย
++    llm_usage.stop_flusher()
++
+ 
+ app = FastAPI(
+     lifespan=lifespan,
+--- image/llm_client.py
++++ release/llm_client.py
+@@ -27,6 +27,7 @@
+ from llm.connector import LLMConnectionError, OllamaConnector  # noqa: E402
+ from llm.gemini import GeminiConnector  # noqa: E402
+ from app.core.config import get_settings  # noqa: E402
++from app.services import llm_usage  # noqa: E402
+ 
+ settings = get_settings()
+ logger = logging.getLogger("course_advisor")
+@@ -100,9 +101,27 @@
+             return self._chatter.chat(*args, **kwargs)
+         except LLMConnectionError as e:
+             if not allow_fallback:
++                llm_usage.record("fallback_declined")
+                 raise LLMConnectionError(FALLBACK_DECLINED) from e
+             logger.warning("เจ้าหลักตอบไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
+-            return self._fallback.chat(*args, **self._fallback_kwargs(kwargs))
++            return self._call_fallback(*args, **self._fallback_kwargs(kwargs))
++
++    def _call_fallback(self, *args, **kwargs):
++        """
++        เรียกโมเดลในเครื่องพร้อมนับผลจริง — "เรียกตัวสำรอง" ไม่เท่ากับ "ผู้ใช้ได้คำตอบ"
++
++        โมเดลในเครื่องล้มได้เหมือนกัน โดยเฉพาะเมื่อเพดานเวลาของคำขอหมดก่อนมันเขียนจบ
++        ซึ่งเกิดได้จริงเพราะมันช้ากว่าเจ้าหลักมาก ถ้านับแค่ "ตกมาที่ตัวสำรอง" ครั้งเดียว
++        ความล้มเหลวจะถูกนับรวมเป็นความสำเร็จ แล้วตัวเลขจะบอกว่าระบบรับมือได้ดีกว่าจริง
++        """
++        llm_usage.record("fallback_local_attempt")
++        try:
++            out = self._fallback.chat(*args, **kwargs)
++        except Exception:
++            llm_usage.record("fallback_local_failed")
++            raise
++        llm_usage.record("fallback_local_ok")
++        return out
+ 
+     def chat_stream(self, *args, allow_fallback: bool = True, **kwargs):
+         """
+@@ -119,11 +138,25 @@
+             return
+         except LLMConnectionError as e:
+             if started:
++                llm_usage.record("stream_failed_midway")
+                 raise
+             if not allow_fallback:
++                llm_usage.record("fallback_declined")
+                 raise LLMConnectionError(FALLBACK_DECLINED) from e
+             logger.warning("เจ้าหลักสตรีมไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
+-        yield from self._fallback.chat_stream(*args, **self._fallback_kwargs(kwargs))
++
++        # สตรีม "สำเร็จ" คือเดินจนจบโดยไม่โยนข้อผิดพลาด ไม่ใช่แค่เริ่มส่งตัวอักษรแรกได้
++        #
++        # ผู้ใช้ปิดหน้าเว็บกลางคันทำให้เกิด GeneratorExit ซึ่งไม่ใช่ทั้งความสำเร็จและ
++        # ความล้มเหลวของโมเดล จึงไม่นับทั้งสองทาง — `except Exception` ไม่จับมันอยู่แล้ว
++        # เพราะ GeneratorExit สืบทอดจาก BaseException ไม่ใช่ Exception
++        llm_usage.record("fallback_local_attempt")
++        try:
++            yield from self._fallback.chat_stream(*args, **self._fallback_kwargs(kwargs))
++        except Exception:
++            llm_usage.record("fallback_local_failed")
++            raise
++        llm_usage.record("fallback_local_ok")
+ 
+     @property
+     def chat_model(self) -> str:
+@@ -155,6 +188,8 @@
+                     api_key=settings.gemini_api_key,
+                     chat_model=settings.gemini_model,
+                     timeout_s=settings.llm_request_timeout_s,
++                    # แพ็กเกจ llm/ ไม่รู้จักฐานข้อมูลของเรา จึงส่งตัวนับเข้าไปจากที่นี่
++                    on_event=llm_usage.record,
+                 ),
+             )
+         else:
+--- image/gemini.py
++++ release/gemini.py
+@@ -35,7 +35,7 @@
+ import os
+ import re
+ import time
+-from collections.abc import Iterator
++from collections.abc import Callable, Iterator
+ from dataclasses import dataclass, field
+ from typing import Any
+ 
+@@ -116,10 +116,17 @@
+     คือสาเหตุที่โมเดลที่ยังใช้ได้ถูกพักทิ้งไปสี่ชั่วโมงเพราะยิงเร็วไปไม่กี่วินาที
+     """
+ 
+-    def __init__(self, model: str, cooldown_s: float):
++    def __init__(self, model: str, cooldown_s: float, kind: str | None = None):
+         super().__init__(model)
+         self.model = model
+         self.cooldown_s = cooldown_s
++        # ชนิดของเหตุการณ์สำหรับตัวนับ (services/llm_usage.py) — อ่านจากระยะพักที่
++        # _cooldown_for ตัดสินไว้แล้ว ไม่ไปอ่านเนื้อความของคำตอบซ้ำอีกรอบ เพราะการ
++        # ตัดสินซ้ำแปลว่ามีที่บอกชนิดโควตาสองแห่ง ซึ่งเพี้ยนจากกันได้
++        #
++        # เส้นแบ่งที่ 10 นาทีปลอดภัย: รายวันตั้งไว้ 4 ชั่วโมง ส่วนเพดานต่อนาทีถูกจำกัด
++        # ไม่ให้เกินสองนาทีอยู่แล้ว (_is_daily_limit ถือว่าเกิน 120 วินาทีคือรายวัน)
++        self.kind = kind or ("quota_day" if cooldown_s >= 600 else "quota_minute")
+ 
+ 
+ # พักโมเดลที่ตอบ 503 ไว้สั้น ๆ เพราะ Google บอกเองว่า "Spikes in demand are usually
+@@ -144,6 +151,11 @@
+     ทั้งที่ยังมีโมเดลบนคลาวด์ว่างอยู่
+     """
+ 
++    def __init__(self, model: str, cooldown_s: float):
++        # ตั้งชนิดให้ตัวนับเอง ไม่ให้ไปเดาจากระยะพัก เพราะ 503 กับเพดานต่อนาทีพักใกล้
++        # เคียงกัน (60 กับ 45 วินาที) แต่เป็นคนละปัญหาและแก้คนละทาง
++        super().__init__(model, cooldown_s, kind="overload")
++
+ 
+ _BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+ 
+@@ -158,6 +170,14 @@
+     chat_model: str = "gemini-3.5-flash-lite"
+     timeout_s: int = 120
+     max_retries: int = 2
++
++    # ตัวรับแจ้งเหตุการณ์สำหรับนับสถิติ — ไม่ตั้งก็ทำงานได้ตามปกติ
++    #
++    # เป็น callback แทนการเรียกตัวนับตรง ๆ เพราะแพ็กเกจ llm/ ต้องไม่รู้จัก backend
++    # ของเรา (ไม่งั้นมันใช้นอกโปรเจกต์นี้ไม่ได้ และผูกกับฐานข้อมูลโดยไม่จำเป็น)
++    # ผู้ประกอบเป็นคนส่ง services/llm_usage.record เข้ามา — ดู services/llm_client.py
++    on_event: Callable[[str], None] | None = field(default=None, repr=False)
++
+     _client: httpx.Client = field(init=False, repr=False)
+ 
+     # เพดานความยาวคำตอบ ตั้งสูงกว่าฝั่งโมเดลในเครื่องมากโดยตั้งใจ
+@@ -310,6 +330,20 @@
+         self._exhausted.clear()
+         return order
+ 
++    def _note(self, event: str) -> None:
++        """
++        บอกตัวนับว่าเกิดอะไรขึ้น — ห้ามทำให้การตอบคำถามล้มเด็ดขาด
++
++        ตัวนับเป็นของเสริมที่มีไว้ตัดสินใจเรื่องผู้ให้บริการ ไม่ใช่ส่วนหนึ่งของการตอบ
++        ถ้ามันพัง สิ่งที่ควรเสียคือสถิติ ไม่ใช่คำตอบของผู้ใช้ที่กำลังรออยู่
++        """
++        if self.on_event is None:
++            return
++        try:
++            self.on_event(event)
++        except Exception:  # noqa: BLE001
++            logger.debug("ตัวนับภายนอกทำงานไม่ได้", exc_info=True)
++
+     def _mark_exhausted(self, model: str, cooldown_s: float | None = None) -> None:
+         cooldown = self.exhausted_for_s if cooldown_s is None else cooldown_s
+         self._exhausted[model] = time.time() + cooldown
+@@ -330,10 +364,13 @@
+                 text = self._chat_one_model(model, payload)
+                 if model != self.chat_model:
+                     logger.info("ตอบด้วยโมเดลสำรอง %s", model)
++                self._note("gemini_ok" if model == self.chat_model else f"gemini_backup:{model}")
+                 return text
+             except _QuotaExhausted as e:
++                self._note(f"gemini_{e.kind}:{model}")
+                 self._mark_exhausted(model, e.cooldown_s)
+                 last_exc = e.__cause__ or e
++        self._note("gemini_all_failed")
+         raise LLMConnectionError(
+             f"โมเดล Gemini ทุกตัวใช้ไม่ได้ (โควตาหมดหรือรับไม่ไหว) ล่าสุด: {last_exc}",
+             user_text="ตอนนี้ผู้ให้บริการโมเดลใช้ไม่ได้ทุกตัว (โควตาหมดหรือรับไม่ไหว) "
+@@ -409,12 +446,15 @@
+                         yield chunk
+                     if model != self.chat_model:
+                         logger.info("สตรีมด้วยโมเดลสำรอง %s", model)
++                    self._note("gemini_ok" if model == self.chat_model else f"gemini_backup:{model}")
+                     return
+                 except _QuotaExhausted as e:
+                     # ชนโควตากลางสตรีมหลังส่งข้อความไปแล้ว สลับโมเดลไม่ได้ เพราะผู้ใช้
+                     # จะเห็นคำตอบต่อกันจากคนละโมเดล ซึ่งอ่านไม่รู้เรื่องยิ่งกว่าข้อผิดพลาด
+                     if started:
++                        self._note("gemini_quota_midstream")
+                         raise LLMConnectionError(f"โควตาหมดกลางคำตอบ: {e}") from e
++                    self._note(f"gemini_{e.kind}:{model}")
+                     self._mark_exhausted(model, e.cooldown_s)
+                     last_exc = e.__cause__ or e
+                     break  # ไปโมเดลถัดไป ไม่ลองซ้ำตัวเดิม
+@@ -431,6 +471,7 @@
+                     if left is not None and left <= 2 * attempt:
+                         check_budget("หน่วงเวลาก่อนลองสตรีมใหม่")
+                     time.sleep(2 * attempt)
++        self._note("gemini_all_failed")
+         raise LLMConnectionError(
+             f"โมเดล Gemini ทุกตัวใช้ไม่ได้ (โควตาหมดหรือรับไม่ไหว) ล่าสุด: {last_exc}",
+             user_text="ตอนนี้ผู้ให้บริการโมเดลใช้ไม่ได้ทุกตัว (โควตาหมดหรือรับไม่ไหว) "
+--- image/llm_usage.py  (ไม่มีในอิมเมจ — ไฟล์ใหม่ทั้งไฟล์)
++++ release/llm_usage.py

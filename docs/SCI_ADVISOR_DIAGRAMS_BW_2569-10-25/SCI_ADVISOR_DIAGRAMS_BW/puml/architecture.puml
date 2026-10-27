@@ -1,0 +1,82 @@
+@startuml architecture
+' สถาปัตยกรรมระบบ SCI Advisor
+' ข้อมูลตรวจจากเซิร์ฟเวอร์ production เมื่อ 25 ต.ค. 2569 (docker ps, docker inspect, env)
+' รายละเอียดและหลักฐานอยู่ในหัวข้อ 2 และ 3.1 ของ SCI_ADVISOR_DIAGRAMS.md
+
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam ArrowFontSize 12
+skinparam roundCorner 6
+
+actor "ผู้ใช้ทั่วไป" as user
+actor "ผู้ดูแล" as admin
+
+rectangle "เซิร์ฟเวอร์เดียว (Docker Compose)" {
+
+  rectangle "Caddy\nReverse Proxy" as caddy
+  rectangle "หน้าเว็บ\n(ไฟล์นิ่ง)" as web
+  rectangle "Backend\nFastAPI" as be
+  database "PostgreSQL\n+ pgvector" as pg
+  rectangle "Ollama\nbge-m3 / qwen2.5" as ol
+  folder "เอกสาร มคอ.2\nและไฟล์อัปโหลด" as files
+
+  rectangle "webapi\n(ไม่ได้ใช้งาน)" as webapi #line.dashed
+  rectangle "frontend\n(ไม่ได้ใช้งาน)" as oldfe #line.dashed
+  rectangle "ตัวนำเข้าเอกสาร\n(สั่งรันเอง)" as worker #line.dashed
+}
+
+rectangle "Google\nGemini API" as gemini
+rectangle "เว็บไซต์คณะ" as faculty
+
+user --> caddy : HTTPS
+admin --> caddy : HTTPS
+
+caddy --> web
+caddy --> be : /api/*
+caddy --> webapi
+
+be --> pg
+be --> ol : เวกเตอร์
+be --> files
+be --> gemini : คำถาม / คำตอบ
+be --> faculty : ดึงข่าว
+
+worker --> pg
+worker --> ol
+worker --> files
+oldfe --> be
+
+@enduml

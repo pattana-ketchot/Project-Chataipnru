@@ -1,0 +1,637 @@
+--- a/src/components/Header.jsx
++++ b/src/components/Header.jsx
+@@ -1,6 +1,7 @@
+ ﻿import { useEffect, useState } from 'react'
+ import { Link, useLocation, useNavigate } from 'react-router-dom'
+ import { Menu, X } from 'lucide-react'
++import { APPLY_URL } from '../lib/applyUrl'
+ 
+ const Header = () => {
+   const location = useLocation()
+@@ -102,7 +103,7 @@
+ 
+         {/* Apply Now Button */}
+         <Link
+-          to="https://admission.pnru.ac.th/info/announce"
++          to={APPLY_URL}
+           className="hidden xl:inline-block ml-auto font-medium border-2 border-green-800 bg-green-800 text-white rounded-full px-4 2xl:px-5 py-1.5 2xl:py-2 text-sm 2xl:text-base whitespace-nowrap hover:bg-green-900 hover:border-green-900 transition-colors"
+         >
+           สมัครเรียน
+@@ -149,7 +150,7 @@
+             เกี่ยวกับเรา
+           </a>
+           <Link
+-            to="https://admission.pnru.ac.th/info/announce"
++            to={APPLY_URL}
+             onClick={() => setMobileMenuOpen(false)}
+             className="mt-2 font-medium border-2 border-green-800 bg-green-800 text-white rounded-full px-5 py-2.5 text-center hover:bg-green-900 hover:border-green-900 transition-colors"
+           >
+--- a/src/pages/Admin/CourseForm.jsx
++++ b/src/pages/Admin/CourseForm.jsx
+@@ -13,8 +13,19 @@
+   { id: 'faculty', label: 'คณะอาจารย์', icon: Users }
+ ]
+ 
++// ตัวแบ่งบรรทัดของช่องที่กรอกเป็นรายการ — ประกาศไว้ที่เดียวเพื่อไม่ให้เขียนผิดคนละแบบ
++const LINE_BREAK = String.fromCharCode(10)
++
+ const LEVEL_OPTIONS = ['ปริญญาตรี', 'ปริญญาโท', 'ปริญญาเอก', 'ประกาศนียบัตรบัณฑิต', 'อนุปริญญา']
+ const DURATION_OPTIONS = ['2 ปี', '3 ปี', '4 ปี', '4.5 ปี', '5 ปี', '6 ปี']
++
++// ค่าที่บันทึกไว้แล้วแต่ไม่อยู่ในรายการตัวเลือก ต้องเพิ่มเข้าไปเป็นตัวเลือกด้วย
++//
++// เช่นหลักสูตรบัณฑิตศึกษาใช้ระยะเวลา "2 ปี (แผน 1 แบบวิชาการ)" ตามที่เว็บคณะประกาศ
++// ซึ่งไม่ตรงกับตัวเลือกใด ถ้าไม่เพิ่มเข้าไป select จะแสดงว่างทั้งที่ข้อมูลมีอยู่
++// ผู้ดูแลจะมองไม่เห็นค่าเดิมแล้วเผลอเลือกทับของทางการไปโดยไม่รู้ตัว
++const withCurrent = (options, current) =>
++  current && !options.includes(current) ? [current, ...options] : options
+ 
+ const emptyForm = {
+   title: '',
+@@ -28,6 +39,12 @@
+   detailTuitionTotal: '',
+   detailAbout: '',
+   detailQualificationsText: '',
++  detailAdmissionConditionsText: '',
++  detailQualificationsNote: '',
++  detailFullConditionsUrl: '',
++  detailSourceUrl: '',
++  detailSourceCheckedAt: '',
++  detailApplyUrl: '',
+   highlights: [],
+   faculty: [],
+   documents: []
+@@ -104,6 +121,12 @@
+         detailTuitionTotal: detail.tuition_total || '',
+         detailAbout: detail.about || '',
+         detailQualificationsText: (detail.qualifications || []).join('\n'),
++        detailAdmissionConditionsText: (detail.admission_conditions || []).join(LINE_BREAK),
++        detailQualificationsNote: detail.qualifications_note || '',
++        detailFullConditionsUrl: detail.full_conditions_url || '',
++        detailSourceUrl: detail.source_url || '',
++        detailSourceCheckedAt: detail.source_checked_at || '',
++        detailApplyUrl: detail.apply_url || '',
+         highlights: normalizeHighlights(detail.highlights),
+         faculty: normalizeFaculty(detail.faculty),
+         documents: normalizeDocuments(detail.documents)
+@@ -200,6 +223,10 @@
+       .split('\n')
+       .map((q) => q.trim())
+       .filter(Boolean)
++    const admissionConditions = form.detailAdmissionConditionsText
++      .split(LINE_BREAK)
++      .map((q) => q.trim())
++      .filter(Boolean)
+     const highlights = form.highlights
+       .filter((h) => h.title.trim())
+       .map((h) => ({ title: h.title.trim(), description: h.description.trim() || undefined }))
+@@ -232,6 +259,12 @@
+       tuition_total: form.detailTuitionTotal.trim() || undefined,
+       about: form.detailAbout.trim() || undefined,
+       qualifications: qualifications.length ? qualifications : undefined,
++      admission_conditions: admissionConditions.length ? admissionConditions : undefined,
++      qualifications_note: form.detailQualificationsNote.trim() || undefined,
++      full_conditions_url: form.detailFullConditionsUrl.trim() || undefined,
++      source_url: form.detailSourceUrl.trim() || undefined,
++      source_checked_at: form.detailSourceCheckedAt.trim() || undefined,
++      apply_url: form.detailApplyUrl.trim() || undefined,
+       highlights: highlights.length ? highlights : undefined,
+       faculty: faculty.length ? faculty : undefined,
+       documents: documents.length ? documents : undefined
+@@ -391,7 +424,7 @@
+                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
+               >
+                 <option value="">-- เลือกระดับการศึกษา --</option>
+-                {LEVEL_OPTIONS.map((lvl) => (
++                {withCurrent(LEVEL_OPTIONS, form.detailLevel).map((lvl) => (
+                   <option key={lvl} value={lvl}>{lvl}</option>
+                 ))}
+               </select>
+@@ -405,7 +438,7 @@
+                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
+               >
+                 <option value="">-- เลือกระยะเวลา --</option>
+-                {DURATION_OPTIONS.map((d) => (
++                {withCurrent(DURATION_OPTIONS, form.detailDuration).map((d) => (
+                   <option key={d} value={d}>{d}</option>
+                 ))}
+               </select>
+@@ -453,6 +486,93 @@
+               onChange={handleChange}
+               placeholder={'สำเร็จการศึกษาระดับมัธยมศึกษาตอนปลายหรือเทียบเท่า\nมีผลการเรียนเฉลี่ยสะสมไม่ต่ำกว่า 2.00'}
+               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru font-mono text-sm"
++            />
++          </div>
++
++          {/* เงื่อนไขที่ผูกกับรอบรับสมัคร แยกจากคุณสมบัติทั่วไปข้างบน
++              ส่วนนี้เปลี่ยนทุกรอบรับสมัคร เช่น ต้องมีผลการเรียนกี่ภาคจึงสมัครรอบนั้นได้
++              แยกช่องไว้เพื่อให้แก้เฉพาะส่วนที่เปลี่ยนได้ โดยไม่ต้องแตะคุณสมบัติทั่วไป */}
++          <div className="mt-4">
++            <label className="block text-sm font-medium text-gray-700 mb-1.5">
++              เงื่อนไขตามรอบรับสมัคร (บรรทัดละ 1 ข้อ)
++            </label>
++            <textarea
++              name="detailAdmissionConditionsText"
++              rows={3}
++              value={form.detailAdmissionConditionsText}
++              onChange={handleChange}
++              placeholder="เช่น ใช้เกรดเฉลี่ยสะสม/หน่วยกิตสะสม อย่างน้อย 4-5 ภาคการศึกษา ในการสมัครเรียน"
++              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru font-mono text-sm"
++            />
++          </div>
++
++          {/* ใช้เมื่อข้อความคุณสมบัติด้านบนเป็นฉบับย่อ ไม่ใช่เงื่อนไขครบทุกข้อ
++              เช่น หลักสูตรบัณฑิตศึกษาที่เล่ม มคอ.2 แยกเงื่อนไขตามแผนการเรียน */}
++          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
++            <div>
++              <label className="block text-sm font-medium text-gray-700 mb-1.5">
++                ข้อความกำกับใต้คุณสมบัติ (ไม่จำเป็น)
++              </label>
++              <input
++                name="detailQualificationsNote"
++                value={form.detailQualificationsNote}
++                onChange={handleChange}
++                placeholder="เช่น ข้อความข้างต้นเป็นฉบับย่อ"
++                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
++              />
++            </div>
++            <div>
++              <label className="block text-sm font-medium text-gray-700 mb-1.5">
++                ลิงก์เงื่อนไขฉบับเต็ม (ไม่จำเป็น)
++              </label>
++              <input
++                name="detailFullConditionsUrl"
++                value={form.detailFullConditionsUrl}
++                onChange={handleChange}
++                placeholder="เช่น ลิงก์เล่ม มคอ.2"
++                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
++              />
++            </div>
++          </div>
++
++          {/* ที่มาของข้อมูลคุณสมบัติ — คุณสมบัติที่รับสมัครเปลี่ยนได้ทุกปีการศึกษา
++              ถ้าไม่บันทึกว่าลอกมาจากไหนและตรวจเมื่อไร ปีถัดไปจะไม่มีใครรู้ว่ายังใช้ได้อยู่หรือเปล่า
++              สองช่องนี้แสดงเป็นบรรทัดเล็กใต้หัวข้อคุณสมบัติผู้สมัครในหน้ารายละเอียด */}
++          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
++            <div>
++              <label className="block text-sm font-medium text-gray-700 mb-1.5">ลิงก์ข้อมูลต้นทาง</label>
++              <input
++                name="detailSourceUrl"
++                value={form.detailSourceUrl}
++                onChange={handleChange}
++                placeholder="เช่น https://sci.pnru.ac.th/program_detail.php?id=26"
++                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
++              />
++            </div>
++            <div>
++              <label className="block text-sm font-medium text-gray-700 mb-1.5">วันที่ตรวจข้อมูล</label>
++              <input
++                name="detailSourceCheckedAt"
++                value={form.detailSourceCheckedAt}
++                onChange={handleChange}
++                placeholder="เช่น 27 ต.ค. 2569"
++                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
++              />
++            </div>
++          </div>
++
++          {/* ปล่อยว่างไว้ได้ หน้ารายละเอียดจะใช้ลิงก์รับสมัครกลางของมหาวิทยาลัย
++              ใส่เฉพาะกรณีหลักสูตรนี้มีช่องทางรับสมัครของตัวเอง */}
++          <div className="mt-4">
++            <label className="block text-sm font-medium text-gray-700 mb-1.5">
++              ลิงก์สมัครเรียนเฉพาะหลักสูตรนี้ (ไม่จำเป็น)
++            </label>
++            <input
++              name="detailApplyUrl"
++              value={form.detailApplyUrl}
++              onChange={handleChange}
++              placeholder="ปล่อยว่าง = ใช้ลิงก์รับสมัครกลางของมหาวิทยาลัย"
++              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
+             />
+           </div>
+         </div>
+--- a/src/pages/AllCourses.jsx
++++ b/src/pages/AllCourses.jsx
+@@ -2,10 +2,14 @@
+ import { Link } from 'react-router-dom'
+ import { Search, GraduationCap, Scale, Briefcase, Star, ArrowRight } from 'lucide-react'
+ import { fetchSiteCourses } from '../lib/siteCourses'
++import { levelOf, byKnownOrder } from '../lib/courseLevels'
++
++const ALL_LEVELS = 'all'
+ 
+ const AllCourses = () => {
+   const [searchQuery, setSearchQuery] = useState('')
+   const [sortBy, setSortBy] = useState('a-z')
++  const [levelFilter, setLevelFilter] = useState(ALL_LEVELS)
+   const [courses, setCourses] = useState([])
+   const [loading, setLoading] = useState(true)
+ 
+@@ -21,9 +25,26 @@
+     load()
+   }, [])
+ 
++  // ระดับที่มีให้เลือก — สร้างจากข้อมูลจริงที่ผู้ดูแลกรอกไว้ ไม่ใช่รายการที่เขียนตายตัว
++  // ถ้าคณะยังไม่เปิดระดับใด ตัวเลือกนั้นก็ไม่ควรโผล่ให้กดแล้วได้หน้าว่าง
++  const levels = useMemo(() => {
++    const found = new Set()
++    for (const course of courses) {
++      const level = levelOf(course)
++      if (level) found.add(level)
++    }
++    return [...found].sort(byKnownOrder)
++  }, [courses])
++
+   // Filter and sort courses
+   const filteredCourses = useMemo(() => {
+     let filtered = courses
++
++    // กรองตามระดับ — ตัดออกเท่านั้น ไม่ดึงหลักสูตรอื่นมาเติมให้ครบจำนวน
++    // หลักสูตรที่ยังไม่ได้กรอกระดับจะไม่เข้าเกณฑ์ใดเลย ซึ่งถูกต้อง
++    if (levelFilter !== ALL_LEVELS) {
++      filtered = filtered.filter((course) => levelOf(course) === levelFilter)
++    }
+ 
+     // Filter by search query
+     if (searchQuery) {
+@@ -43,7 +64,7 @@
+     }
+ 
+     return filtered
+-  }, [courses, searchQuery, sortBy])
++  }, [courses, searchQuery, sortBy, levelFilter])
+ 
+   return (
+     <div className="min-h-screen bg-gray-50">
+@@ -82,8 +103,31 @@
+             />
+           </div>
+ 
+-          {/* Sort */}
+-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-end gap-4">
++          {/* Level filter + Sort */}
++          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
++            {/* ซ่อนทั้งแถวถ้ายังไม่มีหลักสูตรใดกรอกระดับไว้ — ตัวกรองที่มีตัวเลือกเดียวไม่ช่วยอะไร */}
++            {levels.length > 1 ? (
++              <div className="flex flex-wrap items-center gap-2">
++                <span className="text-sm text-gray-600">ระดับการศึกษา</span>
++                <select
++                  value={levelFilter}
++                  onChange={(e) => setLevelFilter(e.target.value)}
++                  className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru text-sm"
++                >
++                  <option value={ALL_LEVELS}>ทุกระดับ</option>
++                  {levels.map((level) => (
++                    <option key={level} value={level}>{level}</option>
++                  ))}
++                </select>
++                {levelFilter !== ALL_LEVELS && (
++                  <span className="text-sm text-gray-500">
++                    พบ {filteredCourses.length} หลักสูตร
++                  </span>
++                )}
++              </div>
++            ) : (
++              <span />
++            )}
+             <select
+               value={sortBy}
+               onChange={(e) => setSortBy(e.target.value)}
+@@ -157,7 +201,11 @@
+               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                 <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                 <h3 className="text-xl font-semibold text-gray-700 mb-2">ไม่พบหลักสูตรที่ค้นหา</h3>
+-                <p className="text-gray-500">ลองใช้คำค้นหาอื่น</p>
++                <p className="text-gray-500">
++                  {levelFilter !== ALL_LEVELS
++                    ? `ยังไม่มีหลักสูตรระดับ${levelFilter} ที่ตรงกับคำค้นหา — ลองเลือกทุกระดับ`
++                    : 'ลองใช้คำค้นหาอื่น'}
++                </p>
+               </div>
+             )}
+           </div>
+--- a/src/pages/CompareCourses.jsx
++++ b/src/pages/CompareCourses.jsx
+@@ -2,6 +2,7 @@
+ import { useNavigate } from 'react-router-dom'
+ import { Scale, GraduationCap, Plus, Check, X, ArrowRight, Info } from 'lucide-react'
+ import { fetchSiteCourses } from '../lib/siteCourses'
++import { levelOf } from '../lib/courseLevels'
+ 
+ const CompareCourses = () => {
+   const navigate = useNavigate()
+@@ -177,6 +178,15 @@
+                         <p className="text-xs text-gray-500 mb-2 text-center line-clamp-1">
+                           {course.title_en}
+                         </p>
++                        {/* ป้ายระดับอ่านจากข้อมูล ไม่ใช่จากวงเล็บในชื่อซึ่งผู้ดูแลแก้ได้
++                            หลักสูตรโทกับเอกคู่นี้ชื่อสาขาเหมือนกัน ถ้าชื่อถูกแก้จะแยกไม่ออก */}
++                        {levelOf(course) && (
++                          <p className="mb-2 text-center">
++                            <span className="mt-1 inline-block rounded-full bg-[#E8F5F1] px-2 py-0.5 text-[11px] font-medium text-pnru">
++                              {levelOf(course)}
++                            </span>
++                          </p>
++                        )}
+                         <p className="text-xs text-gray-600 text-center line-clamp-2 mb-3 min-h-[2rem]">
+                           {course.description}
+                         </p>
+--- a/src/pages/CompareResult.jsx
++++ b/src/pages/CompareResult.jsx
+@@ -2,6 +2,7 @@
+ import { useNavigate, useSearchParams } from 'react-router-dom'
+ import { Plus, Trash2, X, Check, GraduationCap, Sparkles, Loader2, AlertTriangle } from 'lucide-react'
+ import { fetchSiteCoursesByIds } from '../lib/siteCourses'
++import { levelOf } from '../lib/courseLevels'
+ 
+ const CompareResult = () => {
+   const navigate = useNavigate()
+@@ -50,10 +51,13 @@
+     setAiResult(null)
+ 
+     try {
++      // ส่งระดับการศึกษาไปด้วย เพราะคณะมีหลักสูตรที่ชื่อสาขาเหมือนกันทุกตัวอักษร
++      // ต่างกันแค่ระดับ (โท/เอก) ถ้าไม่บอกระดับ โมเดลจะแยกสองรายการนี้ไม่ออก
+       const payload = selectedCourses.map((c) => ({
+         id: c.id,
+         title: c.title,
+         title_en: c.title_en,
++        level: levelOf(c) || undefined,
+         description: c.description,
+         careers: c.careers
+       }))
+@@ -211,6 +215,11 @@
+                       return (
+                         <div key={item.courseId} className="rounded-lg border border-gray-200 p-4">
+                           <h3 className="font-bold text-pnru">{course?.title || 'สาขา'}</h3>
++                          {course && levelOf(course) && (
++                            <span className="mt-1 inline-block rounded-full bg-[#E8F5F1] px-2 py-0.5 text-[11px] font-medium text-pnru">
++                              {levelOf(course)}
++                            </span>
++                          )}
+                           {item.bestFor && (
+                             <p className="mt-1 text-sm text-gray-600">
+                               <span className="font-medium text-gray-800">เหมาะกับ:</span> {item.bestFor}
+@@ -361,6 +370,11 @@
+                             <div className="text-center">
+                               <h3 className="font-bold text-pnru mb-1">{course.title}</h3>
+                               <p className="text-xs text-gray-500">{course.title_en}</p>
++                              {levelOf(course) && (
++                                <span className="mt-1 inline-block rounded-full bg-[#E8F5F1] px-2 py-0.5 text-[11px] font-medium text-pnru">
++                                  {levelOf(course)}
++                                </span>
++                              )}
+                             </div>
+ 
+                             {/* Remove Button */}
+--- a/src/pages/CourseDetail.jsx
++++ b/src/pages/CourseDetail.jsx
+@@ -1,6 +1,7 @@
+ import { useState, useEffect, useRef, useCallback } from 'react'
+ import { useParams, Link } from 'react-router-dom'
+ import { fetchSiteCourse } from '../lib/siteCourses'
++import { applyUrlFor } from '../lib/applyUrl'
+ import {
+   Clock,
+   Users,
+@@ -11,7 +12,9 @@
+   Sparkles,
+   Briefcase,
+   Info,
+-  UserCheck
++  UserCheck,
++  ExternalLink,
++  CalendarClock
+ } from 'lucide-react'
+ 
+ /* ------------------------------------------------------------------ */
+@@ -160,8 +163,12 @@
+   const documents = Array.isArray(detail.documents) ? detail.documents : []
+   const infoList = Array.isArray(detail.important_info) ? detail.important_info : []
+   const qualifications = Array.isArray(detail.qualifications) ? detail.qualifications : []
+-
+-  const hasDetailsContent = hasText(detail.about) || qualifications.length > 0 || highlights.length > 0 || careers.length > 0
++  const admissionConditions = Array.isArray(detail.admission_conditions)
++    ? detail.admission_conditions
++    : []
++
++  const hasDetailsContent = hasText(detail.about) || qualifications.length > 0
++    || admissionConditions.length > 0 || highlights.length > 0 || careers.length > 0
+ 
+   /* --- tabs (always 3, ตามสเปค) --- */
+   const tabs = [
+@@ -262,6 +269,79 @@
+     </div>
+   )
+ 
++  /* --- ที่มาของคุณสมบัติผู้สมัคร ---
++     คุณสมบัติที่รับสมัครเปลี่ยนได้ทุกปีการศึกษา คนอ่านต้องเห็นว่าข้อความชุดนี้
++     มาจากไหนและตรวจไว้เมื่อไร ไม่งั้นอ่านปีถัดไปก็ไม่รู้ว่ายังใช้ได้อยู่หรือเปล่า
++     แสดงเฉพาะเมื่อผู้ดูแลบันทึกที่มาไว้ — ไม่เติมข้อความที่มาให้เองถ้าไม่มีข้อมูล */
++  const sourceUrl = hasText(detail.source_url) ? String(detail.source_url).trim() : ''
++  const sourceCheckedAt = hasText(detail.source_checked_at)
++    ? String(detail.source_checked_at).trim()
++    : ''
++  // ลิงก์เงื่อนไขฉบับเต็ม — ใช้กับหลักสูตรที่หน้าเว็บคณะสรุปสั้นกว่าเล่ม มคอ.2
++  const fullConditionsUrl = hasText(detail.full_conditions_url)
++    ? String(detail.full_conditions_url).trim()
++    : ''
++  const qualificationsNote = hasText(detail.qualifications_note)
++    ? String(detail.qualifications_note).trim()
++    : ''
++
++  const noteLinks = [
++    fullConditionsUrl && { href: fullConditionsUrl, label: 'ดูเงื่อนไขฉบับเต็ม' },
++    { href: applyUrlFor(detail), label: 'ประกาศรับสมัคร' },
++    sourceUrl && { href: sourceUrl, label: 'ดูข้อมูลต้นทาง' }
++  ].filter(Boolean)
++
++  const SourceNote = (
++    <div className="mt-4 max-w-2xl border-t border-gray-100 pt-3 text-xs leading-relaxed text-gray-500">
++      {qualificationsNote && (
++        <p className="mb-2 flex items-start gap-1.5 text-gray-600">
++          <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
++          <span>{qualificationsNote}</span>
++        </p>
++      )}
++      <p>
++        {noteLinks.map((link, index) => (
++          <span key={link.label}>
++            {index > 0 && ' · '}
++            <a
++              href={link.href}
++              target="_blank"
++              rel="noopener noreferrer"
++              className="underline hover:text-pnru"
++            >
++              {link.label}
++            </a>
++          </span>
++        ))}
++        {sourceCheckedAt && ` · ตรวจข้อมูลเมื่อ ${sourceCheckedAt}`}
++      </p>
++      <p className="mt-1">
++        เงื่อนไขการรับสมัครอาจเปลี่ยนตามประกาศของมหาวิทยาลัยในแต่ละปีการศึกษา
++      </p>
++    </div>
++  )
++
++  /* --- ปุ่มสมัครเรียน ---
++     ส่งต่อไปที่ระบบรับสมัครของมหาวิทยาลัย ระบบนี้ไม่รับสมัครเองและไม่เก็บข้อมูลผู้สมัคร
++     เปิดแท็บใหม่เพราะเป็นเว็บคนละที่ คนอ่านยังต้องกลับมาดูหน้าหลักสูตรต่อได้ */
++  const ApplyBox = (
++    <div className="mt-4 rounded-[10px] border border-gray-200 bg-white p-6 lg:p-7">
++      <h3 className="text-base font-bold text-gray-900">สนใจสมัครเรียน</h3>
++      <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
++        สมัครผ่านระบบรับสมัครนักศึกษาของมหาวิทยาลัยราชภัฏพระนคร
++      </p>
++      <a
++        href={applyUrlFor(detail)}
++        target="_blank"
++        rel="noopener noreferrer"
++        className="mt-4 flex items-center justify-center gap-2 rounded-full border-2 border-green-800 bg-green-800 px-5 py-2.5 font-medium text-white transition-colors hover:border-green-900 hover:bg-green-900"
++      >
++        สมัครเรียน
++        <ExternalLink className="h-4 w-4" />
++      </a>
++    </div>
++  )
++
+   return (
+     <div className="min-h-screen bg-white">
+       <div className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+@@ -339,7 +419,10 @@
+ 
+           {/* Sidebar — mobile: ใต้ header ก่อนรายละเอียด / desktop: คอลัมน์ขวา sticky */}
+           <aside className="order-1 lg:order-2 lg:col-span-3 lg:-mt-20">
+-            <div className="lg:sticky lg:top-6">{ImportantInfoBox}</div>
++            <div className="lg:sticky lg:top-6">
++              {ImportantInfoBox}
++              {ApplyBox}
++            </div>
+           </aside>
+ 
+           {/* Main content */}
+@@ -395,7 +478,7 @@
+                       </SectionCard>
+                     )}
+ 
+-                    {qualifications.length > 0 && (
++                    {(qualifications.length > 0 || admissionConditions.length > 0) && (
+                       <SectionCard icon={UserCheck} title="คุณสมบัติผู้สมัคร" bare>
+                         <div className="max-w-2xl space-y-2">
+                           {qualifications.map((item, index) => (
+@@ -405,6 +488,26 @@
+                             </div>
+                           ))}
+                         </div>
++
++                        {/* เงื่อนไขที่ผูกกับรอบรับสมัคร แยกหัวข้อจากคุณสมบัติทั่วไป
++                            เพราะส่วนนี้เปลี่ยนทุกรอบ ส่วนบนไม่เปลี่ยน */}
++                        {admissionConditions.length > 0 && (
++                          <div className="mt-4 max-w-2xl">
++                            <h4 className="mb-2 text-sm font-semibold text-gray-800">
++                              เงื่อนไขตามรอบรับสมัคร
++                            </h4>
++                            <div className="space-y-2">
++                              {admissionConditions.map((item, index) => (
++                                <div key={index} className="flex items-start gap-2 text-sm text-gray-700 lg:text-base">
++                                  <CalendarClock className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
++                                  <span>{item}</span>
++                                </div>
++                              ))}
++                            </div>
++                          </div>
++                        )}
++
++                        {SourceNote}
+                       </SectionCard>
+                     )}
+ 
+--- a/src/pages/FindMajorResult.jsx
++++ b/src/pages/FindMajorResult.jsx
+@@ -2,6 +2,7 @@
+ import { useNavigate } from 'react-router-dom'
+ import { Sparkles, Loader2, RotateCcw, ArrowRight, AlertTriangle, Info, ChevronDown } from 'lucide-react'
+ import { fetchSiteCourses } from '../lib/siteCourses'
++import { forUndergraduateAdvice } from '../lib/courseLevels'
+ import { getFindMajorAnswers, clearFindMajorAnswers } from '../lib/findMajorAnswers'
+ 
+ const steps = [
+@@ -139,7 +140,10 @@
+     const init = async () => {
+       let data = []
+       try {
+-        data = await fetchSiteCourses()
++        // แบบสอบถามถามสายการเรียนระดับ ม.ปลาย/ปวช. คนที่ตอบคือผู้เลือกปริญญาตรี
++        // จึงต้องตัดหลักสูตรบัณฑิตศึกษาออกก่อนส่งให้ AI จัดอันดับ
++        // ไม่งั้นนักเรียน ม.6 จะได้คำแนะนำให้เรียนปริญญาโทหรือเอก
++        data = forUndergraduateAdvice(await fetchSiteCourses())
+       } catch {
+         setError('ระบบยังอ่านข้อมูลสาขาวิชาไม่ได้ในขณะนี้')
+         setLoading(false)
+--- /dev/null
++++ b/src/lib/applyUrl.js
+@@ -0,0 +1,21 @@
++// ลิงก์สมัครเรียน
++//
++// เป็นลิงก์ระดับมหาวิทยาลัย ไม่ได้แยกตามหลักสูตร — ตรวจจากหน้าเว็บคณะ
++// (https://sci.pnru.ac.th/programs.php) เมื่อ 27 ต.ค. 2569 ว่ายังเป็นที่อยู่เดียวกัน
++//
++// เคยเขียนตายตัวซ้ำสองที่ในแถบเมนู ย้ายมาไว้ที่นี่เพราะถ้ามหาวิทยาลัยย้ายหน้า
++// การแก้สองแห่งจะลืมแห่งหนึ่งเสมอ
++export const APPLY_URL = 'https://admission.pnru.ac.th/info/announce'
++
++/**
++ * ลิงก์สมัครของหลักสูตรหนึ่ง
++ *
++ * ถ้าวันหนึ่งหลักสูตรใดมีช่องทางรับสมัครของตัวเอง ผู้ดูแลกรอก apply_url ไว้ใน
++ * ข้อมูลหลักสูตรได้ แล้วหน้ารายละเอียดจะใช้ค่านั้นแทนลิงก์กลาง
++ *
++ * ระบบนี้ไม่รับสมัครเองและไม่เก็บข้อมูลผู้สมัคร — ส่งต่อไปที่ของมหาวิทยาลัยเท่านั้น
++ */
++export const applyUrlFor = (detail) => {
++  const own = typeof detail?.apply_url === 'string' ? detail.apply_url.trim() : ''
++  return own || APPLY_URL
++}
+--- /dev/null
++++ b/src/lib/courseLevels.js
+@@ -0,0 +1,38 @@
++// ระดับการศึกษาของหลักสูตร
++//
++// เก็บอยู่ใน detail.level ซึ่งเป็นช่องเดิมที่ฟอร์มผู้ดูแลกรอกได้อยู่แล้ว
++// (ดู LEVEL_OPTIONS ใน src/pages/Admin/CourseForm.jsx)
++//
++// รวมไว้ที่นี่เพราะมีหลายหน้าต้องอ่านค่าเดียวกัน ถ้าแต่ละหน้าเขียนเอง
++// วันหนึ่งจะตัด/ไม่ตัดช่องว่างไม่เหมือนกันแล้วผลต่างกันโดยไม่มีใครรู้
++
++export const levelOf = (course) => {
++  const level = course?.detail?.level
++  return typeof level === 'string' ? level.trim() : ''
++}
++
++// เรียงตามลำดับการศึกษา ไม่ใช่ตามตัวอักษร
++// ถ้าเรียง ก-ฮ จะได้ เอก ตรี โท ซึ่งอ่านไม่เข้าหัว
++// ระดับที่ไม่อยู่ในรายการนี้ (ถ้าผู้ดูแลเพิ่มภายหลัง) ต่อท้ายตามตัวอักษร
++const LEVEL_ORDER = ['ปริญญาตรี', 'ปริญญาโท', 'ปริญญาเอก', 'ประกาศนียบัตรบัณฑิต', 'อนุปริญญา']
++
++export const byKnownOrder = (a, b) => {
++  const ia = LEVEL_ORDER.indexOf(a)
++  const ib = LEVEL_ORDER.indexOf(b)
++  if (ia === -1 && ib === -1) return a.localeCompare(b, 'th')
++  if (ia === -1) return 1
++  if (ib === -1) return -1
++  return ia - ib
++}
++
++const GRADUATE_LEVELS = ['ปริญญาโท', 'ปริญญาเอก']
++
++/**
++ * หลักสูตรที่เหมาะกับคนกำลังเลือกที่เรียนต่อระดับปริญญาตรี
++ *
++ * **ตัดออกเท่านั้น ไม่เติมอะไรเข้ามา** หลักสูตรที่ผู้ดูแลยังไม่ได้กรอกระดับ
++ * จะยังอยู่เหมือนเดิม — ตัดเฉพาะที่ระบุชัดว่าเป็นบัณฑิตศึกษา เพื่อให้พฤติกรรม
++ * กับข้อมูลชุดเดิมไม่เปลี่ยนจากก่อนเพิ่มฟังก์ชันนี้
++ */
++export const forUndergraduateAdvice = (courses) =>
++  (courses || []).filter((course) => !GRADUATE_LEVELS.includes(levelOf(course)))

@@ -20,6 +20,7 @@ from app.core.config import get_settings
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User
+from app.services.auth_service import can_access_admin, can_delete
 
 settings = get_settings()
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -51,6 +52,48 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     if not user.is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "admin only")
     return user
+
+
+def require_staff(user: User = Depends(get_current_user)) -> User:
+    """
+    ด่านของส่วนผู้ดูแล — ต้องเป็น admin หรือ editor **และ** อนุมัติแล้ว
+
+    ตรงกับเงื่อนไขที่ระบบเดิมใช้ทุกประการ (webapi/api/_lib/adminAuth.js)
+    การตรวจอยู่ที่นี่ที่เดียว หน้าเว็บซ่อนปุ่มได้แต่ห้ามถือว่าการซ่อนคือด่าน
+    """
+    if not can_access_admin(user.role, user.status):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "ต้องเป็นผู้ดูแลที่ได้รับอนุมัติแล้ว")
+    return user
+
+
+def require_admin_role(user: User = Depends(get_current_user)) -> User:
+    """ลบได้เฉพาะ admin — editor แก้ได้แต่ลบไม่ได้"""
+    if not can_delete(user.role, user.status):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "เฉพาะผู้ดูแลระบบเท่านั้น")
+    return user
+
+
+# จำนวนครั้งที่ยอมให้ลองเข้าสู่ระบบต่อหนึ่ง IP
+#
+# ด่านนี้สำคัญกว่าการล็อกบัญชี เพราะกันการไล่เดารหัสของ "หลายบัญชี" จากที่เดียว
+# ซึ่งการล็อกรายบัญชีกันไม่ได้เลย
+_LOGIN_IP_LIMITS = ((60.0, 10), (3600.0, 60))
+_login_bucket: dict[str, list[float]] = defaultdict(list)
+
+
+def login_rate_limiter(request: Request) -> None:
+    """จำกัดการลองเข้าสู่ระบบต่อ IP — ใช้กับ /auth/login และการขอรีเซ็ตรหัสผ่าน"""
+    now = time.time()
+    hits = _login_bucket[_client_ip(request)]
+    longest = max(window for window, _ in _LOGIN_IP_LIMITS)
+    hits[:] = [t for t in hits if now - t < longest]
+    for window, allowed in _LOGIN_IP_LIMITS:
+        if sum(1 for t in hits if now - t < window) >= allowed:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "ลองเข้าสู่ระบบถี่เกินไป รบกวนรอสักครู่แล้วลองใหม่",
+            )
+    hits.append(now)
 
 
 # --- naive per-process rate limiter (dev only, see SECURITY note above) ---

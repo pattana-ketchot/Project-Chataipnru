@@ -1,0 +1,48 @@
+{
+  "base": {
+    "js": {
+      "name": "index-VoqZ65Zz.js",
+      "sha256": "5beda48b3b5cc4133057fb235bad55cd207540fec31037fefd7af680e068ebba",
+      "bytes": 472427
+    },
+    "css": {
+      "name": "index-CmT3E8tu.css",
+      "sha256": "054ba5403c5bc37296e113b272293b56e9a1b94e4ecd5237d8db6042d7db4736",
+      "bytes": 48690
+    },
+    "index.html": {
+      "name": "index.html",
+      "sha256": "c053afb812c8298c75d1cc12e60a5a1217fba0295f2220ae34758ed2a4ef1b43",
+      "bytes": 1779
+    }
+  },
+  "production": {
+    "js": {
+      "name": "index-VoqZ65Zz.js",
+      "sha256": "5beda48b3b5cc4133057fb235bad55cd207540fec31037fefd7af680e068ebba",
+      "bytes": 472427
+    },
+    "css": {
+      "name": "index-CmT3E8tu.css",
+      "sha256": "054ba5403c5bc37296e113b272293b56e9a1b94e4ecd5237d8db6042d7db4736",
+      "bytes": 48690
+    }
+  },
+  "release": {
+    "js": {
+      "name": "index-BP_qDdgl.js",
+      "sha256": "cc36a29b10b4260d797d12beb72dc6f13942d88bfbc24c13bec141cfe15a1d95",
+      "bytes": 481842
+    },
+    "css": {
+      "name": "index-lp97Jr5s.css",
+      "sha256": "a36ba9d3144a0cea4932343f8c9d799b1e4a98a84a0d39f9d0136458425c6f6e",
+      "bytes": 48720
+    },
+    "index.html": {
+      "name": "index.html",
+      "sha256": "2343cce2f045d2a1361a42d0caebaebee5327caf9dc585faaed6767e9fe8cce0",
+      "bytes": 1779
+    }
+  }
+}

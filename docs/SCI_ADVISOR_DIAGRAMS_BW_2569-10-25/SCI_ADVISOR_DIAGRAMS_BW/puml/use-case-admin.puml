@@ -1,0 +1,59 @@
+@startuml use-case-admin
+' กรณีใช้งาน (ข) ผู้ดูแลเนื้อหาและผู้ดูแลระบบ
+' ด่านสิทธิ์จริงอยู่ที่ backend/app/api/deps.py:57-73 ไม่ใช่การซ่อนปุ่มบนหน้าเว็บ
+' จำนวนบัญชีจากฐาน production 25 ต.ค. 2569 — admin 1 บัญชี · editor 0 บัญชี
+' คำอธิบายใต้ภาพอยู่ในหัวข้อ 3.4 ของ SCI_ADVISOR_DIAGRAMS.md
+
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam ranksep 50
+skinparam nodesep 25
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+left to right direction
+
+actor "ผู้ดูแลเนื้อหา\n(editor)" as editor
+actor "ผู้ดูแลระบบ\n(admin)" as admin
+
+rectangle "แก้ไขได้ (require_staff)" {
+  usecase "เพิ่ม / แก้ไขสาขา" as UC1
+  usecase "เพิ่ม / แก้ไขข่าว" as UC2
+  usecase "เพิ่ม / แก้ไขคลังความรู้" as UC3
+  usecase "ตั้งค่าโมเดล AI" as UC4
+  usecase "อัปโหลดรูป / ไฟล์" as UC5
+}
+
+rectangle "ลบและจัดการบัญชี (require_admin_role)" {
+  usecase "ลบสาขา / ข่าว / คลังความรู้" as UC6
+  usecase "ดูรายชื่อผู้ใช้" as UC7
+  usecase "เปลี่ยน role / อนุมัติบัญชี" as UC8
+  usecase "ออกลิงก์ตั้งรหัสใหม่" as UC9
+}
+
+editor --> UC1
+editor --> UC2
+editor --> UC3
+editor --> UC4
+editor --> UC5
+
+admin --> UC6
+admin --> UC7
+admin --> UC8
+admin --> UC9
+
+admin --|> editor
+
+@enduml

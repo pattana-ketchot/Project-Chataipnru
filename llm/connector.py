@@ -21,8 +21,11 @@ SECURITY:
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
+import os
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -33,7 +36,157 @@ logger = logging.getLogger("llm.connector")
 
 
 class LLMConnectionError(RuntimeError):
-    """โมเดล local ต่อไม่ได้ / timeout / ตอบผิดรูปแบบ"""
+    """
+    โมเดล local ต่อไม่ได้ / timeout / ตอบผิดรูปแบบ
+
+    `user_text` คือข้อความที่ "เขียนไว้ให้ผู้ใช้อ่าน" โดยเฉพาะ · ผู้เรียกฝั่งเว็บต้องส่ง
+    ค่านี้ต่อให้ผู้ใช้ ไม่ใช่ str(exc) เพราะข้อความของ exception หลายตัวมีรายละเอียด
+    วินิจฉัยต่อท้าย เช่น "ollama returned 500: {body}" หรือ "gemini ล้มเหลวหลังลอง 3
+    ครั้ง: {last_exc}" ซึ่งไม่ได้เขียนให้ผู้ใช้อ่านและอาจพาเนื้อหาจากปลายทางออกมาด้วย
+    (เจอจากการทดสอบ n1-05 เมื่อ 14 ต.ค. 2569: ผู้ใช้เห็นข้อความภายในของตัวเชื่อมต่อ)
+
+    ไม่ตั้งค่านี้ = ไม่มีข้อความที่เขียนให้ผู้ใช้ ให้ผู้เรียกใช้ข้อความกลางของตัวเอง
+    """
+
+    def __init__(self, *args, user_text: str | None = None) -> None:
+        super().__init__(*args)
+        self.user_text = user_text
+
+
+class LLMBudgetExceeded(LLMConnectionError):
+    """
+    คำขอนี้ใช้เวลารวมเกินเพดานที่ตั้งไว้ — หยุดลองต่อแล้วบอกผู้ใช้ว่าบริการขัดข้อง
+
+    สืบทอดจาก LLMConnectionError เพื่อให้ผู้เรียกเดิมที่ดักจับชนิดนั้นอยู่แล้วรับมือได้
+    เหมือนเดิม (ตอบข้อความบริการขัดข้อง ไม่เดาข้อมูล)
+    """
+
+
+# เพดานเวลารวมต่อหนึ่งคำขอที่ต้องใช้โมเดล นับรวมทุกอย่าง: การลองซ้ำ การพักรอ cooldown
+# และการไล่โมเดลสำรอง
+#
+# ทำไมต้องเป็นเพดาน "รวม" ไม่ใช่ timeout ต่อครั้ง: 13 ต.ค. 2569 คำขอหนึ่งใช้เวลา 408
+# วินาที โดยที่ timeout ต่อครั้งตั้งไว้แค่ 120 วินาที เพราะเวลาจริงเกิดจากการบวกกันของ
+# การลองซ้ำสามครั้ง การไล่สี่โมเดล และการพักรอ cooldown — ไม่มีใครเกินเพดานของตัวเอง
+# แต่ผู้ใช้รอเกือบเจ็ดนาที
+_DEFAULT_BUDGET_S = float(os.getenv("RAG_TIME_BUDGET_S", "30"))
+
+# เวลาที่คำขอปัจจุบันต้องจบ (เวลาแบบ monotonic) · None = ไม่จำกัด
+_deadline: contextvars.ContextVar[float | None] = contextvars.ContextVar(
+    "llm_request_deadline", default=None
+)
+
+
+def start_budget(seconds: float | None = None) -> float | None:
+    """
+    เริ่มนับเพดานเวลาของคำขอนี้ คืน "เวลาสิ้นสุด" (monotonic) หรือ None ถ้าไม่จำกัด
+
+    ใช้ ContextVar เพราะแต่ละคำขอของ FastAPI ทำงานในบริบทของตัวเอง ค่าจึงไม่รั่ว
+    ข้ามคำขอ และไม่ต้องส่งพารามิเตอร์ผ่านทุกชั้นของการเรียก
+
+    **คืนค่าเป็นเวลาสิ้นสุด ไม่ใช่ token ของ ContextVar** — ตั้งใจเปลี่ยนจากแบบ token
+    เพราะ token ใช้ได้เฉพาะในบริบทเดียวกับที่สร้าง แต่ stream_answer เป็น generator
+    ที่ Starlette ปั๊มทีละ step ผ่าน threadpool และแต่ละ step ได้บริบท "สำเนาใหม่"
+    ของคำขอ · ผลคือ reset ด้วย token ที่สร้างใน step แรกได้ ValueError
+    ("was created in a different Context") ทุกคำขอ และค่าที่ตั้งไว้ก็มองไม่เห็น
+    ข้าม step ทำให้เพดานเวลาไม่ถูกบังคับระหว่างสตรีมอยู่ดี
+    เจอจากการรันชุดทดสอบผ่าน /chat-web จริงเมื่อ 14 ต.ค. 2569 — ล้มทั้ง 19/19 คำขอ
+    ตัวเลขเวลาสิ้นสุดส่งต่อข้ามบริบทได้ จึงใช้ apply_budget() ตั้งซ้ำทุก step ได้
+    """
+    budget = _DEFAULT_BUDGET_S if seconds is None else seconds
+    deadline = None if budget <= 0 else time.monotonic() + budget
+    _deadline.set(deadline)
+    return deadline
+
+
+def apply_budget(deadline: float | None) -> None:
+    """
+    ตั้งเวลาสิ้นสุดเดิมในบริบทปัจจุบัน — เรียกทุกครั้งที่งานอาจย้ายบริบท
+
+    ใช้กับ generator ที่ถูกปั๊มทีละ step (ดู stream_answer) เพื่อให้ทุก step
+    เห็นเพดานเดียวกัน · เรียกซ้ำได้ ไม่ขยับเวลาสิ้นสุด เพราะรับค่าสัมบูรณ์เข้ามา
+    """
+    _deadline.set(deadline)
+
+
+def reset_budget(_deadline_value=None) -> None:
+    """
+    เลิกบังคับเพดานในบริบทปัจจุบัน
+
+    รับค่าที่ start_budget() คืนมาได้เพื่อให้ผู้เรียกเดิมเขียนเหมือนเดิม แต่ไม่ใช้ค่านั้น
+    — ล้างเป็น None ตรงๆ เพราะไม่มีการตั้งเพดานซ้อนกันในระบบนี้ และการล้างแบบนี้
+    ทำได้จากทุกบริบท ไม่ผูกกับบริบทที่สร้าง
+    """
+    _deadline.set(None)
+
+
+def budget_left_s() -> float | None:
+    """เหลือเวลาอีกกี่วินาที · None = ไม่ได้ตั้งเพดานไว้"""
+    end = _deadline.get()
+    return None if end is None else end - time.monotonic()
+
+
+def check_budget(doing: str) -> None:
+    """โยน LLMBudgetExceeded ถ้าหมดเวลาแล้ว · เรียกก่อนเริ่มงานที่กินเวลาทุกครั้ง"""
+    left = budget_left_s()
+    if left is not None and left <= 0:
+        raise LLMBudgetExceeded(
+            "ระบบใช้เวลาตอบเกินเพดานที่ตั้งไว้ขณะที่ผู้ให้บริการโมเดลขัดข้อง "
+            f"จึงหยุดรอ (ขั้นที่กำลังทำ: {doing})",
+            user_text="ระบบใช้เวลาตอบนานเกินเพดานที่ตั้งไว้ จึงหยุดรอครับ "
+                      "ตอนนี้ผู้ให้บริการโมเดลขัดข้อง รบกวนลองใหม่อีกครั้งในอีกสักครู่",
+        )
+
+
+# เผื่อเวลาให้ปลายทางปิดการเชื่อมต่อและให้เราคืนคำตอบได้ทัน ไม่ตั้ง timeout เท่าที่เหลือพอดี
+_BUDGET_SLACK_S = 0.5
+
+
+def http_timeout(default_s: float, doing: str) -> float:
+    """
+    เวลาที่ยอมให้คำขอ HTTP ครั้งนี้ใช้ — ไม่เกินเวลาที่เหลือของคำขอทั้งหมด
+
+    **จำเป็นต่อการบังคับเพดานจริง** การตรวจ check_budget ก่อนยิงอย่างเดียวไม่พอ
+    เพราะถ้าปลายทางค้าง คำขอนั้นจะใช้เวลาตาม timeout ของตัวเอง (120 วินาที) ต่อไป
+    ทั้งที่เพดานรวมเหลืออีกไม่กี่วินาที — ผู้ใช้จึงยังรอเกินเพดานอยู่ดี
+
+    โยน LLMBudgetExceeded ทันทีถ้าเวลาหมดแล้ว
+    """
+    check_budget(doing)
+    left = budget_left_s()
+    if left is None:
+        return default_s
+    return max(min(default_s, left - _BUDGET_SLACK_S), 0.2)
+
+
+def post_json_bounded(client: httpx.Client, path: str, payload: dict[str, Any], *,
+                      timeout_s: float, doing: str) -> dict[str, Any]:
+    """
+    ยิง POST แล้วอ่านคำตอบแบบสตรีม พร้อมตรวจเพดานเวลารวมทุกก้อนที่อ่านได้
+
+    **ทำไมไม่ใช้ client.post() ตรงๆ**
+    timeout ของ httpx เป็น "เวลารอข้อมูลก้อนถัดไป" ไม่ใช่เวลารวมของคำขอ ถ้าปลายทาง
+    ทยอยส่งข้อมูลเรื่อยๆ แต่ไม่ยอมจบ read timeout จะไม่เคยชน และคำขอค้างไม่จำกัดเวลา
+    ทั้งที่ตั้งเพดานรวมไว้แล้ว — เป็นช่องเดียวกับที่เคยทำให้เส้นทางสตรีมพลาด แต่ฝั่ง
+    "ไม่สตรีม" (ขั้นเขียนคำถามใหม่ ขั้นตรวจเอกสาร การฝังเวกเตอร์) ยังเหลืออยู่
+
+    เจอจริง 14 ต.ค. 2569: ชุดทดสอบ /chat-web ยิงไปที่เซิร์ฟเวอร์ที่ส่งข้อมูลทุก 0.25
+    วินาทีไม่หยุด คำขอค้างเกินสิบนาทีโดยเพดาน 6 วินาทีไม่ทำงานเลย
+
+    การอ่านทีละก้อนทำให้มีจุดตรวจเพดานถี่เท่าที่ข้อมูลเข้ามา กรณีที่ปลายทางเงียบสนิท
+    ยังอาศัย read timeout ซึ่ง http_timeout() จำกัดไว้ไม่เกินเวลาที่เหลืออยู่แล้ว
+    """
+    with client.stream("POST", path, json=payload,
+                       timeout=http_timeout(timeout_s, doing)) as resp:
+        if resp.status_code >= 400:
+            # ต้องอ่าน body ให้จบก่อน ไม่งั้นข้อความอธิบายข้อผิดพลาดอ่านไม่ได้
+            resp.read()
+            resp.raise_for_status()
+        buf = bytearray()
+        for raw in resp.iter_bytes():
+            check_budget(doing)
+            buf += raw
+    return json.loads(bytes(buf) or b"{}")
 
 
 @dataclass
@@ -172,9 +325,15 @@ class OllamaConnector:
             "options": options,
         }
         try:
-            with self._client.stream("POST", "/api/chat", json=payload) as resp:
+            with self._client.stream(
+                "POST", "/api/chat", json=payload,
+                timeout=http_timeout(self.timeout_s, "เริ่มสตรีมจากโมเดลในเครื่อง"),
+            ) as resp:
                 resp.raise_for_status()
                 for line in resp.iter_lines():
+                    # ต้องตรวจทุกชิ้น ไม่ใช่พึ่ง read timeout อย่างเดียว — สตรีมที่ทยอย
+                    # ส่งข้อมูลเรื่อย ๆ จะไม่เคยชน read timeout เลย แต่ยืดเวลารวมได้ไม่จำกัด
+                    check_budget("อ่านสตรีมจากโมเดลในเครื่อง")
                     if not line:
                         continue
                     data = json.loads(line)
@@ -191,10 +350,13 @@ class OllamaConnector:
     def _post_with_retry(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         last_exc: Exception | None = None
         for attempt in range(1, self.max_retries + 2):
+            # โมเดลในเครื่องเป็นขั้นที่ช้าที่สุดของระบบ (วัดได้ 120 วินาทีต่อครั้งเมื่อ
+            # ต้องโหลดโมเดลเข้าหน่วยความจำ) จึงต้องเคารพเพดานเวลารวมของคำขอด้วย
             try:
-                resp = self._client.post(path, json=payload)
-                resp.raise_for_status()
-                return resp.json()
+                return post_json_bounded(
+                    self._client, path, payload, timeout_s=self.timeout_s,
+                    doing=f"เรียกโมเดลในเครื่อง {path}",
+                )
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_exc = e
                 logger.warning("ollama %s attempt %d/%d failed: %s", path, attempt, self.max_retries + 1, type(e).__name__)

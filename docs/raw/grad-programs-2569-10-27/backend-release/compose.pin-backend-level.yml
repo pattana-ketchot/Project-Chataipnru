@@ -1,0 +1,6 @@
+# ตรึงอิมเมจ backend เป็นอิมเมจของ release แยกระดับปริญญา (27 ต.ค. 2569)
+# operational artifact ของการ deploy ไม่ใช่ source ที่ commit และไม่มีค่าลับใด
+# ใช้ร่วมกับ docker-compose.prod.yml + docker-compose.staging.yml และต้องสั่ง --no-build
+services:
+  backend:
+    image: course-advisor-system-backend:level-2569-10-27

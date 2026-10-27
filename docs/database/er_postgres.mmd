@@ -1,0 +1,289 @@
+erDiagram
+  MKO__CREDIT_GROUPS |o--o{ MKO__CREDIT_GROUPS : "parent_id cascade"
+  MKO__CREDIT_GROUPS |o--o{ MKO__SUBJECTS : "credit_group_id set-null"
+  MKO__CURRICULA ||--o{ MKO__CREDIT_GROUPS : "curriculum_id cascade"
+  MKO__CURRICULA ||--o{ MKO__FIELD_VALUES : "curriculum_id cascade"
+  MKO__CURRICULA ||--o{ MKO__LEARNING_OUTCOMES : "curriculum_id cascade"
+  MKO__CURRICULA ||--o{ MKO__LIST_ITEMS : "curriculum_id cascade"
+  MKO__CURRICULA ||--o{ MKO__SUBJECTS : "curriculum_id cascade"
+  MKO__DOCUMENT_PAGES ||--o{ MKO__EVIDENCE : "document_id,page_end (ผสม)"
+  MKO__DOCUMENT_PAGES ||--o{ MKO__EVIDENCE : "document_id,page_start (ผสม)"
+  MKO__DOCUMENT_SECTIONS |o--o{ MKO__EVIDENCE : "section_id set-null"
+  MKO__EVIDENCE |o--o{ MKO__FIELD_VALUES : "evidence_id"
+  MKO__EVIDENCE |o--o{ MKO__SUBJECTS : "description_evidence_id"
+  MKO__EVIDENCE |o--o{ MKO__SUBJECTS : "listing_evidence_id"
+  MKO__EVIDENCE ||--o{ MKO__CREDIT_GROUPS : "evidence_id"
+  MKO__EVIDENCE ||--o{ MKO__FIELD_VALUE_EVIDENCE : "evidence_id cascade"
+  MKO__EVIDENCE ||--o{ MKO__LEARNING_OUTCOMES : "evidence_id"
+  MKO__EVIDENCE ||--o{ MKO__LIST_ITEMS : "evidence_id"
+  MKO__EXTRACTION_RUNS ||--o{ MKO__CREDIT_GROUPS : "run_id cascade"
+  MKO__EXTRACTION_RUNS ||--o{ MKO__DOCUMENT_SECTIONS : "run_id cascade"
+  MKO__EXTRACTION_RUNS ||--o{ MKO__EVIDENCE : "run_id cascade"
+  MKO__EXTRACTION_RUNS ||--o{ MKO__FIELD_VALUES : "run_id cascade"
+  MKO__EXTRACTION_RUNS ||--o{ MKO__LEARNING_OUTCOMES : "run_id cascade"
+  MKO__EXTRACTION_RUNS ||--o{ MKO__LIST_ITEMS : "run_id cascade"
+  MKO__EXTRACTION_RUNS ||--o{ MKO__SUBJECTS : "run_id cascade"
+  MKO__FIELD_VALUES ||--o{ MKO__FIELD_VALUE_EVIDENCE : "field_value_id cascade"
+  MKO__LEARNING_OUTCOMES |o--o{ MKO__LEARNING_OUTCOMES : "parent_id cascade"
+  MKO__PROGRAMS |o--o{ MKO__CURRICULA : "program_id"
+  MKO__PUBLICATIONS |o--o{ MKO__SHADOW_ANSWERS : "publication_id set-null"
+  MKO__PUBLICATIONS ||--o{ MKO__PUBLISHED_LIST_ITEMS : "publication_id cascade"
+  MKO__PUBLICATIONS ||--o{ MKO__PUBLISHED_VALUES : "publication_id cascade"
+  PUBLIC__CHAT_SESSIONS |o--o{ PUBLIC__RECOMMENDATIONS : "session_id set-null"
+  PUBLIC__CHAT_SESSIONS ||--o{ PUBLIC__CHAT_MESSAGES : "session_id cascade"
+  PUBLIC__COURSES ||--o{ MKO__CURRICULA : "course_id cascade"
+  PUBLIC__COURSES ||--o{ MKO__PUBLISHED_LIST_ITEMS : "course_id cascade"
+  PUBLIC__COURSES ||--o{ MKO__PUBLISHED_VALUES : "course_id cascade"
+  PUBLIC__COURSES ||--o{ PUBLIC__COURSE_CHUNKS : "course_id cascade"
+  PUBLIC__COURSES ||--o{ PUBLIC__COURSE_DOCUMENTS : "course_id cascade"
+  PUBLIC__COURSES ||--o{ PUBLIC__RECOMMENDATIONS : "course_id cascade"
+  PUBLIC__COURSE_DOCUMENTS |o--o{ MKO__CURRICULA : "primary_document_id"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ MKO__DOCUMENT_PAGES : "document_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ MKO__DOCUMENT_SECTIONS : "document_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ MKO__EXTRACTION_RUNS : "document_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ MKO__FIELD_VALUES : "document_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ MKO__LIST_ITEMS : "document_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ MKO__PUBLISHED_LIST_ITEMS : "document_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ MKO__PUBLISHED_VALUES : "document_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ MKO__REVIEW_DECISIONS : "document_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ PUBLIC__COURSE_CHUNKS : "document_id cascade"
+  PUBLIC__USERS |o--o{ PUBLIC__COURSE_DOCUMENTS : "uploaded_by"
+  PUBLIC__USERS ||--o{ PUBLIC__CHAT_SESSIONS : "user_id cascade"
+  PUBLIC__USERS ||--o{ PUBLIC__RECOMMENDATIONS : "user_id cascade"
+  PUBLIC__USERS ||--o{ PUBLIC__USER_PROFILES : "user_id cascade"
+  PUBLIC__USERS ||--o{ PUBLIC__USER_REQUIREMENTS : "user_id cascade"
+
+  MKO__CREDIT_GROUPS {
+    uuid id PK
+    uuid curriculum_id FK
+    uuid run_id FK
+    uuid parent_id FK
+    text name_th
+    smallint min_credits
+    text status
+    uuid evidence_id FK
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  MKO__CURRICULA {
+    uuid id PK
+    uuid course_id FK
+    uuid program_id FK
+    smallint edition_year_be
+    uuid primary_document_id FK
+    smallint total_credits
+    text status
+    more คอลัมน์อื่นอีก_14_รายการ
+  }
+  MKO__DOCUMENT_PAGES {
+    uuid document_id PK,FK
+    integer page_number PK
+    text text_source
+    boolean is_toc
+    more คอลัมน์อื่นอีก_5_รายการ
+  }
+  MKO__DOCUMENT_SECTIONS {
+    uuid id PK
+    uuid run_id FK
+    uuid document_id FK
+    text section_key
+    integer page_start
+    integer page_end
+    more คอลัมน์อื่นอีก_2_รายการ
+  }
+  MKO__EVIDENCE {
+    uuid id PK
+    uuid run_id FK
+    uuid document_id FK
+    integer page_start FK
+    integer page_end FK
+    uuid section_id FK
+    text quote
+    text method
+    more คอลัมน์อื่นอีก_1_รายการ
+  }
+  MKO__EXTRACTION_RUNS {
+    uuid id PK
+    uuid document_id FK
+    text parser_version
+    text template_type
+    text status
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  MKO__FIELD_VALUE_EVIDENCE {
+    uuid field_value_id PK,FK
+    uuid evidence_id PK,FK
+  }
+  MKO__FIELD_VALUES {
+    uuid id PK
+    uuid curriculum_id FK
+    uuid run_id FK
+    uuid document_id FK
+    text field_key
+    text value_text
+    integer value_int
+    text status
+    uuid evidence_id FK
+    more คอลัมน์อื่นอีก_5_รายการ
+  }
+  MKO__LEARNING_OUTCOMES {
+    uuid id PK
+    uuid curriculum_id FK
+    uuid run_id FK
+    text framework
+    text code
+    uuid parent_id FK
+    text status
+    uuid evidence_id FK
+    more คอลัมน์อื่นอีก_5_รายการ
+  }
+  MKO__LIST_ITEMS {
+    uuid id PK
+    uuid curriculum_id FK
+    uuid run_id FK
+    uuid document_id FK
+    text item_type
+    smallint seq
+    text status
+    uuid evidence_id FK
+    more คอลัมน์อื่นอีก_5_รายการ
+  }
+  MKO__PROGRAMS {
+    uuid id PK
+    text name_th
+    text degree_level
+    more คอลัมน์อื่นอีก_2_รายการ
+  }
+  MKO__PUBLICATIONS {
+    uuid id PK
+    timestamptz published_at
+    text published_by
+    text policy
+    more คอลัมน์อื่นอีก_2_รายการ
+  }
+  MKO__PUBLISHED_LIST_ITEMS {
+    uuid publication_id PK,FK
+    uuid course_id PK,FK
+    text item_type PK
+    smallint seq PK
+    uuid document_id FK
+    text source_filename
+    integer page_start
+    more คอลัมน์อื่นอีก_3_รายการ
+  }
+  MKO__PUBLISHED_VALUES {
+    uuid publication_id PK,FK
+    uuid course_id PK,FK
+    text field_key PK
+    uuid document_id FK
+    text source_filename
+    integer page_start
+    text quote
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  MKO__REVIEW_DECISIONS {
+    uuid id PK
+    uuid document_id FK
+    text field_key
+    text value_key
+    text decision
+    text reviewer
+    more คอลัมน์อื่นอีก_5_รายการ
+  }
+  MKO__SCHEMA_MIGRATIONS {
+    text version PK
+    timestamptz applied_at
+  }
+  MKO__SHADOW_ANSWERS {
+    uuid id PK
+    text question
+    text route
+    uuid publication_id FK
+    text comparison
+    more คอลัมน์อื่นอีก_14_รายการ
+  }
+  MKO__SUBJECTS {
+    uuid id PK
+    uuid curriculum_id FK
+    uuid run_id FK
+    text code
+    text name_th
+    smallint credits
+    uuid credit_group_id FK
+    uuid listing_evidence_id FK
+    uuid description_evidence_id FK
+    more คอลัมน์อื่นอีก_11_รายการ
+  }
+  PUBLIC__CHAT_ANSWER_CACHE {
+    text question_key PK
+    text corpus_version
+    text status
+    integer hits
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__CHAT_MESSAGES {
+    uuid id PK
+    uuid session_id FK
+    text role
+    text content
+    more คอลัมน์อื่นอีก_1_รายการ
+  }
+  PUBLIC__CHAT_SESSIONS {
+    uuid id PK
+    uuid user_id FK
+    timestamptz started_at
+    more คอลัมน์อื่นอีก_1_รายการ
+  }
+  PUBLIC__COURSE_CHUNKS {
+    uuid id PK
+    uuid course_id FK
+    uuid document_id FK
+    integer chunk_index
+    integer page_number
+    vector_1024 embedding
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__COURSE_DOCUMENTS {
+    uuid id PK
+    uuid course_id FK
+    text original_filename
+    text file_sha256
+    text extraction_status
+    uuid uploaded_by FK
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__COURSES {
+    uuid id PK
+    text code
+    text title
+    boolean is_active
+    more คอลัมน์อื่นอีก_9_รายการ
+  }
+  PUBLIC__RECOMMENDATIONS {
+    uuid id PK
+    uuid user_id FK
+    uuid course_id FK
+    uuid session_id FK
+    numeric score
+    text rationale
+    more คอลัมน์อื่นอีก_3_รายการ
+  }
+  PUBLIC__USER_PROFILES {
+    uuid user_id PK,FK
+    text education_level
+    text career_goal
+    more คอลัมน์อื่นอีก_7_รายการ
+  }
+  PUBLIC__USER_REQUIREMENTS {
+    uuid id PK
+    uuid user_id FK
+    text req_type
+    text req_value
+    smallint priority
+    more คอลัมน์อื่นอีก_1_รายการ
+  }
+  PUBLIC__USERS {
+    uuid id PK
+    citext email
+    boolean is_admin
+    more คอลัมน์อื่นอีก_5_รายการ
+  }

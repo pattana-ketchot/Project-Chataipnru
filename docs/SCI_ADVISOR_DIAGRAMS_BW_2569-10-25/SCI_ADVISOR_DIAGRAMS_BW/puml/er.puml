@@ -1,0 +1,140 @@
+@startuml er
+' =====================================================================
+' ER Diagram — schema public ของฐาน course_advisor
+' ปรับปรุง 25 ต.ค. 2569
+'
+' ข้อมูลทั้งหมดตรวจจากฐาน production เมื่อ 25 ต.ค. 2569 แบบอ่านอย่างเดียว
+'   pg_constraint  : ชนิดและ on delete ของทุก FK
+'   pg_attribute   : คอลัมน์ FK ตัวใดเป็น NOT NULL ตัวใด null ได้ (ใช้กำหนด cardinality)
+'   pg_index       : primary key ของทุกตาราง
+'   query_to_xml   : จำนวนแถวของทุกตาราง
+'
+' การอ่าน cardinality ในภาพนี้
+'   ||--o{   FK เป็น NOT NULL  -> ลูกต้องมีแม่เสมอ หนึ่งแม่มีลูกได้หลายตัว
+'   |o--o{   FK เป็น null ได้   -> ลูกอาจไม่มีแม่ (ON DELETE SET NULL หรือ NO ACTION)
+'   ||--o|   FK เป็น primary key ของลูกด้วย -> หนึ่งแม่มีลูกได้ไม่เกินหนึ่ง
+'
+' ตารางเอกสารและคลังเวกเตอร์อยู่ในไฟล์ er-docs.puml
+' schema web อยู่ในไฟล์ er-web.puml · schema mko อยู่ใน er-mko.puml
+' ฝั่ง Supabase ซึ่งเป็นคนละฐาน อยู่ใน er-supabase.puml
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — ลบบรรทัดนี้บรรทัดเดียวก็กลับเป็นภาพสี
+skinparam shadowing false
+skinparam defaultFontSize 13
+hide circle
+
+package "บัญชีผู้ใช้" {
+  entity "users" as users {
+    id : uuid <<PK>>
+    --
+    email : citext <<unique>>
+    password_hash : text
+    password_scheme : text
+    supabase_user_id : uuid
+    role : admin | editor | user
+    status : pending | approved | rejected
+    is_active : boolean
+    failed_login_count : int
+    locked_until : timestamptz
+  }
+  entity "user_profiles" as profiles {
+    user_id : uuid <<PK, FK>>
+    --
+    education_level, field_of_study
+    skills, interests
+  }
+  entity "user_requirements" as reqs {
+    id : uuid <<PK>>
+    --
+    user_id : uuid <<FK>>
+    req_type, req_value, priority
+  }
+  entity "auth_sessions" as sessions {
+    id : uuid <<PK>>
+    --
+    user_id : uuid <<FK>>
+    token_hash : text
+    user_agent, expires_at, revoked_at
+  }
+  entity "auth_tokens" as tokens {
+    id : uuid <<PK>>
+    --
+    user_id : uuid <<FK>>
+    purpose : password_reset | email_verify
+    token_hash, expires_at, used_at
+  }
+  entity "migration_007_user_backup" as bak {
+    user_id : uuid <<PK, FK>>
+  }
+}
+
+package "บทสนทนาและผลแนะนำ" {
+  entity "chat_sessions" as chats {
+    id : uuid <<PK>>
+    --
+    user_id : uuid <<FK>>
+  }
+  entity "chat_messages" as msgs {
+    id : uuid <<PK>>
+    --
+    session_id : uuid <<FK>>
+    role : user | assistant | system
+    content : text
+  }
+  entity "recommendations" as recos {
+    id : uuid <<PK>>
+    --
+    user_id : uuid <<FK>>
+    course_id : uuid <<FK>>
+    session_id : uuid <<FK, null ได้>>
+  }
+}
+
+users ||--o| profiles
+users ||--o{ reqs
+users ||--o{ sessions
+users ||--o{ tokens
+users ||--o{ chats
+users ||--o{ recos
+users ||--o| bak
+
+chats ||--o{ msgs
+chats |o--o{ recos
+
+@enduml

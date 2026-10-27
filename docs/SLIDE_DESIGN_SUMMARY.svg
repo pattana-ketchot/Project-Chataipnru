@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="'Tahoma','Segoe UI','Leelawadee UI',sans-serif">
+<defs><linearGradient id="hl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#22B8D8"/><stop offset="100%" stop-color="#2F6BE0"/></linearGradient>
+<radialGradient id="bgA" cx="0" cy="0" r="1"><stop offset="0%" stop-color="#DCE7FA"/><stop offset="100%" stop-color="#ffffff"/></radialGradient>
+<radialGradient id="bgB" cx="1" cy="1" r="1"><stop offset="0%" stop-color="#DFF3F8"/><stop offset="100%" stop-color="#ffffff"/></radialGradient></defs>
+<rect width="1920" height="1080" fill="#ffffff"/>
+<rect width="1920" height="1080" fill="url(#bgA)" opacity="0.55"/>
+<rect width="1920" height="1080" fill="url(#bgB)" opacity="0.5"/>
+<rect x="46" y="28" width="1828" height="1024" rx="10" fill="#ffffff" opacity="0.92"/>
+<text x="100" y="70" font-size="19" fill="#64748B" font-weight="normal" text-anchor="start">Database Design</text>
+<text x="100" y="96" font-size="19" fill="#64748B">for the <tspan font-weight="bold" fill="#0F172A">SCI Advisor System</tspan></text>
+<text x="1820" y="70" font-size="21" fill="#0F172A" font-weight="bold" text-anchor="end">4123204</text>
+<text x="1820" y="96" font-size="19" fill="#64748B" font-weight="normal" text-anchor="end">Advanced Database</text>
+<text x="960.0" y="192" text-anchor="middle" font-size="46" font-weight="bold" fill="#0F172A">สรุปภาพรวมและ<tspan fill="url(#hl)">ผลการออกแบบ</tspan>ฐานข้อมูลระบบ SCI Advisor</text>
+<rect x="70" y="238" width="281" height="116" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.5"/>
+<text x="210.5" y="286" font-size="38" fill="#0B7C90" font-weight="bold" text-anchor="middle">28</text>
+<text x="210.5" y="314" font-size="17" fill="#0F172A" font-weight="bold" text-anchor="middle">ตารางใน PostgreSQL</text>
+<text x="210.5" y="337" font-size="13.5" fill="#64748B" font-weight="normal" text-anchor="middle">public 10 + mko 18</text>
+<rect x="369" y="238" width="281" height="116" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.5"/>
+<text x="509.5" y="286" font-size="38" fill="#0B7C90" font-weight="bold" text-anchor="middle">6</text>
+<text x="509.5" y="314" font-size="17" fill="#0F172A" font-weight="bold" text-anchor="middle">วิว (View)</text>
+<text x="509.5" y="337" font-size="13.5" fill="#64748B" font-weight="normal" text-anchor="middle">สำหรับอ่านข้อมูลที่ผ่านการตรวจ</text>
+<rect x="668" y="238" width="281" height="116" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.5"/>
+<text x="808.5" y="286" font-size="38" fill="#0B7C90" font-weight="bold" text-anchor="middle">83</text>
+<text x="808.5" y="314" font-size="17" fill="#0F172A" font-weight="bold" text-anchor="middle">คอลัมน์</text>
+<text x="808.5" y="337" font-size="13.5" fill="#64748B" font-weight="normal" text-anchor="middle">ใน schema public</text>
+<rect x="967" y="238" width="281" height="116" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.5"/>
+<text x="1107.5" y="286" font-size="38" fill="#0B7C90" font-weight="bold" text-anchor="middle">11</text>
+<text x="1107.5" y="314" font-size="17" fill="#0F172A" font-weight="bold" text-anchor="middle">คีย์นอก</text>
+<text x="1107.5" y="337" font-size="13.5" fill="#64748B" font-weight="normal" text-anchor="middle">ใน schema public</text>
+<rect x="1266" y="238" width="281" height="116" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.5"/>
+<text x="1406.5" y="286" font-size="38" fill="#0B7C90" font-weight="bold" text-anchor="middle">9,039</text>
+<text x="1406.5" y="314" font-size="17" fill="#0F172A" font-weight="bold" text-anchor="middle">ท่อนข้อความ</text>
+<text x="1406.5" y="337" font-size="13.5" fill="#64748B" font-weight="normal" text-anchor="middle">พร้อมเวกเตอร์ 1024 มิติ</text>
+<rect x="1565" y="238" width="281" height="116" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.5"/>
+<text x="1705.5" y="286" font-size="38" fill="#0B7C90" font-weight="bold" text-anchor="middle">4,129</text>
+<text x="1705.5" y="314" font-size="17" fill="#0F172A" font-weight="bold" text-anchor="middle">หน้าเอกสาร</text>
+<text x="1705.5" y="337" font-size="13.5" fill="#64748B" font-weight="normal" text-anchor="middle">จาก มคอ.2 จำนวน 31 ฉบับ</text>
+<rect x="70" y="396" width="574" height="420" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<rect x="98" y="424" width="58" height="58" rx="16" fill="#12A5BC"/>
+<ellipse cx="127" cy="444" rx="12" ry="5" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M115,444 V462 a12,5 0 0 0 24,0 V444" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M115,453 a12,5 0 0 0 24,0" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="182" cy="453" r="18" fill="#0B7C90"/>
+<text x="182" y="460" font-size="19" fill="#ffffff" font-weight="bold" text-anchor="middle">1</text>
+<text x="98" y="520" font-size="21" fill="#0F172A" font-weight="bold" text-anchor="start">โครงสร้างที่ออกแบบให้ย้อนตรวจได้</text>
+<text x="98" y="545" font-size="14.5" fill="#0B7C90" font-weight="normal" text-anchor="start">(Traceable by Design)</text>
+<text x="98" y="588" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ระบบใช้ PostgreSQL เป็นฐานข้อมูลหลักสำหรับเก็บทั้งข้อมูล</text>
+<text x="98" y="616" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">หลักสูตรและเวกเตอร์ โดยมี Supabase แยกต่างหากสำหรับ</text>
+<text x="98" y="644" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">จัดการเนื้อหาหน้าเว็บ ไม่ได้เชื่อมต่อกันโดยตรง</text>
+<text x="98" y="700" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ตารางผูกกันด้วยคีย์นอก 11 เส้น ทำให้คำตอบที่ดึงจาก</text>
+<text x="98" y="728" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">เอกสารทุกคำตอบ อ้างอิงกลับไปยังไฟล์ต้นฉบับและ</text>
+<text x="98" y="756" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">เลขหน้าได้จริง</text>
+<rect x="672" y="396" width="574" height="420" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<rect x="700" y="424" width="58" height="58" rx="16" fill="#12A5BC"/>
+<circle cx="727" cy="451" r="9" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M734,458 L741,465" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="784" cy="453" r="18" fill="#0B7C90"/>
+<text x="784" y="460" font-size="19" fill="#ffffff" font-weight="bold" text-anchor="middle">2</text>
+<text x="700" y="520" font-size="21" fill="#0F172A" font-weight="bold" text-anchor="start">ค้นด้วยความหมาย ตอบด้วย SQL</text>
+<text x="700" y="545" font-size="14.5" fill="#0B7C90" font-weight="normal" text-anchor="start">(Semantic + Structured)</text>
+<text x="700" y="588" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">เก็บเนื้อหาเป็นเวกเตอร์ 1024 มิติพร้อมดัชนี ivfflat รองรับ</text>
+<text x="700" y="616" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">การค้นตามความหมาย (Semantic Search) ผู้ใช้จึงไม่ต้อง</text>
+<text x="700" y="644" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">พิมพ์คำให้ตรงกับที่เขียนไว้ในเอกสาร</text>
+<text x="700" y="700" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ส่วนคำถามเชิงโครงสร้าง เช่น จำนวนหน่วยกิตหรือชื่อ</text>
+<text x="700" y="728" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ปริญญา ตอบจาก schema mko ด้วย SQL ซึ่งเก็บค่าที่</text>
+<text x="700" y="756" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">สกัดแล้วพร้อมหลักฐานและสถานะการตรวจทาน</text>
+<rect x="1274" y="396" width="574" height="420" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<rect x="1302" y="424" width="58" height="58" rx="16" fill="#12A5BC"/>
+<path d="M1331,442 l12,20 h-24 z" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1331,450 v5" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="1331" cy="459" r="1.4" fill="#ffffff"/>
+<circle cx="1386" cy="453" r="18" fill="#0B7C90"/>
+<text x="1386" y="460" font-size="19" fill="#ffffff" font-weight="bold" text-anchor="middle">3</text>
+<text x="1302" y="520" font-size="21" fill="#0F172A" font-weight="bold" text-anchor="start">ข้อจำกัดตามสภาพจริง</text>
+<text x="1302" y="545" font-size="14.5" fill="#0B7C90" font-weight="normal" text-anchor="start">(Current Limitations)</text>
+<text x="1302" y="588" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ยังมีสี่ข้อที่ต้องพัฒนาต่อ — คำย่อและคำเรียกติดปากยัง</text>
+<text x="1302" y="616" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">พึ่งตารางที่เขียนด้วยมือ ชื่อหลักสูตรที่ซ้ำกันหลายปีการ</text>
+<text x="1302" y="644" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ศึกษายังแยกไม่เด็ดขาด การเรียบเรียงคำตอบพึ่งโมเดล</text>
+<text x="1302" y="672" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ภาษาจากผู้ให้บริการภายนอก และการนำเข้าเอกสารใหม่</text>
+<text x="1302" y="700" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ยังต้องทำด้วยคน</text>
+<text x="1302" y="756" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ทั้งหมดนี้คือสถานะความสามารถจริง ไม่ใช่เป้าหมายที่ตั้งไว้</text>
+<rect x="70" y="852" width="1780" height="96" rx="16" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.6"/>
+<circle cx="116" cy="898" r="17" fill="#0B7C90"/>
+<path d="M109,898 l5,5 l10,-11" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="150" y1="874" x2="150" y2="926" stroke="#CBE9F0" stroke-width="2"/>
+<text x="174" y="894" font-size="18" fill="#0B7C90" font-weight="bold" text-anchor="start">สิ่งที่ยืนยันได้</text>
+<text x="174" y="924" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ทุกตัวเลขบนสไลด์นี้อ่านจากฐานข้อมูล production โดยตรง และทุกค่าที่ระบบใช้ตอบ สาวกลับไปถึงชื่อไฟล์และเลขหน้าของเอกสารต้นฉบับได้</text>
+</svg>

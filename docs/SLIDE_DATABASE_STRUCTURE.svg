@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="'Tahoma','Segoe UI','Leelawadee UI',sans-serif">
+<rect width="1920" height="1080" fill="#FFFFFF"/>
+<text x="100" y="58" font-size="20" fill="#64748B" font-weight="normal" text-anchor="start">Database Design</text>
+<text x="100" y="86" font-size="20" fill="#64748B">for the <tspan font-weight="bold" fill="#0F172A">SCI Advisor System</tspan></text>
+<text x="1820" y="58" font-size="22" fill="#0F172A" font-weight="bold" text-anchor="end">4123204</text>
+<text x="1820" y="86" font-size="20" fill="#64748B" font-weight="normal" text-anchor="end">Advanced Database</text>
+<text x="100" y="196" font-size="58" font-weight="bold" fill="#0F172A">โครงสร้าง<tspan fill="#2563EB">ฐานข้อมูล</tspan>ของระบบ</text>
+<text x="100" y="240" font-size="23" fill="#64748B" font-weight="normal" text-anchor="start">ระบบใช้ PostgreSQL เป็นฐานข้อมูลหลัก และใช้ Supabase สำหรับงานจัดการเนื้อหาหน้าเว็บ</text>
+<rect x="100" y="286" width="980" height="736" rx="26" fill="#FBFCFF" stroke="#DCE8F8" stroke-width="1.8"/>
+<circle cx="176" cy="354" r="40" fill="#EEF3FF"/>
+<ellipse cx="176" cy="346" rx="11" ry="4.5" fill="none" stroke="#1D4ED8" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M165,346 V362 a11,4.5 0 0 0 22,0 V346" fill="none" stroke="#1D4ED8" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M165,354 a11,4.5 0 0 0 22,0" fill="none" stroke="#1D4ED8" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="240" y="346" font-size="36" fill="#1D4ED8" font-weight="bold" text-anchor="start">PostgreSQL</text>
+<text x="240" y="380" font-size="21" fill="#64748B" font-weight="normal" text-anchor="start">ฐานข้อมูลหลักของระบบ · pgvector Extension</text>
+<line x1="128" y1="404" x2="1052" y2="404" stroke="#DCE8F8" stroke-width="1.5"/>
+<rect x="126" y="424" width="928" height="108" rx="16" fill="#FFFFFF" stroke="#E6EDF7" stroke-width="1.4"/>
+<rect x="148" y="450" width="56" height="56" rx="15" fill="#EEF3FF"/>
+<ellipse cx="176" cy="470" rx="11" ry="4.5" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M165,470 V486 a11,4.5 0 0 0 22,0 V470" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M165,478 a11,4.5 0 0 0 22,0" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="224" y="472" font-size="23.5" fill="#0F172A" font-weight="bold" text-anchor="start">คลังข้อมูลหลักสูตรต้นฉบับ</text>
+<text x="224" y="503" font-size="19.5" fill="#64748B" font-weight="normal" text-anchor="start">เก็บเอกสาร มคอ.2 พร้อมหลักฐานอ้างอิงย้อนกลับได้</text>
+<rect x="126" y="542" width="928" height="108" rx="16" fill="#FFFFFF" stroke="#E6EDF7" stroke-width="1.4"/>
+<rect x="148" y="568" width="56" height="56" rx="15" fill="#EEF3FF"/>
+<path d="M167,584 h11 l7,7 v17 a2,2 0 0 1 -2,2 h-16 a2,2 0 0 1 -2,-2 v-22 a2,2 0 0 1 2,-2 z" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M178,584 v7 h7" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M171,597 h10 M171,603 h10" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="224" y="590" font-size="23.5" fill="#0F172A" font-weight="bold" text-anchor="start">เนื้อหาข้อความสกัด (Document Chunks)</text>
+<text x="224" y="621" font-size="19.5" fill="#64748B" font-weight="normal" text-anchor="start">แบ่งข้อความจากเอกสารเป็นท่อนสำหรับใช้อ้างอิง</text>
+<rect x="126" y="660" width="928" height="108" rx="16" fill="#FFFFFF" stroke="#E6EDF7" stroke-width="1.4"/>
+<rect x="148" y="686" width="56" height="56" rx="15" fill="#EEF3FF"/>
+<circle cx="174" cy="712" r="8.5" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M180.5,718.5 L187,725" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="224" y="708" font-size="23.5" fill="#0F172A" font-weight="bold" text-anchor="start">ค้นหาด้วยความหมาย (Semantic Search)</text>
+<text x="224" y="739" font-size="19.5" fill="#64748B" font-weight="normal" text-anchor="start">เวกเตอร์ 1024 มิติ พร้อมดัชนี ivfflat</text>
+<rect x="126" y="778" width="928" height="108" rx="16" fill="#FFFFFF" stroke="#E6EDF7" stroke-width="1.4"/>
+<rect x="148" y="804" width="56" height="56" rx="15" fill="#EEF3FF"/>
+<path d="M165,823 h22 a2,2 0 0 1 2,2 v12 a2,2 0 0 1 -2,2 h-13 l-6,5 v-5 h-3 a2,2 0 0 1 -2,-2 v-12 a2,2 0 0 1 2,-2 z" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="224" y="826" font-size="23.5" fill="#0F172A" font-weight="bold" text-anchor="start">ประวัติการสนทนาและผลการแนะนำ</text>
+<text x="224" y="857" font-size="19.5" fill="#64748B" font-weight="normal" text-anchor="start">chat_sessions · chat_messages · recommendations</text>
+<rect x="126" y="896" width="928" height="108" rx="16" fill="#FFFFFF" stroke="#E6EDF7" stroke-width="1.4"/>
+<rect x="148" y="922" width="56" height="56" rx="15" fill="#EEF3FF"/>
+<rect x="166" y="940" width="9" height="9" rx="2" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="166" y="951" width="9" height="9" rx="2" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="177" y="940" width="9" height="9" rx="2" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="177" y="951" width="9" height="9" rx="2" fill="none" stroke="#2563EB" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="224" y="944" font-size="23.5" fill="#0F172A" font-weight="bold" text-anchor="start">ข้อมูลหลักสูตรที่สกัดแล้ว (schema mko)</text>
+<text x="224" y="975" font-size="19.5" fill="#64748B" font-weight="normal" text-anchor="start">18 ตาราง 6 วิว พร้อมสถานะการตรวจทาน</text>
+<rect x="1120" y="286" width="700" height="736" rx="26" fill="#FBFCFF" stroke="#DCE8F8" stroke-width="1.8"/>
+<circle cx="1196" cy="354" r="40" fill="#EAF7F1"/>
+<path d="M1198,341 l-10,15 h8 l-2,12 l11,-16 h-9 z" fill="#0F9D63" stroke="#0F9D63" stroke-width="2" stroke-linejoin="round"/>
+<text x="1260" y="346" font-size="36" fill="#0F9D63" font-weight="bold" text-anchor="start">Supabase</text>
+<text x="1260" y="380" font-size="21" fill="#64748B" font-weight="normal" text-anchor="start">แพลตฟอร์มจัดการเนื้อหาหน้าเว็บ</text>
+<line x1="1148" y1="404" x2="1792" y2="404" stroke="#DCE8F8" stroke-width="1.5"/>
+<rect x="1146" y="424" width="648" height="108" rx="16" fill="#FFFFFF" stroke="#E6EDF7" stroke-width="1.4"/>
+<rect x="1168" y="450" width="56" height="56" rx="15" fill="#EAF7F1"/>
+<circle cx="1196" cy="478" r="4.5" fill="none" stroke="#0F9D63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1196,466 v3 M1196,487 v3 M1184,478 h3 M1205,478 h3 M1187.5,469.5 l2,2 M1202.5,484.5 l2,2 M1204.5,469.5 l-2,2 M1189.5,484.5 l-2,2" fill="none" stroke="#0F9D63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="1196" cy="478" r="9.5" fill="none" stroke="#0F9D63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1244" y="472" font-size="23.5" fill="#0F172A" font-weight="bold" text-anchor="start">ระบบผู้ดูแลและการจัดการเว็บ</text>
+<text x="1244" y="503" font-size="19.5" fill="#64748B" font-weight="normal" text-anchor="start">ข่าว บทความ และการตั้งค่าหน้าเว็บไซต์</text>
+<rect x="1146" y="542" width="648" height="108" rx="16" fill="#FFFFFF" stroke="#E6EDF7" stroke-width="1.4"/>
+<rect x="1168" y="568" width="56" height="56" rx="15" fill="#EAF7F1"/>
+<path d="M1196,584 l10,4 v8 c0,7 -5,11 -10,13 c-5,-2 -10,-6 -10,-13 v-8 z" fill="none" stroke="#0F9D63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1192,597 l3,3 l6,-6" fill="none" stroke="#0F9D63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1244" y="590" font-size="23.5" fill="#0F172A" font-weight="bold" text-anchor="start">บัญชีผู้ดูแลระบบ (Admin Auth)</text>
+<text x="1244" y="621" font-size="19.5" fill="#64748B" font-weight="normal" text-anchor="start">เข้าสู่ระบบเฉพาะผู้ดูแล ไม่ใช่ของนักศึกษา</text>
+<rect x="1146" y="660" width="648" height="108" rx="16" fill="#FFFFFF" stroke="#E6EDF7" stroke-width="1.4"/>
+<rect x="1168" y="686" width="56" height="56" rx="15" fill="#EAF7F1"/>
+<rect x="1184" y="704" width="24" height="16" rx="2.5" fill="none" stroke="#0F9D63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1196,720 v4 M1190,725 h12" fill="none" stroke="#0F9D63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1244" y="708" font-size="23.5" fill="#0F172A" font-weight="bold" text-anchor="start">ข้อมูลหลักสูตรสำหรับแสดงผล</text>
+<text x="1244" y="739" font-size="19.5" fill="#64748B" font-weight="normal" text-anchor="start">ใช้แสดงบนหน้าเว็บ แยกจากคลังความรู้ที่ใช้ตอบคำถาม</text>
+<rect x="1146" y="786" width="648" height="210" rx="16" fill="#FFF8E8" stroke="#F2D9A0" stroke-width="1.4"/>
+<text x="1170" y="828" font-size="22" fill="#8A6212" font-weight="bold" text-anchor="start">หมายเหตุสำคัญ</text>
+<text x="1170" y="860" font-size="19" fill="#6B5116" font-weight="normal" text-anchor="start">ข้อมูลการสนทนาและคลังความรู้ที่ใช้ตอบคำถาม</text>
+<text x="1170" y="886" font-size="19" fill="#6B5116" font-weight="normal" text-anchor="start">ทั้งหมดอยู่ใน PostgreSQL ไม่ได้อยู่ใน Supabase</text>
+<text x="1170" y="938" font-size="19" fill="#6B5116" font-weight="normal" text-anchor="start">ตาราง courses มีทั้งสองฝั่งแต่คนละหน้าที่ —</text>
+<text x="1170" y="964" font-size="19" fill="#6B5116" font-weight="normal" text-anchor="start">Supabase ใช้แสดงผล PostgreSQL ใช้ตอบคำถาม</text>
+</svg>

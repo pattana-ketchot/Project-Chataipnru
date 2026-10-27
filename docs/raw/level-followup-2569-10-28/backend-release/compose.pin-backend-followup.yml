@@ -1,0 +1,6 @@
+# ตรึงอิมเมจ backend เป็นอิมเมจของ release ต่อบริบทระดับปริญญา (28 ต.ค. 2569)
+# operational artifact ของการ deploy ไม่ใช่ source ที่ commit และไม่มีค่าลับใด
+# ใช้ร่วมกับชุด -f เดิม และต้องสั่ง --no-build --no-deps
+services:
+  backend:
+    image: course-advisor-system-backend:followup-2569-10-28

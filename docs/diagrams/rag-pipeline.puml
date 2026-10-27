@@ -1,0 +1,138 @@
+@startuml rag-pipeline
+' =====================================================================
+' RAG Pipeline Diagram — ตั้งแต่ PDF จนถึงคำตอบพร้อมแหล่งอ้างอิง
+'
+' หลักฐาน (ตรวจเมื่อ 25 ต.ค. 2569 แบบอ่านอย่างเดียว):
+'   ฝั่งนำเข้า
+'     pipeline/ingest.py            docstring: PDF -> extract -> clean -> chunk -> embed -> insert DB
+'     pipeline/extract_pdf.py       ถอดข้อความทีละหน้า
+'     pipeline/ocr.py               เติมหน้าที่เป็นภาพสแกน (รับผลจากไฟล์ JSON ที่เตรียมไว้ก่อน)
+'     pipeline/clean.py             ทำความสะอาดข้อความ
+'     pipeline/chunker.py:30-31     CHUNK_SIZE_CHARS = 1000 · CHUNK_OVERLAP_CHARS = 150
+'     pipeline/embed.py             เรียก OllamaConnector
+'     docker-compose.worker.yml     EMBED_MODEL=bge-m3 · EMBED_DIM=1024 · role advisor_ingest
+'   ฝั่งตอบคำถาม
+'     backend/app/services/vector_search.py:17-34   top_k, cosine `<=>`
+'     backend/app/services/rag.py                   ประกอบบริบทส่งโมเดล
+'     backend/app/services/answer_evidence.py       คัดหน้าที่เป็นที่มาของคำตอบ
+'     backend/app/services/answer_claims.py         ตรวจว่าหน้าที่อ้างรองรับข้ออ้างไหม
+'   ฐานข้อมูล
+'     public.course_chunks.embedding = vector(1024)
+'     idx_course_chunks_embedding = ivfflat (embedding vector_cosine_ops) WITH (lists='100')
+'     CHAT_TOP_K = 25 (จาก env ของคอนเทนเนอร์ backend)
+'
+' ** render ด้วย kroki.io เท่านั้น ** planttext.com และ plantuml.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam sequenceGroupBackgroundColor white
+skinparam sequenceGroupBorderColor black
+skinparam sequenceGroupHeaderFontColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam titleBackgroundColor white
+skinparam legendBackgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+skinparam ArrowFontSize 11
+
+' ===================== ช่วงนำเข้า =====================
+package "ช่วงนำเข้า — สั่งรันเองโดยคน ไม่ได้ทำงานอัตโนมัติ" #F3E8FF {
+  rectangle "1. ไฟล์ PDF มคอ.2\nวางไว้ที่ staging/crawl\nหรือส่ง --pdf ตรง ๆ" as pdf
+  rectangle "2. ถอดข้อความทีละหน้า\npipeline/extract_pdf.py\nเก็บเลขหน้าไว้กับข้อความ" as extract
+  rectangle "2ข. OCR เฉพาะหน้าที่เป็นภาพ\npipeline/ocr.py\nรับผลจากไฟล์ JSON ที่เตรียมไว้ก่อน\nเพื่อให้ตรวจด้วยตาได้ก่อนเข้าคลัง" as ocr
+  rectangle "3. ทำความสะอาดข้อความ\npipeline/clean.py" as clean
+  rectangle "4. ตัดเป็นชิ้น (chunking)\npipeline/chunker.py\nชิ้นละ 1,000 ตัวอักษร ซ้อนกัน 150\nตัดที่รอยต่อประโยคเมื่อหาได้" as chunk
+  rectangle "5. แปลงเป็นเวกเตอร์ (embedding)\npipeline/embed.py -> Ollama\nbge-m3 · 1024 มิติ" as embed
+  rectangle "6. เขียนลงฐานข้อมูล\nหนึ่ง transaction ต่อเอกสาร\nบทบาท advisor_ingest เท่านั้น" as insert
+}
+
+' ===================== คลังข้อมูล =====================
+database "public.course_chunks\ncontent · page_number · chunk_index\nembedding vector(1024)\n9,039 แถว\n\nดัชนี ivfflat (cosine, lists=100)" as chunks
+database "public.course_documents\nชื่อไฟล์ · sha256 · 31 แถว\npublic.courses 24 แถว" as docs
+database "mko.* (v_live_*)\nข้อมูลหลักสูตรที่ตรวจรับแล้ว\nพร้อมเลขหน้าหลักฐาน" as mko
+database "public.chat_answer_cache\nผูกกับ corpus_version" as cache
+
+' ===================== ช่วงตอบคำถาม =====================
+package "ช่วงตอบคำถาม — ทุกครั้งที่ผู้ใช้ถาม" #E8FFE8 {
+  rectangle "A. คำถามของผู้ใช้\nPOST /api/chat -> /chat-web" as q
+  rectangle "B. ด่านที่ตอบได้ก่อนถึง RAG\nด่าน 0-0.7185 ตอบจาก mko.v_live_*\nด่าน 0.719 ตรวจแคช\nผ่านด่านนี้ได้ = ไม่เรียกโมเดลเลย" as gates
+  rectangle "C. แปลงคำถามเป็นเวกเตอร์\nOllama bge-m3 1024 มิติ\n(ต้องเป็นโมเดลเดียวกับตอนนำเข้า)" as qembed
+  rectangle "D. ค้นชิ้นที่ใกล้เคียง\nvector_search.py\nตัวดำเนินการ `<=>` (cosine)\nCHAT_TOP_K = 25" as search
+  rectangle "D2. เรียบเรียงคำถามใหม่แล้วค้นซ้ำ\nเมื่อมีประวัติบทสนทนา หรือคำถามเป็นภาษาอังกฤษ\n(ด่าน 2 และ 2.5 — เรียกโมเดลหนึ่งครั้ง)" as rewrite
+  rectangle "E. ตรวจว่าตอบได้ไหม\n_grounding_verdict() ผ่าน Gemini\nให้เหตุผลก่อน แล้วจึงตัดสิน" as ground
+  rectangle "F. ให้โมเดลเขียนคำตอบ\nGemini gemini-3.5-flash-lite (หลัก)\nOllama qwen2.5:3b (สำรองเฉพาะตอน\nล้มก่อนส่งตัวอักษรแรก)" as write
+  rectangle "G. คัดหน้าที่เป็นที่มาจริง\nanswer_evidence.py + answer_claims.py\nชั้นที่สอง ตรวจข้ออ้างกับข้อความทั้งหน้า\nชั้นที่สาม ตัดหน้าที่ไม่รองรับข้ออ้างใดเลย\nข้ออ้างที่ยังค้าง -> ขึ้นคำเตือน" as evid
+  rectangle "G2. เก็บผลกลับ\nบันทึกบทสนทนา · เก็บแคชเมื่อไม่มีประวัติ\nนับสถิติการเรียกโมเดล" as persist
+  rectangle "H. คำตอบ + แหล่งอ้างอิง\nชื่อไฟล์ + เลขหน้า มคอ.2\nส่งกลับทั้งใน header และท้ายข้อความ" as ans
+  rectangle "คำตอบที่เตรียมไว้แล้ว\nส่งเป็นก้อนเดียว" as H1
+  rectangle "แจ้งว่าไม่มีข้อมูล\nไม่เดาคำตอบ" as H2
+}
+
+pdf --> extract
+extract --> ocr : หน้าที่ถอดข้อความไม่ได้
+ocr --> clean
+extract --> clean : หน้าที่ถอดได้ปกติ
+clean --> chunk
+chunk --> embed
+embed --> insert
+insert --> chunks
+insert --> docs
+
+q --> gates
+gates --> cache : อ่าน/เขียน
+gates --> mko : อ่าน
+gates --> H1 : มีด่านใดด่านหนึ่งตอบได้
+gates --> qembed : ไม่มีด่านใดตอบได้
+qembed --> search
+search --> chunks : ค้นด้วยเวกเตอร์
+chunks --> search : 25 ชิ้นที่ใกล้ที่สุด
+search --> rewrite : มีประวัติ / เป็นภาษาอังกฤษ
+rewrite --> search : ค้นซ้ำด้วยคำถามที่เรียบเรียงแล้ว
+search --> ground : ชิ้นส่วนที่จะใช้ตอบ
+ground --> write : ตอบได้
+ground --> H2 : ไม่มีข้อมูลในเอกสาร
+write --> evid
+evid --> docs : ขอชื่อไฟล์ของหน้าที่อ้าง
+evid --> ans
+evid --> persist
+persist --> cache : เก็บคำตอบใหม่
+H1 --> ans
+
+@enduml

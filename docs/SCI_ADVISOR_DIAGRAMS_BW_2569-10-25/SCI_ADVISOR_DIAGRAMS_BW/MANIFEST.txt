@@ -1,0 +1,134 @@
+SCI Advisor — ชุดไดอะแกรมสำหรับรายงานจบ
+ปรับปรุง 25 ต.ค. 2569
+
+ไดอะแกรม 18 ภาพ · แต่ละภาพมี .puml / .svg / .png
+
+รูปแบบ: ขาวดำ กล่องพื้นขาวขอบดำ เส้นเชื่อมมุมฉาก
+ไม่มีกล่อง legend ไม่มี note อธิบายในรูป และไม่ฝังชื่อภาพไว้ในรูป
+ชื่อภาพให้ใส่เป็นคำบรรยายใต้รูปในรายงาน (ดูหัวข้อ 3 ของเอกสาร)
+
+ใช้ .svg ในรายงาน · .png เป็นไฟล์สำรอง
+
+แก้ไขต่อ: วาง .puml ลง https://www.planttext.com (พรีวิวภาษาไทยจะเพี้ยน ใช้ดูโครงผังเท่านั้น)
+ภาพจริง : วาง .puml ลง https://kroki.io เลือก PlantUML แล้วโหลด SVG
+
+========================================================================
+รายการไฟล์ (56 ไฟล์)
+========================================================================
+
+ไฟล์                                                 ไบต์
+SCI_ADVISOR_DIAGRAMS.md                             34786
+puml/architecture.puml                               2300
+svg/architecture.svg                                16229
+png/architecture.png                                15449
+puml/dfd-level0.puml                                 5513
+svg/dfd-level0.svg                                  13195
+png/dfd-level0.png                                  22667
+puml/dfd-level1.puml                                 5939
+svg/dfd-level1.svg                                  15975
+png/dfd-level1.png                                  21941
+puml/dfd-level1a.puml                                3882
+svg/dfd-level1a.svg                                 13980
+png/dfd-level1a.png                                 19604
+puml/dfd-level1b.puml                                5870
+svg/dfd-level1b.svg                                 18545
+png/dfd-level1b.png                                 31510
+puml/dfd-level2-p2.puml                              6601
+svg/dfd-level2-p2.svg                               26957
+png/dfd-level2-p2.png                               42117
+puml/er.puml                                         4359
+svg/er.svg                                          22373
+png/er.png                                          42841
+puml/er-docs.puml                                    4372
+svg/er-docs.svg                                     17936
+png/er-docs.png                                     36433
+puml/er-mko.puml                                     7935
+svg/er-mko.svg                                      67335
+png/er-mko.png                                      92895
+puml/er-supabase.puml                                1824
+svg/er-supabase.svg                                 11170
+png/er-supabase.png                                 10816
+puml/er-web.puml                                     3525
+svg/er-web.svg                                      16305
+png/er-web.png                                      32714
+puml/rag-pipeline.puml                               9783
+svg/rag-pipeline.svg                                41634
+png/rag-pipeline.png                                97761
+puml/sequence-admin-authz.puml                       4791
+svg/sequence-admin-authz.svg                        24124
+png/sequence-admin-authz.png                        67590
+puml/sequence-admin-login.puml                       5254
+svg/sequence-admin-login.svg                        23425
+png/sequence-admin-login.png                        71387
+puml/sequence-ai-chat.puml                           6159
+svg/sequence-ai-chat.svg                            19843
+png/sequence-ai-chat.png                            43538
+puml/sequence-doc-ingest.puml                        6703
+svg/sequence-doc-ingest.svg                         30633
+png/sequence-doc-ingest.png                         69901
+puml/use-case.puml                                   2078
+svg/use-case.svg                                    13731
+png/use-case.png                                    19962
+puml/use-case-admin.puml                             2057
+svg/use-case-admin.svg                              12002
+png/use-case-admin.png                              18924
+
+========================================================================
+sha256
+========================================================================
+
+7f8de4996c5823705b78e9ac43893acff02e3fbdbc33264cf74f16973022e4bf  SCI_ADVISOR_DIAGRAMS.md
+ac51736f92c3895831bf1aa3604ff6356970c3eb2e48da64783cceb9b295af44  puml/architecture.puml
+7c54cd867b5cfe8045057f7128160d517f55221381ac8bb24eb8ef32733a3d35  svg/architecture.svg
+b9c0ced5d61a3aa880eb251f6c8d8daa3328a559c44786b0bb6ec63ca5f814f6  png/architecture.png
+563a84653091030f629a8fbd372c32b8dd9abd00de43b2d3e0d6fa67a85e4935  puml/dfd-level0.puml
+22b466926000291d6c7c3cf42498eecf95ebb3c847da53cdeaf0286aa9fa4c94  svg/dfd-level0.svg
+0fb0dba9faf6bc6ef895d182e0080a1e327818f0f2d5c3151ed996a4f962fdcd  png/dfd-level0.png
+14a7bd6b4255eef139b71d5f079d4f5f8337c1618db948e65e934c7e283d0cca  puml/dfd-level1.puml
+61e9cb0a04d62292e89776bf5fd95439594fbcbac2644824c2dc1abed6de2b91  svg/dfd-level1.svg
+a6fb5ff12f7d04daefa89be7252f1357f780f3d06ad32dde3f846735e477526f  png/dfd-level1.png
+e6f6e75ae4fe6edc3b413363099bcf71b635ea09a8c8c44708055aecbaba9066  puml/dfd-level1a.puml
+0ff4774839f750c364c73d3f437374736633862cc0aef9212453db61f2421a5a  svg/dfd-level1a.svg
+67517ead7d810eb65ed0c4d87f8eea09e927f5b8fe3440e3af818f1f2cacfcdf  png/dfd-level1a.png
+4f702da22b4dab6f1ad1f77f768ca9eadb2703e941d24c7b3feaa3bed85f786e  puml/dfd-level1b.puml
+f637cbda96cc1f7f1128e4cc13f4f21087cb71e0d852de2c1344603145bf9372  svg/dfd-level1b.svg
+befe3c17898921d1c5f6042bd6fcc1ff01a0b2e7e89f438c085f9488c08977c5  png/dfd-level1b.png
+1e1e0a53617c482606b76ce438c349eb0d32428db82eb809f4e4e2f1393cb520  puml/dfd-level2-p2.puml
+0e53f163c5902770a607f323717178a0fdb04140706675bb2551c1c0ed26f007  svg/dfd-level2-p2.svg
+55d35b709445e7f5262e506e0c9c38f8e5ec52cb1771dd4991c1610f39775549  png/dfd-level2-p2.png
+f7e96e2607505d443edc4260627f362d3c2936e41a0bf98a610c02b845e6bbea  puml/er.puml
+8921dfadcf296127f588d9d90bb406e4b2c6724cc5cd6e95785464a1de50ae66  svg/er.svg
+a748fc36863948fbe3b5c4e19998a6d569942a24072f4b8c2723c1742adb9b9e  png/er.png
+768008c0ff2d4d402be61c8eec6ec5a4424d207a50b587243647e72331a84c72  puml/er-docs.puml
+34e2942f78be67da19978ef9842f62c0f17e0378a4cd8f5a0d8a95c29c4c5019  svg/er-docs.svg
+6cd7b5a82962788d4f7a47711bf28c3b7b117c5251cad7a708007a4cc85826cb  png/er-docs.png
+588c27d75a7ecd2081e4e6e6e67cfcf1b7bf8f1cfc19220c98c4bf5da16c09b6  puml/er-mko.puml
+ea562eeadd550f0a76ec89d557b742200931fe7b459ea10c1571769cd8193c0f  svg/er-mko.svg
+3de121f69228b9d643760f3cb2de483285149191d4f5474957954d6d24b524a4  png/er-mko.png
+d10e35ee2f4db04948d37ace5cc8d0d2e9cf1a249f737888ce07770682a23cba  puml/er-supabase.puml
+86d5acbae3b20cc56f456d12a934ecebf675fe31ae1f282e2cc6e19f48c34caf  svg/er-supabase.svg
+873b402c74cb22261f0cdb456aa48d0df89ff498e2aa26184b1f2487b54b2ec0  png/er-supabase.png
+3eb1653754353ee3554f302ed38438b4c6b306fbc2245b5a15c44ef6e1fcd290  puml/er-web.puml
+d17cf907dbeff9d62e25c71d8de046298d46ec5ea01eace545dd56d4dbabaf28  svg/er-web.svg
+24c257a385e80cd56d5ba675d6e148c1282424eb76c6a8365724acf7ad396c17  png/er-web.png
+72749ca883a026b280d0f2b4041b3de90b894fec2a5ff69c62ac4af6353824cb  puml/rag-pipeline.puml
+9cba93c4e6b7a3ab0b4f000a2b2082806a8afd288249509b164d8dd71b60247b  svg/rag-pipeline.svg
+bbaf66b7f824345a180abbf0e3edf6bbb0bff0ce2e0a7aaec808610723fe0096  png/rag-pipeline.png
+df6a353bd9add6d70f45abb862844f977d02b9bc26edcb8c0ebf9c9b326b120b  puml/sequence-admin-authz.puml
+124e6c99f86c50c037f33b6cbe8d86c30266d568a8c82dd15bd16a3b9a9dd9a1  svg/sequence-admin-authz.svg
+3f8c3807388262aafb0abf4c9d6ec0064455d249e14f7d6bf63051fdf8770bbf  png/sequence-admin-authz.png
+9d6f504066f0014a83cdee7cc420c0f514a0dfb71a42bd20f51d584513c80fc6  puml/sequence-admin-login.puml
+7ddacfdd8957a1398be53d7c91055cbf315fa6592297216cf60c3f9df6f252da  svg/sequence-admin-login.svg
+bd16ff81d842b5ce32ac134aa97f09bfe4ff492e2c3fa4123d174f45f57c6757  png/sequence-admin-login.png
+3924dd358f4003f25bfbac2c4fb0df5c8d11835c896cc03bdfee0c175ab9a8d3  puml/sequence-ai-chat.puml
+87e502b56ae626af20c29f2e30ac8f5fa33f91ef86113abcc8af821e36b77242  svg/sequence-ai-chat.svg
+ff63191c617b95104e705db5d80b56b72a6f4049b260d9b6dfaf2b9403271137  png/sequence-ai-chat.png
+9096291932b6bfa4a835fc32614af0a725860e55e5a68adac5ec568237443a2a  puml/sequence-doc-ingest.puml
+611fe48328857d7b14e7e228fe301381e246698ff39ae1b3d2bf93ab7ef58487  svg/sequence-doc-ingest.svg
+7c7812007ca94efd213d97de1c92527331ec4a0f4d913d2c00481432ced2616b  png/sequence-doc-ingest.png
+b2f6ed10fe01af55dbe682b6c52abcecffacc0b7cf6fe9bf7e58d290607ff9e7  puml/use-case.puml
+6e0894f1d2555bc51889414c67476139416955f3305837704d719d8eec33cb45  svg/use-case.svg
+2d528b1e8afc521d0ed28a97ea38d9ee50a062f804dade08fa508c50912d1053  png/use-case.png
+fe3ad0447c96e8189608ea0af9b93e67b477cc7525cf472ab07d1003b78fc5cb  puml/use-case-admin.puml
+6a64b3ac1e7154b48ccf7ef47850e49beaad136da6eab564573659c12757a604  svg/use-case-admin.svg
+c60dd1fdddac9a513cb0b9048390bef7a06b59028af97b3e9cb51683e24ab6bf  png/use-case-admin.png

@@ -1,0 +1,63 @@
+@startuml use-case
+' กรณีใช้งาน (ก) ผู้ใช้ทั่วไปและสมาชิก
+' ข้อมูลสิทธิ์ตรวจจาก backend/app/api/deps.py และจำนวนบัญชีจากฐาน production 25 ต.ค. 2569
+' ส่วนของผู้ดูแลอยู่ในภาพ use-case-admin
+' คำอธิบายใต้ภาพอยู่ในหัวข้อ 3.4 ของ SCI_ADVISOR_DIAGRAMS.md
+
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam ranksep 50
+skinparam nodesep 25
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+left to right direction
+
+actor "ผู้เยี่ยมชม" as guest
+actor "สมาชิก" as user
+
+rectangle "ความสามารถสาธารณะ (ไม่ต้องเข้าสู่ระบบ)" {
+  usecase "ดูรายการสาขา" as UC1
+  usecase "ดูรายละเอียดสาขา" as UC2
+  usecase "ดูข่าวของคณะ" as UC3
+  usecase "ถาม AI" as UC4
+  usecase "เปรียบเทียบสองสาขา" as UC5
+  usecase "ให้ระบบแนะนำสาขา" as UC6
+  usecase "สมัครบัญชี / เข้าสู่ระบบ" as UC7
+}
+
+rectangle "ความสามารถของสมาชิก" {
+  usecase "จัดการโปรไฟล์" as UC8
+  usecase "เปลี่ยนรหัสผ่าน" as UC9
+  usecase "บันทึกเงื่อนไขที่ต้องการ" as UC10
+  usecase "ถาม AI แบบเก็บประวัติ" as UC11
+}
+
+guest --> UC1
+guest --> UC2
+guest --> UC3
+guest --> UC4
+guest --> UC5
+guest --> UC6
+guest --> UC7
+
+user --> UC8
+user --> UC9
+user --> UC10
+user --> UC11
+
+user --|> guest
+
+@enduml

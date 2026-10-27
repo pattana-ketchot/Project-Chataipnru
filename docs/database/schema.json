@@ -1,0 +1,4540 @@
+{
+  "tables": {
+    "postgres|public.users": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "email",
+          "type": "CITEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": true,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "password_hash",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "full_name",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "TRUE",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "is_admin",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "FALSE",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "schema.sql"
+    },
+    "postgres|public.user_profiles": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "user_profiles",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "users",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "education_level",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "field_of_study",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "current_role",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "career_goal",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "skills",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'[]'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "interests",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'[]'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "language_preference",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "'th'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "metadata",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'{}'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "user_id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "schema.sql"
+    },
+    "postgres|public.user_requirements": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "user_requirements",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "user_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "users",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "req_type",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "req_value",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "priority",
+          "type": "SMALLINT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "3",
+          "check": "priority BETWEEN 1 AND 5",
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "schema.sql"
+    },
+    "postgres|public.courses": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "courses",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "code",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": true,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "title",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "provider",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "summary",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "mode",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "duration_weeks",
+          "type": "NUMERIC",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "price",
+          "type": "NUMERIC",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "currency",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "'THB'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "tags",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'[]'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "TRUE",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "schema.sql"
+    },
+    "postgres|public.course_documents": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "course_documents",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "course_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "courses",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "original_filename",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "file_sha256",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "storage_path",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_count",
+          "type": "INTEGER",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "extraction_status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'pending'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "extraction_error",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "uploaded_by",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "users",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "uploaded_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [
+        [
+          "course_id",
+          "file_sha256"
+        ]
+      ],
+      "source": "schema.sql"
+    },
+    "postgres|public.course_chunks": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "course_chunks",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "course_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "courses",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "chunk_index",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_number",
+          "type": "INTEGER",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "token_count",
+          "type": "INTEGER",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "embedding",
+          "type": "VECTOR(1024)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "metadata",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'{}'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [
+        [
+          "document_id",
+          "chunk_index"
+        ]
+      ],
+      "source": "schema.sql"
+    },
+    "postgres|public.chat_sessions": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "chat_sessions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "user_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "users",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "started_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "ended_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "schema.sql"
+    },
+    "postgres|public.chat_messages": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "chat_messages",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "session_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "chat_sessions",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "role",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "role IN ('user','assistant','system')",
+          "fk": null
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "schema.sql"
+    },
+    "postgres|public.recommendations": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "recommendations",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "user_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "users",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "course_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "courses",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "session_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "chat_sessions",
+            "ref_column": "id",
+            "on_delete": "SET NULL"
+          }
+        },
+        {
+          "name": "score",
+          "type": "NUMERIC",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "rationale",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "retrieved_chunk_ids",
+          "type": "UUID[]",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'{}'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "model_used",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "schema.sql"
+    },
+    "postgres|public.chat_answer_cache": {
+      "db": "postgres",
+      "schema": "public",
+      "name": "chat_answer_cache",
+      "columns": [
+        {
+          "name": "question_key",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "corpus_version",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "reply",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "citations",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'[]'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "hits",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "0",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "last_used_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "question_key"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "schema.sql"
+    },
+    "postgres|mko.schema_migrations": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "schema_migrations",
+      "columns": [
+        {
+          "name": "version",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "applied_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "version"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.document_pages": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "document_pages",
+      "columns": [
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "page_number",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "page_number >= 1",
+          "fk": null
+        },
+        {
+          "name": "text_raw",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "text_clean",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "text_source",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "text_source IN ('text_layer', 'ocr', 'text_layer+ocr', 'plain_text')",
+          "fk": null
+        },
+        {
+          "name": "is_toc",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "FALSE",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "encoding_suspect",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "FALSE",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "text_sha256",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "document_id",
+        "page_number"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.extraction_runs": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "extraction_runs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "parser_version",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "template_type",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "template_type IN ('tqf2', 'std2565', 'brief', 'web_page', 'unknown')",
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'running'",
+          "check": "status IN ('running', 'done', 'failed')",
+          "fk": null
+        },
+        {
+          "name": "summary",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'{}'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "error",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "started_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "finished_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.document_sections": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "document_sections",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "run_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.extraction_runs",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "section_key",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "heading_text",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_start",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_end",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "is_appendix",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "FALSE",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [
+        "CHECK (page_end >= page_start)"
+      ],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.evidence": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "evidence",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "run_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.extraction_runs",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_start",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_end",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "section_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.document_sections",
+            "ref_column": "id",
+            "on_delete": "SET NULL"
+          }
+        },
+        {
+          "name": "quote",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "length(btrim(quote)) > 0",
+          "fk": null
+        },
+        {
+          "name": "method",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "method IN ('regex', 'table_parser', 'list_parser', 'llm_span', 'manual')",
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [
+        {
+          "columns": [
+            "document_id",
+            "page_start"
+          ],
+          "ref_table": "mko.document_pages",
+          "ref_columns": [
+            "document_id",
+            "page_number"
+          ],
+          "on_delete": "CASCADE",
+          "kind": "composite"
+        },
+        {
+          "columns": [
+            "document_id",
+            "page_end"
+          ],
+          "ref_table": "mko.document_pages",
+          "ref_columns": [
+            "document_id",
+            "page_number"
+          ],
+          "on_delete": "CASCADE",
+          "kind": "composite"
+        }
+      ],
+      "checks": [
+        "CHECK (page_end >= page_start)"
+      ],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.programs": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "programs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "name_th",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "name_en",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "degree_level",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "degree_level IN ('bachelor', 'master', 'doctoral')",
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [
+        [
+          "name_th",
+          "degree_level"
+        ]
+      ],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.curricula": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "curricula",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "course_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": true,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.courses",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "program_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.programs",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "edition_year_be",
+          "type": "SMALLINT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "edition_year_be BETWEEN 2500 AND 2700",
+          "fk": null
+        },
+        {
+          "name": "revision_type",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "revision_type IN ('new', 'revised')",
+          "fk": null
+        },
+        {
+          "name": "template_type",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "template_type IN ('tqf2', 'std2565', 'brief', 'web_page', 'unknown')",
+          "fk": null
+        },
+        {
+          "name": "primary_document_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "program_name_th",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "program_name_en",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "degree_name_th",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "degree_name_en",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "degree_abbr_th",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "degree_abbr_en",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "degree_level",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "degree_level IN ('bachelor', 'master', 'doctoral')",
+          "fk": null
+        },
+        {
+          "name": "total_credits",
+          "type": "SMALLINT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "total_credits BETWEEN 1 AND 400",
+          "fk": null
+        },
+        {
+          "name": "study_years",
+          "type": "NUMERIC(3, 1)",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "language",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'draft'",
+          "check": "status IN ('draft', 'in_review', 'published')",
+          "fk": null
+        },
+        {
+          "name": "published_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [
+        [
+          "program_id",
+          "edition_year_be"
+        ]
+      ],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.field_values": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "field_values",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "curriculum_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.curricula",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "run_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.extraction_runs",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "field_key",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "value_text",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "value_int",
+          "type": "INTEGER",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "status IN ('candidate', 'needs_review', 'verified', 'rejected', 'not_found', 'not_applicable')",
+          "fk": null
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "confidence",
+          "type": "NUMERIC(4, 3)",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "confidence BETWEEN 0 AND 1",
+          "fk": null
+        },
+        {
+          "name": "evidence_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.evidence",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "reviewed_by",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "reviewed_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [
+        "CONSTRAINT field_value_evidence_rule CHECK ( (status IN ('not_found', 'not_applicable') AND value_text IS NULL AND value_int IS NULL AND evidence_id IS NULL) OR (status NOT IN ('not_found', 'not_applicable') AND evidence_id IS NOT NULL AND (value_text IS NOT NULL OR value_int IS NOT NULL)) )",
+        "CONSTRAINT field_value_verified_reviewer CHECK (status <> 'verified' OR reviewed_by IS NOT NULL)"
+      ],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.field_value_evidence": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "field_value_evidence",
+      "columns": [
+        {
+          "name": "field_value_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.field_values",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "evidence_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.evidence",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        }
+      ],
+      "pk": [
+        "field_value_id",
+        "evidence_id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.list_items": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "list_items",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "curriculum_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.curricula",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "run_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.extraction_runs",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "item_type",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "item_type IN ('philosophy', 'objective', 'career', 'admission')",
+          "fk": null
+        },
+        {
+          "name": "seq",
+          "type": "SMALLINT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "seq >= 1",
+          "fk": null
+        },
+        {
+          "name": "text",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "length(btrim(text)) > 0",
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "status IN ('candidate', 'needs_review', 'verified', 'rejected')",
+          "fk": null
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "evidence_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.evidence",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "reviewed_by",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "reviewed_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [
+        "CONSTRAINT list_item_verified_reviewer CHECK (status <> 'verified' OR reviewed_by IS NOT NULL)"
+      ],
+      "uniques": [
+        [
+          "run_id",
+          "item_type",
+          "seq"
+        ]
+      ],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.credit_groups": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "credit_groups",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "curriculum_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.curricula",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "run_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.extraction_runs",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "parent_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.credit_groups",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "seq",
+          "type": "SMALLINT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "name_th",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "min_credits",
+          "type": "SMALLINT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "status IN ('candidate', 'needs_review', 'verified', 'rejected')",
+          "fk": null
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "evidence_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.evidence",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "reviewed_by",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "reviewed_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.subjects": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "subjects",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "curriculum_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.curricula",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "run_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.extraction_runs",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "code",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "name_th",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "name_en",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "credits",
+          "type": "SMALLINT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "hours_pattern",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "lecture_hours",
+          "type": "SMALLINT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "practice_hours",
+          "type": "SMALLINT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "self_study_hours",
+          "type": "SMALLINT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "credit_group_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.credit_groups",
+            "ref_column": "id",
+            "on_delete": "SET NULL"
+          }
+        },
+        {
+          "name": "description_th",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "description_en",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "status IN ('candidate', 'needs_review', 'verified', 'rejected')",
+          "fk": null
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "listing_evidence_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.evidence",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "description_evidence_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.evidence",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "reviewed_by",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "reviewed_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [
+        "CHECK (listing_evidence_id IS NOT NULL OR description_evidence_id IS NOT NULL)"
+      ],
+      "uniques": [
+        [
+          "run_id",
+          "code"
+        ]
+      ],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.learning_outcomes": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "learning_outcomes",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "curriculum_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.curricula",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "run_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.extraction_runs",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "framework",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "framework IN ('PLO', 'SubPLO', 'YLO', 'TQF_domain')",
+          "fk": null
+        },
+        {
+          "name": "code",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "parent_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.learning_outcomes",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "seq",
+          "type": "SMALLINT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "text",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "status IN ('candidate', 'needs_review', 'verified', 'rejected')",
+          "fk": null
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "evidence_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.evidence",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "reviewed_by",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "reviewed_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "001_mko_structured.sql"
+    },
+    "postgres|mko.review_decisions": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "review_decisions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "document_sha256",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "field_key",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "value_key",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "shown_value",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "decision",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "decision IN ('verified', 'rejected')",
+          "fk": null
+        },
+        {
+          "name": "reviewer",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "length(btrim(reviewer)) > 0",
+          "fk": null
+        },
+        {
+          "name": "note",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "decided_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "superseded_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "002_mko_review_publish.sql"
+    },
+    "postgres|mko.publications": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "publications",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "published_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "clock_timestamp()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "published_by",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "length(btrim(published_by)) > 0",
+          "fk": null
+        },
+        {
+          "name": "policy",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "policy IN ('verified_any', 'verified_human_only')",
+          "fk": null
+        },
+        {
+          "name": "parser_version",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "summary",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'{}'",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "002_mko_review_publish.sql"
+    },
+    "postgres|mko.published_values": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "published_values",
+      "columns": [
+        {
+          "name": "publication_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.publications",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "course_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.courses",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "field_key",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "value_text",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "value_int",
+          "type": "INTEGER",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "source_filename",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_start",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_end",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "quote",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "length(btrim(quote)) > 0",
+          "fk": null
+        },
+        {
+          "name": "reviewed_by",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "publication_id",
+        "course_id",
+        "field_key"
+      ],
+      "table_fks": [],
+      "checks": [
+        "CHECK (value_text IS NOT NULL OR value_int IS NOT NULL)",
+        "CHECK (page_end >= page_start)"
+      ],
+      "uniques": [],
+      "source": "002_mko_review_publish.sql"
+    },
+    "postgres|mko.published_list_items": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "published_list_items",
+      "columns": [
+        {
+          "name": "publication_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.publications",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "course_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.courses",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "item_type",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "item_type IN ('objective', 'career', 'admission')",
+          "fk": null
+        },
+        {
+          "name": "seq",
+          "type": "SMALLINT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "seq >= 1",
+          "fk": null
+        },
+        {
+          "name": "text",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "length(btrim(text)) > 0",
+          "fk": null
+        },
+        {
+          "name": "document_id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.course_documents",
+            "ref_column": "id",
+            "on_delete": "CASCADE"
+          }
+        },
+        {
+          "name": "source_filename",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_start",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "page_end",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "reviewed_by",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "publication_id",
+        "course_id",
+        "item_type",
+        "seq"
+      ],
+      "table_fks": [],
+      "checks": [
+        "CHECK (page_end >= page_start)"
+      ],
+      "uniques": [],
+      "source": "002_mko_review_publish.sql"
+    },
+    "postgres|mko.shadow_answers": {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "shadow_answers",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMPTZ",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "now()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "mode",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "mode IN ('shadow', 'replay')",
+          "fk": null
+        },
+        {
+          "name": "question",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "interpreted_question",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "has_history",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "FALSE",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "intent_field",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "route",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "route IN ('structured', 'rag')",
+          "fk": null
+        },
+        {
+          "name": "route_reason",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "course_ids",
+          "type": "UUID[]",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'{}'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "structured_status",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "structured_status IN ('answered', 'no_data', 'not_applicable')",
+          "fk": null
+        },
+        {
+          "name": "structured_answer",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "facts",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'[]'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "publication_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "mko.publications",
+            "ref_column": "id",
+            "on_delete": "SET NULL"
+          }
+        },
+        {
+          "name": "served_status",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "served_reply",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "comparison",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "comparison IN ('agree', 'partial', 'disagree', 'served_no_answer', 'unclear', 'not_compared')",
+          "fk": null
+        },
+        {
+          "name": "comparison_detail",
+          "type": "JSONB",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'{}'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "latency_ms",
+          "type": "INTEGER",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "002_mko_review_publish.sql"
+    },
+    "supabase|public.user_profiles": {
+      "db": "supabase",
+      "schema": "public",
+      "name": "user_profiles",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "user_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": true,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "role",
+          "type": "VARCHAR(50)",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "'user'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "full_name",
+          "type": "VARCHAR(255)",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "email",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(50)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'approved'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "supabase_schema.sql"
+    },
+    "supabase|public.courses": {
+      "db": "supabase",
+      "schema": "public",
+      "name": "courses",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(255)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "title_en",
+          "type": "VARCHAR(255)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "logo",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "careers",
+          "type": "TEXT[]",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "detail",
+          "type": "JSONB",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_by",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "auth.uid()",
+          "check": null,
+          "fk": {
+            "ref_table": "auth.users",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "updated_by",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.user_profiles",
+            "ref_column": "user_id",
+            "on_delete": null
+          }
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "supabase_schema.sql"
+    },
+    "supabase|public.news": {
+      "db": "supabase",
+      "schema": "public",
+      "name": "news",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(255)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "category",
+          "type": "VARCHAR(100)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "date",
+          "type": "DATE",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "image",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(50)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "'published'",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_by",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "auth.uid()",
+          "check": null,
+          "fk": {
+            "ref_table": "auth.users",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "updated_by",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "public.user_profiles",
+            "ref_column": "user_id",
+            "on_delete": null
+          }
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "supabase_schema.sql"
+    },
+    "supabase|public.ai_settings": {
+      "db": "supabase",
+      "schema": "public",
+      "name": "ai_settings",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "1",
+          "check": "id = 1",
+          "fk": null
+        },
+        {
+          "name": "model",
+          "type": "VARCHAR(255)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_by",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "auth.users",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "supabase_schema.sql"
+    },
+    "supabase|public.rag_documents": {
+      "db": "supabase",
+      "schema": "public",
+      "name": "rag_documents",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "source_type",
+          "type": "VARCHAR(50)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": "source_type IN ('major', 'news', 'article', 'knowledge')",
+          "fk": null
+        },
+        {
+          "name": "source_id",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(255)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "chunk_index",
+          "type": "INTEGER",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": "0",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "embedding",
+          "type": "vector",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [
+        [
+          "source_type",
+          "source_id",
+          "chunk_index"
+        ]
+      ],
+      "source": "supabase_schema.sql"
+    },
+    "supabase|public.knowledge_articles": {
+      "db": "supabase",
+      "schema": "public",
+      "name": "knowledge_articles",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(255)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "file_path",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "file_name",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "file_size",
+          "type": "BIGINT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_by",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "auth.users",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        },
+        {
+          "name": "updated_by",
+          "type": "UUID",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": {
+            "ref_table": "auth.users",
+            "ref_column": "id",
+            "on_delete": null
+          }
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "supabase_schema.sql"
+    },
+    "supabase|public.external_news": {
+      "db": "supabase",
+      "schema": "public",
+      "name": "external_news",
+      "columns": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "not_null": true,
+          "pk": true,
+          "unique": false,
+          "default": "gen_random_uuid()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(255)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "image_url",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "detail_url",
+          "type": "TEXT",
+          "not_null": true,
+          "pk": false,
+          "unique": true,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "published_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "published_text",
+          "type": "VARCHAR(255)",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "source",
+          "type": "VARCHAR(100)",
+          "not_null": true,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "slug",
+          "type": "VARCHAR(255)",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "facebook_url",
+          "type": "TEXT",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": null,
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "synced_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "not_null": false,
+          "pk": false,
+          "unique": false,
+          "default": "NOW()",
+          "check": null,
+          "fk": null
+        }
+      ],
+      "pk": [
+        "id"
+      ],
+      "table_fks": [],
+      "checks": [],
+      "uniques": [],
+      "source": "supabase_schema.sql"
+    }
+  },
+  "views": [
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "v_published_curricula",
+      "definition": "SELECT * FROM mko.curricula WHERE status = 'published'",
+      "source": "001_mko_structured.sql"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "v_published_field_values",
+      "definition": "SELECT fv.* FROM mko.field_values fv JOIN mko.curricula c ON c.id = fv.curriculum_id WHERE c.status = 'published' AND fv.status = 'verified'",
+      "source": "001_mko_structured.sql"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "v_published_list_items",
+      "definition": "SELECT li.* FROM mko.list_items li JOIN mko.curricula c ON c.id = li.curriculum_id WHERE c.status = 'published' AND li.status = 'verified'",
+      "source": "001_mko_structured.sql"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "v_live_publication",
+      "definition": "SELECT id, published_at, published_by, policy, parser_version FROM mko.publications ORDER BY published_at DESC LIMIT 1",
+      "source": "002_mko_review_publish.sql"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "v_live_values",
+      "definition": "SELECT v.publication_id, v.course_id, c.title AS course_title, v.field_key, v.value_text, v.value_int, v.document_id, v.source_filename, v.page_start, v.page_end, v.quote, v.reviewed_by FROM mko.published_values v JOIN mko.v_live_publication p ON p.id = v.publication_id JOIN public.courses c ON c.id = v.course_id WHERE c.is_active",
+      "source": "002_mko_review_publish.sql"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "name": "v_live_list_items",
+      "definition": "SELECT i.publication_id, i.course_id, c.title AS course_title, i.item_type, i.seq, i.text, i.document_id, i.source_filename, i.page_start, i.page_end, i.reviewed_by FROM mko.published_list_items i JOIN mko.v_live_publication p ON p.id = i.publication_id JOIN public.courses c ON c.id = i.course_id WHERE c.is_active",
+      "source": "002_mko_review_publish.sql"
+    }
+  ],
+  "indexes": [
+    {
+      "db": "postgres",
+      "schema": "public",
+      "table": "user_requirements",
+      "name": "idx_user_requirements_user",
+      "unique": false,
+      "method": "btree",
+      "columns": "user_id"
+    },
+    {
+      "db": "postgres",
+      "schema": "public",
+      "table": "user_requirements",
+      "name": "idx_user_requirements_type",
+      "unique": false,
+      "method": "btree",
+      "columns": "req_type"
+    },
+    {
+      "db": "postgres",
+      "schema": "public",
+      "table": "courses",
+      "name": "idx_courses_tags",
+      "unique": false,
+      "method": "gin",
+      "columns": "tags"
+    },
+    {
+      "db": "postgres",
+      "schema": "public",
+      "table": "course_chunks",
+      "name": "idx_course_chunks_embedding",
+      "unique": false,
+      "method": "ivfflat",
+      "columns": "embedding vector_cosine_ops"
+    },
+    {
+      "db": "postgres",
+      "schema": "public",
+      "table": "course_chunks",
+      "name": "idx_course_chunks_course",
+      "unique": false,
+      "method": "btree",
+      "columns": "course_id"
+    },
+    {
+      "db": "postgres",
+      "schema": "public",
+      "table": "chat_messages",
+      "name": "idx_chat_messages_session",
+      "unique": false,
+      "method": "btree",
+      "columns": "session_id"
+    },
+    {
+      "db": "postgres",
+      "schema": "public",
+      "table": "recommendations",
+      "name": "idx_recommendations_user",
+      "unique": false,
+      "method": "btree",
+      "columns": "user_id"
+    },
+    {
+      "db": "postgres",
+      "schema": "public",
+      "table": "chat_answer_cache",
+      "name": "idx_chat_answer_cache_version",
+      "unique": false,
+      "method": "btree",
+      "columns": "corpus_version"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "table": "extraction_runs",
+      "name": "idx_extraction_runs_document",
+      "unique": false,
+      "method": "btree",
+      "columns": "document_id, started_at DESC"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "table": "document_sections",
+      "name": "idx_document_sections_run",
+      "unique": false,
+      "method": "btree",
+      "columns": "run_id, section_key"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "table": "field_values",
+      "name": "idx_field_values_lookup",
+      "unique": false,
+      "method": "btree",
+      "columns": "curriculum_id, field_key, status"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "table": "field_values",
+      "name": "idx_field_values_run",
+      "unique": false,
+      "method": "btree",
+      "columns": "run_id"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "table": "list_items",
+      "name": "idx_list_items_lookup",
+      "unique": false,
+      "method": "btree",
+      "columns": "curriculum_id, item_type, status"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "table": "review_decisions",
+      "name": "uq_review_decisions_active",
+      "unique": true,
+      "method": "btree",
+      "columns": "document_id, field_key, value_key"
+    },
+    {
+      "db": "postgres",
+      "schema": "mko",
+      "table": "shadow_answers",
+      "name": "idx_shadow_answers_created",
+      "unique": false,
+      "method": "btree",
+      "columns": "created_at DESC"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "user_profiles",
+      "name": "idx_user_profiles_user_id",
+      "unique": false,
+      "method": "btree",
+      "columns": "user_id"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "user_profiles",
+      "name": "idx_user_profiles_role",
+      "unique": false,
+      "method": "btree",
+      "columns": "role"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "user_profiles",
+      "name": "idx_user_profiles_status",
+      "unique": false,
+      "method": "btree",
+      "columns": "status"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "courses",
+      "name": "idx_courses_created_at",
+      "unique": false,
+      "method": "btree",
+      "columns": "created_at DESC"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "news",
+      "name": "idx_news_date",
+      "unique": false,
+      "method": "btree",
+      "columns": "date DESC"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "news",
+      "name": "idx_news_created_at",
+      "unique": false,
+      "method": "btree",
+      "columns": "created_at DESC"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "news",
+      "name": "idx_news_category",
+      "unique": false,
+      "method": "btree",
+      "columns": "category"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "news",
+      "name": "idx_news_status",
+      "unique": false,
+      "method": "btree",
+      "columns": "status"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "rag_documents",
+      "name": "idx_rag_documents_source",
+      "unique": false,
+      "method": "btree",
+      "columns": "source_type, source_id"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "rag_documents",
+      "name": "idx_rag_documents_embedding",
+      "unique": false,
+      "method": "ivfflat",
+      "columns": "embedding vector_cosine_ops"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "knowledge_articles",
+      "name": "idx_knowledge_articles_created_at",
+      "unique": false,
+      "method": "btree",
+      "columns": "created_at DESC"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "external_news",
+      "name": "idx_external_news_published_at",
+      "unique": false,
+      "method": "btree",
+      "columns": "published_at DESC"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "external_news",
+      "name": "idx_external_news_source",
+      "unique": false,
+      "method": "btree",
+      "columns": "source"
+    },
+    {
+      "db": "supabase",
+      "schema": "public",
+      "table": "external_news",
+      "name": "idx_external_news_slug",
+      "unique": true,
+      "method": "btree",
+      "columns": "slug"
+    }
+  ]
+}

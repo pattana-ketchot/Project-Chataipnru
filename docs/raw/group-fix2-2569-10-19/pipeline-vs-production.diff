@@ -1,0 +1,139 @@
+### diff: pipeline/mko/out/cs66_subjects.json  (mkoload = ฉบับที่ใช้เผยแพร่ production เมื่อ 14 ต.ค. 2569)
+--- mkoload/pipeline/mko/out/cs66_subjects.json	2026-10-14 06:44:50.000000000 +0000
++++ release-groupfix2/pipeline/mko/out/cs66_subjects.json	2026-10-18 23:49:40.862819668 +0000
+@@ -1613,14 +1613,15 @@
+       "category_path": [
+         "กลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา"
+       ],
+-      "requirement": "choose_group",
++      "requirement": "required_in_group",
+       "evidence": {
+         "file": "cs66.pdf",
+         "pdf_page": 19,
+-        "quote": "4124813 การเตรียมความพร้อมฝึกประสบการณ์วิชาชีพและสหกิจศึกษา Preparation for Professional Internship and Cooperative Education 2(90)"
++        "quote": "2.4) กลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ไม่น้อยกว่า 7 หน่วยกิต 4124813 การเตรียมความพร้อมฝึกประสบการณ์วิชาชีพและสหกิจศึกษา Preparation for Professional Internship and Cooperative Education 2(90) ให้เลือกรายวิชาต่อไปนี้ ไม่น้อยกว่า 5 หน่วยกิต"
+       },
+       "status": "candidate",
+-      "prereq_checked_page": 54
++      "prereq_checked_page": 54,
++      "_หมายเหตุการจัดประเภท": "เล่มวางบรรทัด 'ให้เลือกรายวิชาต่อไปนี้ ไม่น้อยกว่า 5 หน่วยกิต' ไว้หลังวิชานี้ กติกาการเลือกจึงใช้กับ 4124814 และ 4124815 เท่านั้น ส่วนวิชานี้ต้องเรียน (2 + อย่างน้อย 5 = ไม่น้อยกว่า 7 ตรงกับหัวข้อกลุ่ม) — ไม่นับรวมในยอด 'วิชาบังคับ 35 วิชา 96 หน่วยกิต' ซึ่งเป็นยอดของศึกษาทั่วไปบังคับ 24 + แกน 18 + เฉพาะด้าน 54 และไม่รวมกลุ่มนี้"
+     },
+     {
+       "code": "4124814",
+
+### diff: pipeline/mko/subjects_db.py
+--- mkoload/pipeline/mko/subjects_db.py	2026-10-14 09:52:28.323467110 +0000
++++ release-groupfix2/pipeline/mko/subjects_db.py	2026-10-18 23:49:41.144827348 +0000
+@@ -31,6 +31,22 @@
+ CHECKS = 0
+ FAILURES: list[str] = []
+ 
++# ค่าที่ requirement ใช้ได้ — ต้องตรงกับข้อบังคับใน db/migrations/009
++#
++#   required           ต้องเรียนทุกวิชา และนับรวมในยอด "วิชาบังคับ" ของหลักสูตร
++#   elective           วิชาเลือก
++#   choose_group       อยู่ในชุดที่ให้เลือกให้ครบหน่วยกิตขั้นต่ำของกลุ่ม
++#   required_in_group  ต้องเรียน แต่อยู่ในกลุ่มที่มีเพดานขั้นต่ำ จึงไม่นับรวมในยอด
++#                      "วิชาบังคับ" ที่เล่มพิมพ์ไว้ (ดูเหตุผลเต็มใน migration 009)
++REQUIREMENTS = ("required", "elective", "choose_group", "required_in_group")
++
++# (ชื่อกลุ่ม, ขั้นต่ำของกลุ่ม, ขั้นต่ำของส่วนที่ให้เลือก) — ตัวเลขมาจากเล่มโดยตรง
++# cs66.pdf หน้า 19: "กลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ไม่น้อยกว่า 7 หน่วยกิต"
++# และ "ให้เลือกรายวิชาต่อไปนี้ ไม่น้อยกว่า 5 หน่วยกิต"
++GROUP_FLOORS = (
++    ("กลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา", 7, 5),
++)
++
+ 
+ def check(label: str, ok: bool, detail: str = "") -> bool:
+     global CHECKS
+@@ -77,8 +93,9 @@
+     check("ไม่มีแถวค้างสถานะ needs_review",
+           not [s for s in subjects if s.get("status") == "needs_review"],
+           str([s["code"] for s in subjects if s.get("status") == "needs_review"][:8]))
+-    check("ข้อกำหนดอยู่ในสามค่าที่กำหนด",
+-          all(s["requirement"] in ("required", "elective", "choose_group") for s in subjects))
++    check("ข้อกำหนดอยู่ในสี่ค่าที่กำหนด",
++          all(s["requirement"] in REQUIREMENTS for s in subjects),
++          str(sorted({s["requirement"] for s in subjects} - set(REQUIREMENTS))))
+     codes = [s["code"] for s in subjects]
+     dupes = sorted({c for c in codes if codes.count(c) > 1})
+     # รหัสซ้ำไม่ใช่เหตุให้ตก ถ้าเล่มพิมพ์ซ้ำจริง — แต่ต้องถูกยุบเหลือแถวเดียวตอนนำเข้า
+@@ -88,9 +105,34 @@
+ 
+     required_credits = sum(s["credits"] or 0 for s in subjects if s["requirement"] == "required")
+     # ตรวจยอดกับหน่วยกิตของกลุ่มที่เล่มระบุไว้: ศึกษาทั่วไปบังคับ 24 + แกน 18 + เฉพาะด้าน 54
+-    check("หน่วยกิตรวมของวิชาบังคับตรงกับหน่วยกิตกลุ่มที่เล่มระบุ (24+18+54)",
++    #
++    # **ยอดนี้ไม่รวมกลุ่มฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา และไม่รวมกลุ่มวิชาเลือก**
++    # เพราะเล่มนับสองกลุ่มนั้นแยกต่างหาก (cs66.pdf หน้า 15-16 และ 19)
++    #     หมวดวิชาเฉพาะ ไม่น้อยกว่า 94 = แกน 18 + เฉพาะด้าน 54 + เลือก 15 + ฝึกประสบการณ์ 7
++    # วิชาที่ต้องเรียนแต่อยู่ในกลุ่มที่มีเพดานขั้นต่ำ จึงใช้ค่า required_in_group
++    # ไม่ใช่ required — ถ้านับรวมเข้ามา ยอดจะกลายเป็น 98 ซึ่งไม่ตรงกับตัวเลขใดในเล่ม
++    check("หน่วยกิตรวมของวิชาบังคับตรงกับหน่วยกิตกลุ่มที่เล่มระบุ (24+18+54 = 96 ไม่รวมกลุ่มฝึกประสบการณ์และกลุ่มวิชาเลือก)",
+           required_credits == 96, f"ได้ {required_credits}")
+ 
++    # ---- กลุ่มที่มีเพดานขั้นต่ำ: ตรวจว่าชุดวิชาที่จัดไว้ทำให้ถึงขั้นต่ำที่เล่มระบุได้จริง ----
++    #
++    # ตรวจจาก "สิ่งที่เล่มบอก" ไม่ใช่จากความสมเหตุสมผล — cs66.pdf หน้า 19 บอกสองเลข
++    # คือขั้นต่ำของกลุ่ม 7 หน่วยกิต และขั้นต่ำของส่วนที่ให้เลือก 5 หน่วยกิต
++    for group, floor_group, floor_choice in GROUP_FLOORS:
++        rows = [s for s in subjects if group in (s.get("category_path") or [])]
++        if not rows:
++            continue
++        must = sum(s["credits"] or 0 for s in rows if s["requirement"] == "required_in_group")
++        options = [s["credits"] or 0 for s in rows if s["requirement"] == "choose_group"]
++        check(f"[{group}] มีวิชาที่ต้องเรียนและวิชาให้เลือกครบทั้งสองฝั่ง",
++              must > 0 and len(options) >= 2,
++              f"ต้องเรียน {must} หน่วยกิต · ตัวเลือก {options}")
++        check(f"[{group}] เรียนน้อยที่สุดแล้วยังถึงขั้นต่ำ {floor_group} หน่วยกิตที่เล่มระบุ",
++              bool(options) and must + min(options) >= floor_group,
++              f"ต้องเรียน {must} + ตัวเลือกน้อยสุด {min(options) if options else 0}")
++        check(f"[{group}] ตัวเลือกทุกตัวมีหน่วยกิตไม่น้อยกว่า {floor_choice} ตามที่เล่มระบุ",
++              all(c >= floor_choice for c in options), f"ตัวเลือก {options}")
++
+     known = set(codes)
+     bad = [f"{p['subject_code']}->{p['prerequisite_code']}" for p in prereqs
+            if p["subject_code"] not in known or p["prerequisite_code"] not in known]
+@@ -194,6 +236,11 @@
+         before = {
+             "values": conn.execute(text("SELECT count(*) FROM mko.v_live_values")).scalar_one(),
+             "list_items": conn.execute(text("SELECT count(*) FROM mko.v_live_list_items")).scalar_one(),
++            # นับไว้ก่อนด้วย เพื่อให้ตรวจรอบที่ไม่ได้ส่ง --list-items ได้อย่างมีความหมาย
++            # (ดูเหตุผลที่จุดตรวจท้ายไฟล์)
++            "careers_math": conn.execute(text(
++                "SELECT count(*) FROM mko.v_live_list_items "
++                "WHERE item_type = 'career' AND course_title LIKE '%คณิตศาสตร์%'")).scalar_one(),
+         }
+         print(f"ก่อนเผยแพร่: v_live_values {before['values']} แถว · "
+               f"v_live_list_items {before['list_items']} แถว")
+@@ -335,8 +382,21 @@
+         n_career = conn.execute(text("""
+             SELECT count(*) FROM mko.v_live_list_items
+              WHERE item_type = 'career' AND course_title LIKE '%คณิตศาสตร์%'""")).scalar_one()
+-        check("คณิตศาสตร์มีรายการอาชีพแล้ว (เดิมยังไม่พบในข้อมูลของระบบ)",
+-              n_career == len(items), f"{n_career} ข้อ")
++        # จุดตรวจนี้เทียบกับอะไร ขึ้นกับว่ารอบนี้ส่งรายการอาชีพมาด้วยหรือไม่
++        #
++        # รอบที่ส่งมา   -> ต้องได้ครบเท่าจำนวนที่ส่ง (เกณฑ์เดิม ไม่ผ่อนลง)
++        # รอบที่ไม่ส่ง  -> ต้องเท่ากับก่อนเผยแพร่พอดี คือของเดิมถูกคัดลอกมาครบ ไม่หายไป
++        #
++        # เดิมเทียบกับ len(items) เสมอ รอบที่เผยแพร่เฉพาะรายวิชาจึงตกทุกครั้ง
++        # ทั้งที่ของเดิมถูกคัดลอกมาครบถ้วน (เจอ 19 ต.ค. 2569 ตอนแก้ requirement ของ 4124813)
++        # การแก้นี้ไม่ได้ปิดจุดตรวจ แต่เปลี่ยนให้เทียบกับสิ่งที่รอบนั้นควรได้จริง
++        if items:
++            check("คณิตศาสตร์มีรายการอาชีพครบตามที่ส่งมา",
++                  n_career == len(items), f"ได้ {n_career} จาก {len(items)} ข้อ")
++        else:
++            check("รายการอาชีพเดิมถูกคัดลอกมาครบ (รอบนี้ไม่ได้ส่ง --list-items)",
++                  n_career == before["careers_math"],
++                  f"ก่อน {before['careers_math']} หลัง {n_career} ข้อ")
+ 
+         print()
+         print(f"จุดตรวจ {CHECKS} จุด")
+
+### diff: pipeline/mko/out/ma64_careers.json  (ต้องไม่มีความต่าง)
+(ไม่มีความต่าง — ไฟล์เดียวกันทุกไบต์)
+
+### diff: pipeline/mko/verify_publish_content.py  (ต้องไม่มีความต่าง)
+(ไม่มีความต่าง — ไฟล์เดียวกันทุกไบต์)

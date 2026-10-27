@@ -1,0 +1,100 @@
+@startuml dfd-level1b
+' =====================================================================
+' DFD Level 1 (ข) — เส้นทางเตรียมข้อมูล
+' ระบบแนะนำหลักสูตร SCI Advisor · ปรับปรุง 25 ต.ค. 2569 ตามผลตรวจทาน
+'
+' สิ่งที่แก้จากฉบับก่อน
+'   1. เลขกระบวนการเปลี่ยนจาก P0/P7/P8 เป็น P7/P8/P9 ให้ต่อเนื่องกับภาพ (ก) ที่ใช้ P1-P6
+'      เลข 0 สงวนไว้ให้แผนภาพบริบทเท่านั้น
+'   2. ใช้สัญลักษณ์มาตรฐานและตั้งชื่อเส้นด้วยชื่อข้อมูล แยกคำขอกับข้อมูลตอบกลับ
+'   3. ผู้กระทำภายนอกใช้ชื่อเดียวกับภาพ (ก) และ Level 0 — "ผู้ดูแล" ไม่ใช่ "ผู้อนุมัติ"
+'   4. ตัด Ollama ออกจากผู้กระทำภายนอก (เป็นคอนเทนเนอร์ในระบบ)
+'   5. ย้าย note ยาวไปเป็นคำอธิบายใต้ภาพใน SCI_ADVISOR_DIAGRAMS.md
+'
+' หลักฐาน (ตรวจ 25 ต.ค. 2569 แบบอ่านอย่างเดียว):
+'   P7 backend/app/api/routes/crawl_review.py · services/crawl_review.py:225
+'   P8 pipeline/crawl/approve.py · pipeline/ingest.py · pipeline/chunker.py:30-31
+'      docker-compose.worker.yml (profiles: ["worker"] · EMBED_MODEL=bge-m3 · EMBED_DIM=1024)
+'   P9 pipeline/mko/extract.py, review.py, publish.py · pipeline/mko/subjects_db.py
+'   docker ps — ไม่มีคอนเทนเนอร์ ingest-worker ทำงานอยู่
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+skinparam ArrowFontSize 11
+skinparam defaultFontSize 13
+
+' ---------- ผู้กระทำภายนอก ----------
+rectangle "ผู้ดูแล\n(เนื้อหา / ระบบ)" as staff
+rectangle "ผู้ดูแลเซิร์ฟเวอร์" as ops
+
+' ---------- กระบวนการ ----------
+usecase "P7\nตรวจรับและอนุมัติ\nไฟล์ที่เตรียมไว้" as P7
+usecase "P8\nนำเข้าเอกสาร\nเข้าคลังเวกเตอร์" as P8
+usecase "P9\nสกัดข้อมูลหลักสูตร\nตรวจรับ และเผยแพร่" as P9
+
+' ---------- คลังข้อมูล ----------
+database "D9 การอนุมัตินำเข้า" as D9
+database "D7 ไฟล์บนดิสก์" as D7
+database "D2 คลังเอกสารและเวกเตอร์" as D2
+database "D6 ข้อมูลหลักสูตรที่เผยแพร่" as D6
+
+' ---------- P7 ----------
+staff --> P7 : คำสั่งอนุมัติไฟล์
+P7 --> staff : รายการไฟล์ที่รออนุมัติ + ค่า sha256
+D9 --> P7 : รายการไฟล์ที่ครawler เตรียมไว้
+P7 --> D9 : ระเบียนการอนุมัติ (decision = approve)
+
+' ---------- P8 ----------
+ops --> P8 : คำสั่งรันตัวนำเข้า
+P8 --> ops : จำนวนชิ้นที่เขียน · รหัสออกเมื่อมีงานล้ม
+D9 --> P8 : การอนุมัติที่ยังไม่ถูกถอน
+P8 --> D9 : เวลาเริ่มและเวลาจบการนำเข้า
+D7 --> P8 : ไฟล์ PDF จาก staging
+P8 --> D7 : สำเนาไฟล์ที่นำเข้าแล้ว
+P8 --> D2 : ระเบียนเอกสาร + ชิ้นข้อความ + เวกเตอร์ 1024 มิติ
+
+' ---------- P9 ----------
+ops --> P9 : คำสั่งสกัด / ตรวจรับ / เผยแพร่
+P9 --> ops : ผลการตรวจรับ + เลขการเผยแพร่
+D2 --> P9 : ข้อความของเอกสารต้นฉบับ
+P9 --> D6 : ค่าที่สกัดได้ + หลักฐานเลขหน้า + การเผยแพร่
+
+@enduml

@@ -1,0 +1,87 @@
+erDiagram
+  PUBLIC__CHAT_SESSIONS |o--o{ PUBLIC__RECOMMENDATIONS : "session_id set-null"
+  PUBLIC__CHAT_SESSIONS ||--o{ PUBLIC__CHAT_MESSAGES : "session_id cascade"
+  PUBLIC__COURSES ||--o{ PUBLIC__COURSE_CHUNKS : "course_id cascade"
+  PUBLIC__COURSES ||--o{ PUBLIC__COURSE_DOCUMENTS : "course_id cascade"
+  PUBLIC__COURSES ||--o{ PUBLIC__RECOMMENDATIONS : "course_id cascade"
+  PUBLIC__COURSE_DOCUMENTS ||--o{ PUBLIC__COURSE_CHUNKS : "document_id cascade"
+  PUBLIC__USERS |o--o{ PUBLIC__COURSE_DOCUMENTS : "uploaded_by"
+  PUBLIC__USERS ||--o{ PUBLIC__CHAT_SESSIONS : "user_id cascade"
+  PUBLIC__USERS ||--o{ PUBLIC__RECOMMENDATIONS : "user_id cascade"
+  PUBLIC__USERS ||--o{ PUBLIC__USER_PROFILES : "user_id cascade"
+  PUBLIC__USERS ||--o{ PUBLIC__USER_REQUIREMENTS : "user_id cascade"
+
+  PUBLIC__CHAT_ANSWER_CACHE {
+    text question_key PK
+    text corpus_version
+    text status
+    integer hits
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__CHAT_MESSAGES {
+    uuid id PK
+    uuid session_id FK
+    text role
+    text content
+    more คอลัมน์อื่นอีก_1_รายการ
+  }
+  PUBLIC__CHAT_SESSIONS {
+    uuid id PK
+    uuid user_id FK
+    timestamptz started_at
+    more คอลัมน์อื่นอีก_1_รายการ
+  }
+  PUBLIC__COURSE_CHUNKS {
+    uuid id PK
+    uuid course_id FK
+    uuid document_id FK
+    integer chunk_index
+    integer page_number
+    vector_1024 embedding
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__COURSE_DOCUMENTS {
+    uuid id PK
+    uuid course_id FK
+    text original_filename
+    text file_sha256
+    text extraction_status
+    uuid uploaded_by FK
+    more คอลัมน์อื่นอีก_4_รายการ
+  }
+  PUBLIC__COURSES {
+    uuid id PK
+    text code
+    text title
+    boolean is_active
+    more คอลัมน์อื่นอีก_9_รายการ
+  }
+  PUBLIC__RECOMMENDATIONS {
+    uuid id PK
+    uuid user_id FK
+    uuid course_id FK
+    uuid session_id FK
+    numeric score
+    text rationale
+    more คอลัมน์อื่นอีก_3_รายการ
+  }
+  PUBLIC__USER_PROFILES {
+    uuid user_id PK,FK
+    text education_level
+    text career_goal
+    more คอลัมน์อื่นอีก_7_รายการ
+  }
+  PUBLIC__USER_REQUIREMENTS {
+    uuid id PK
+    uuid user_id FK
+    text req_type
+    text req_value
+    smallint priority
+    more คอลัมน์อื่นอีก_1_รายการ
+  }
+  PUBLIC__USERS {
+    uuid id PK
+    citext email
+    boolean is_admin
+    more คอลัมน์อื่นอีก_5_รายการ
+  }

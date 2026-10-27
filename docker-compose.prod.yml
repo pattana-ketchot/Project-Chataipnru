@@ -81,9 +81,23 @@ services:
       # หน้าเว็บเรียก API ผ่าน origin เดียวกันอยู่แล้ว จึงไม่ต้องตั้ง CORS
       # แต่ใส่ไว้เผื่อมีการเรียกตรงจากเครื่องมือทดสอบ
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-["http://localhost:3000"]}
+      # ไฟล์ที่ผู้ดูแลอัปโหลด — ที่อยู่ใหม่ของสิ่งที่เคยอยู่ใน Supabase Storage (Phase 4)
+      # ต่างจาก documents ตรงที่ต้องเขียนได้ จึง mount แบบอ่านเขียน
+      UPLOADS_DIR: ${UPLOADS_DIR:-/srv/uploads}
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-10485760}
+      # ส่งอีเมลรีเซ็ตรหัสผ่าน/ยืนยันอีเมล — ไม่ตั้งค่า = ส่งไม่ได้ แต่ส่วนอื่นทำงานปกติ
+      # ระหว่างที่ยังไม่ได้ตั้งค่า ผู้ดูแลออกลิงก์ให้ได้ที่ /api/auth/admin/reset-link
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
     volumes:
       # เอกสาร มคอ.2 ต้นฉบับ อ่านอย่างเดียว — backend ไม่เขียนอะไรลงโฟลเดอร์นี้
       - ./documents:/srv/documents:ro
+      # เขียนได้ ต่างจาก documents ที่อ่านอย่างเดียว เพราะผู้ดูแลอัปโหลดไฟล์เข้ามาที่นี่
+      - ./uploads:/srv/uploads
 
   frontend:
     build:

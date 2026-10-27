@@ -1,0 +1,140 @@
+@startuml er-docs
+set separator none
+' =====================================================================
+' ER Diagram — schema public: เอกสาร คลังเวกเตอร์ แคช และสถิติ
+' แยกออกมาจาก er.puml เพราะวาดรวม 14 ตารางแล้วภาพกว้าง 2,746 px
+' ย่อลงหน้า A4 แนวนอนแล้วตัวอักษรเหลือราว 1.2 มม. ซึ่งอ่านไม่ออก
+' ปรับปรุง 25 ต.ค. 2569
+'
+' ข้อมูลทั้งหมดตรวจจากฐาน production เมื่อ 25 ต.ค. 2569 แบบอ่านอย่างเดียว
+'   pg_constraint  : ชนิดและ on delete ของทุก FK
+'   pg_attribute   : คอลัมน์ FK ตัวใดเป็น NOT NULL ตัวใด null ได้ (ใช้กำหนด cardinality)
+'   pg_index       : primary key ของทุกตาราง
+'   query_to_xml   : จำนวนแถวของทุกตาราง
+'
+' การอ่าน cardinality ในภาพนี้
+'   ||--o{   FK เป็น NOT NULL  -> ลูกต้องมีแม่เสมอ หนึ่งแม่มีลูกได้หลายตัว
+'   |o--o{   FK เป็น null ได้   -> ลูกอาจไม่มีแม่ (ON DELETE SET NULL หรือ NO ACTION)
+'   ||--o|   FK เป็น primary key ของลูกด้วย -> หนึ่งแม่มีลูกได้ไม่เกินหนึ่ง
+'
+' schema web อยู่ในไฟล์ er-web.puml · schema mko อยู่ใน er-mko.puml
+' ฝั่ง Supabase ซึ่งเป็นคนละฐาน อยู่ใน er-supabase.puml
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam sequenceGroupBackgroundColor white
+skinparam sequenceGroupBorderColor black
+skinparam sequenceGroupHeaderFontColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam titleBackgroundColor white
+skinparam legendBackgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — ลบบรรทัดนี้บรรทัดเดียวก็กลับเป็นภาพสี
+skinparam shadowing false
+skinparam defaultFontSize 13
+hide circle
+
+entity "users" as users {
+  id : uuid <<PK>>
+  ..
+  (รายละเอียดอยู่ใน er.puml)
+}
+entity "chat_sessions" as chats {
+  id : uuid <<PK>>
+  ..
+  (รายละเอียดอยู่ใน er.puml)
+}
+entity "recommendations" as recos {
+  id : uuid <<PK>>
+  ..
+  (รายละเอียดอยู่ใน er.puml)
+}
+
+package "เอกสาร มคอ.2 และคลังเวกเตอร์" {
+  entity "courses" as courses {
+    id : uuid <<PK>>
+    --
+    title : text
+    is_active : boolean
+  }
+  entity "course_documents" as docs {
+    id : uuid <<PK>>
+    --
+    course_id : uuid <<FK>>
+    uploaded_by : uuid <<FK, null ได้>>
+    original_filename, file_sha256
+    storage_path, extraction_status
+  }
+  entity "course_chunks" as chunks {
+    id : uuid <<PK>>
+    --
+    course_id : uuid <<FK>>
+    document_id : uuid <<FK>>
+    chunk_index : int
+    page_number : int
+    content : text
+    embedding : vector(1024)
+  }
+}
+
+package "แคชและสถิติ (ไม่มี FK)" {
+  entity "chat_answer_cache" as cache {
+    question_key : text <<PK>>
+    --
+    corpus_version : text
+    status, reply
+    citations : jsonb
+    hits, created_at, last_used_at
+  }
+  entity "llm_usage_daily" as usage {
+    day : date <<PK>>
+    event : text <<PK>>
+    --
+    n : bigint
+    updated_at : timestamptz
+  }
+}
+
+courses ||--o{ docs
+courses ||--o{ chunks
+courses ||--o{ recos
+docs ||--o{ chunks
+users |o--o{ docs
+
+@enduml

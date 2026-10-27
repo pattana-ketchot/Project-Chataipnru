@@ -1,0 +1,163 @@
+--- a/backend/app/services/course_scope.py  (image level-2569-10-27)
++++ b/backend/app/services/course_scope.py  (ซ้อน patch 28 ต.ค.)
+@@ -465,6 +465,23 @@
+     return _LEVEL_LABEL.get(level, level)
+ 
+ 
++def without_degree_level(text: str) -> str:
++    """
++    ข้อความที่ตัดคำบอกระดับปริญญาออก
++
++    ใช้ดูว่า "ข้อความนี้พูดแค่ระดับปริญญา หรือมีเรื่องอื่นด้วย" — เมื่อระบบถามกลับว่า
++    เอาระดับไหน แล้วผู้ใช้ตอบสั้น ๆ ว่า "ปริญญาโท" ข้อความจะไม่เหลืออะไรหลังตัด
++    ซึ่งแปลว่าเป็นคำตอบของคำถามที่ระบบถาม ไม่ใช่คำถามใหม่
++
++    **เรียกหลังตัดชื่อหลักสูตรออกแล้วเท่านั้น** เพราะรูปแบบของระดับปริญญาตรีคือ
++    ชื่อปริญญาที่ลงท้ายด้วย "บัณฑิต" ซึ่งกินชื่อหลักสูตรอย่าง
++    "การแพทย์แผนไทยประยุกต์บัณฑิต" ไปทั้งชื่อถ้าเรียกก่อน
++    """
++    for pattern, _level in _DEGREE_LEVEL_PATTERNS:
++        text = pattern.sub(" ", text)
++    return text
++
++
+ def _build(ids: list[uuid.UUID], name: str, question: str, strip: str | None = None) -> CourseScope:
+     return CourseScope(course_ids=ids, matched_name=name, search_text=_search_text(question, [strip or name]))
+ 
+--- a/backend/app/services/follow_up.py  (image level-2569-10-27)
++++ b/backend/app/services/follow_up.py  (ซ้อน patch 28 ต.ค.)
+@@ -1,5 +1,6 @@
+ """
+-คำถามต่อเนื่องที่ผู้ใช้เปลี่ยนเฉพาะหลักสูตรหรือปีของหลักสูตร เช่น "แล้ว <ชื่อหลักสูตร> ล่ะ" หรือ "แล้ว พ.ศ. 2564 ล่ะ"
++คำถามต่อเนื่องที่ผู้ใช้เปลี่ยนเฉพาะหลักสูตร ปี หรือระดับปริญญาของคำถามก่อนหน้า
++เช่น "แล้ว <ชื่อหลักสูตร> ล่ะ" · "แล้ว พ.ศ. 2564 ล่ะ" · "ปริญญาโท"
+ 
+ ปัญหาที่แก้ (docs/MKO_PHASE2_SHADOW_EVAL.md ข้อ 4)
+ ---------------------------------------------------
+@@ -28,7 +29,8 @@
+ from sqlalchemy.orm import Session
+ 
+ from app.models.course import Course
+-from app.services.course_scope import _distinctive_name, resolve_scopes, without_programme_names
++from app.services.course_scope import (_distinctive_name, degree_level_label, requested_degree_level,
++                                       resolve_scopes, without_degree_level, without_programme_names)
+ from app.services.query_expansion import ALIASES, _alias_present
+ from app.services.structured_intent import years_in
+ 
+@@ -36,13 +38,20 @@
+ # ปีที่ระบุ พร้อมคำนำหน้า พ.ศ./ค.ศ. ถ้ามี
+ _YEAR_PHRASE = re.compile(r"(?:[พค]\.?\s*ศ\.?\s*)?(?<!\d)(?:25|19|20)\d{2}(?!\d)")
+ # คำที่ไม่บอกเรื่องที่ถาม: คำเชื่อม คำลงท้าย คำห่อชื่อหลักสูตร และเครื่องหมาย
++#
++# "เอา" และ "ขอ" คือคำเลือกที่คนใช้ตอบคำถามที่ระบบถามกลับ ("เอาปริญญาโทครับ")
++# ไม่ได้บอกเรื่องที่ถาม จึงไม่ควรทำให้ข้อความถูกนับเป็นคำถามใหม่
++# วางไว้ท้ายรายการเพื่อให้ "ของ" ซึ่งยาวกว่าถูกจับก่อนที่ตำแหน่งเดียวกัน
+ _FILLER = re.compile(
+-    r"แล้ว|ล่ะ|หละ|ละ|ครับ|คับ|ค่ะ|คะ|จ้ะ|จ้า|นะ|อ่ะ|อะ|หลักสูตร|สาขาวิชา|สาขา|ฉบับ|ปี|ของ|ด้วย"
++    r"แล้ว|ล่ะ|หละ|ละ|ครับ|คับ|ค่ะ|คะ|จ้ะ|จ้า|นะ|อ่ะ|อะ|หลักสูตร|สาขาวิชา|สาขา|ฉบับ|ปี|ของ|ด้วย|เอา|ขอ"
+     r"|[\s?？!.,ๆ\"'()\[\]:;-]"
+ )
+ # ชื่อที่ตามหลัง "วิชา"/"รายวิชา" คือชื่อรายวิชา ส่วน "สาขาวิชา" เป็นคำห่อชื่อหลักสูตร
+ _SUBJECT_BEFORE = re.compile(r"(?<!สาขา)วิชา\s*$")
+ _EXTRA_SPACE = re.compile(r"\s{2,}")
++# วลีระบุระดับปริญญาที่คำถามเดิมอาจมีอยู่ ("...ระดับปริญญาโท เรียนกี่หน่วยกิต")
++# ตัดออกก่อนใส่ระดับใหม่ ไม่งั้นคำถามจะมีสองระดับพร้อมกัน
++_LEVEL_PHRASE = re.compile(r"ระดับ(?:ปริญญา(?:ตรี|โท|เอก)|ประกาศนียบัตรบัณฑิต|อนุปริญญา)")
+ 
+ 
+ def _programme_names(db: Session) -> list[str]:
+@@ -50,10 +59,17 @@
+     return sorted({_distinctive_name(c.title) for c in courses} - {""})
+ 
+ 
+-def _residue(text: str, names: list[str]) -> str:
+-    """ส่วนที่เหลือของข้อความหลังตัดชื่อหลักสูตร คำย่อ ปี และคำที่ไม่บอกเรื่องที่ถามออก"""
++def _residue(text: str, names: list[str], *, drop_level: bool = False) -> str:
++    """
++    ส่วนที่เหลือของข้อความหลังตัดชื่อหลักสูตร คำย่อ ปี และคำที่ไม่บอกเรื่องที่ถามออก
++
++    drop_level ตัดคำบอกระดับปริญญาออกด้วย — ใช้ดูว่าข้อความพูดแค่ระดับปริญญาหรือไม่
++    ต้องตัดชื่อหลักสูตรก่อนเสมอ (ดู course_scope.without_degree_level)
++    """
+     remainder = without_programme_names(text.translate(_THAI_DIGITS), names)
+     remainder = _YEAR_PHRASE.sub(" ", remainder)
++    if drop_level:
++        remainder = without_degree_level(remainder)
+     return _FILLER.sub("", remainder)
+ 
+ 
+@@ -98,6 +114,21 @@
+     return _EXTRA_SPACE.sub(" ", _YEAR_PHRASE.sub(" ", question.translate(_THAI_DIGITS))).strip()
+ 
+ 
++def _without_levels(question: str) -> str:
++    """ตัดวลี "ระดับ<ปริญญา...>" ที่คำถามเดิมมีอยู่ออก เพื่อไม่ให้ซ้อนกับระดับใหม่"""
++    return _EXTRA_SPACE.sub(" ", _LEVEL_PHRASE.sub(" ", question)).strip()
++
++
++def _with_level(question: str, label: str, programme: str | None) -> str:
++    """วางวลีระดับปริญญาไว้ต่อท้ายชื่อหลักสูตร ถ้าหาชื่อไม่เจอให้ต่อท้ายคำถาม"""
++    stripped = _without_levels(question)
++    phrase = f"ระดับ{label}"
++    if programme and programme in stripped:
++        end = stripped.index(programme) + len(programme)
++        return _EXTRA_SPACE.sub(" ", f"{stripped[:end]} {phrase} {stripped[end:]}").strip()
++    return f"{stripped} {phrase}"
++
++
+ def _with_year(question: str, year_be: int, programme: str | None) -> str:
+     stripped = _without_years(question)
+     phrase = f"พ.ศ. {year_be}"
+@@ -109,21 +140,40 @@
+ 
+ def swap_follow_up(db: Session, history: list, message: str, context_programme: str | None = None) -> str | None:
+     """
+-    คำถามที่ประกอบใหม่เมื่อข้อความล่าสุดเปลี่ยนแค่หลักสูตรหรือปีของคำถามก่อนหน้า คืน None ถ้าไม่ใช่กรณีนี้
++    คำถามที่ประกอบใหม่เมื่อข้อความล่าสุดเปลี่ยนแค่หลักสูตร ปี หรือระดับปริญญาของคำถามก่อนหน้า
++    คืน None ถ้าไม่ใช่กรณีนี้
+ 
+     context_programme คือหลักสูตรที่บทสนทนากำลังคุย ใช้เมื่อผู้ใช้เปลี่ยนแค่ปีและคำถามก่อนหน้าไม่ได้เอ่ยชื่อหลักสูตร
++
++    ระดับปริญญา — เพิ่มเมื่อ 28 ต.ค. 2569
++    -----------------------------------
++    เมื่อสาขาหนึ่งเปิดหลายระดับ ระบบจะถามกลับว่าเอาระดับไหน ผู้ใช้มักตอบสั้น ๆ ว่า
++    "ปริญญาโท" ข้อความนั้นไม่มีชื่อหลักสูตรและไม่มีปี เดิมจึงตกไปให้โมเดลเขียนคำถามใหม่
++    ซึ่งคืน "หลักสูตร<ชื่อ> ระดับปริญญาโท" — **เก็บชื่อกับระดับไว้ แต่ทิ้งเรื่องที่ถาม**
++    เส้นทางตอบจากฐานข้อมูลจึงไม่ทำงาน และการค้นเอกสารค้นด้วยคำที่ไม่มีหัวข้อที่ถาม
++    ผลคือตอบว่าไม่พบข้อมูล ทั้งที่ตัวเลขอยู่ในเล่มที่เลือกมาถูกแล้ว
++    (ตรวจพบตอนตรวจรับ deploy 27 ต.ค. 2569)
++
++    การตอบด้วยระดับจึงนับเป็นการเปลี่ยนตัวแปรตัวเดียวเหมือนเปลี่ยนหลักสูตรหรือปี
++    ประกอบคำถามใหม่ด้วยโค้ดจากคำถามเดิม เรื่องที่ถามคงเดิม ไม่ต้องให้โมเดลเดา
+     """
+     if not history:
+         return None
++    names = _programme_names(db)
+     new_programmes = explicit_programmes(db, message)
+     years = years_in(message)
+-    if not new_programmes and not years:
++    level = requested_degree_level(message)
++
++    # ข้อความพูดแค่ระดับปริญญาหรือไม่ — ตัดชื่อหลักสูตร ปี ระดับ และคำลงท้ายแล้วไม่เหลืออะไร
++    # ถ้ายังเหลือ แปลว่าผู้ใช้ถามเรื่องใหม่ ต้องไม่ดึงกลับไปคำถามเดิม
++    level_only = level is not None and not _residue(message, names, drop_level=True)
++
++    if not new_programmes and not years and not level_only:
+         return None
+     # เปลี่ยนหลายหลักสูตรหรือหลายปีพร้อมกันคือคำถามใหม่ ไม่ใช่การเปลี่ยนตัวแปรตัวเดียว
+     if len(new_programmes) > 1 or len(years) > 1:
+         return None
+-    names = _programme_names(db)
+-    if _residue(message, names):
++    if _residue(message, names) and not level_only:
+         return None
+     base = _base_question(history, names)
+     if base is None:
+@@ -150,5 +200,7 @@
+             question = f"{question} (หลักสูตร{programme})"
+     if years:
+         question = _with_year(question, years[0], programme)
++    if level is not None:
++        question = _with_level(question, degree_level_label(level), programme)
+     question = _EXTRA_SPACE.sub(" ", question).strip()
+     return question if question != message else None

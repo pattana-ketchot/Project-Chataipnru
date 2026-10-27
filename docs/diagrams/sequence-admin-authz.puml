@@ -1,0 +1,105 @@
+@startuml sequence-admin-authz
+' =====================================================================
+' Sequence Diagram — การตรวจสอบสิทธิ์ผู้ดูแลในทุกคำขอ
+'
+' หลักฐาน (ตรวจเมื่อ 25 ต.ค. 2569 แบบอ่านอย่างเดียว):
+'   backend/app/api/deps.py:29-48    get_current_user() ตรวจ bearer token
+'   backend/app/api/deps.py:57-66    require_staff()      -> can_access_admin(role, status)
+'   backend/app/api/deps.py:69-73    require_admin_role() -> can_delete(role, status)
+'   backend/app/api/routes/site_admin.py  prefix /site-admin
+'   handoff/01-users-and-permissions/roles-and-permissions.md  ตารางสิทธิ์
+'   handoff/05-frontend/pages-and-routes.md  ProtectedAdminRoute.jsx ครอบเส้นทางผู้ดูแล
+'
+' ** render ด้วย kroki.io เท่านั้น ** planttext.com และ plantuml.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam sequenceGroupBackgroundColor white
+skinparam sequenceGroupBorderColor black
+skinparam sequenceGroupHeaderFontColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam titleBackgroundColor white
+skinparam legendBackgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+
+actor "ผู้ดูแลเนื้อหา\n(editor, approved)" as editor
+participant "หน้าเว็บ SPA\nProtectedAdminRoute.jsx" as spa
+participant "Caddy" as caddy
+participant "backend\ndeps.py (ด่าน)\nroutes/site_admin.py" as be
+database "PostgreSQL\npublic.users\nweb.site_courses" as db
+
+editor -> spa : กดบันทึกการแก้ไขหลักสูตร
+spa -> caddy : PUT /api/site-admin/courses/{id}\nAuthorization: Bearer <access token>
+caddy -> be : ตัด /api ออก -> PUT /site-admin/courses/{id}
+
+== ด่านที่สอง: ฝั่งเซิร์ฟเวอร์ — ด่านที่ตัดสินจริง ==
+
+be -> be : get_current_user()\nถอดและตรวจ access token
+
+alt ไม่มี token / หมดอายุ / ชนิดผิด / แก้ไขมา
+  be --> spa : <b>401</b> missing bearer token · token expired ·\ninvalid token · wrong token type
+else token ใช้ได้
+  be -> db : SELECT ... FROM users WHERE id = <sub ของ token>
+  db --> be : แถวผู้ใช้ (role, status, is_active)
+  alt ไม่พบผู้ใช้ หรือบัญชีถูกปิด
+    be --> spa : <b>401</b> user not found or inactive
+  else ผู้ใช้ใช้งานได้
+    be -> be : require_staff()\ncan_access_admin(role, status)
+    alt ไม่ผ่าน
+      be --> spa : <b>403</b> "ต้องเป็นผู้ดูแลที่ได้รับอนุมัติแล้ว"
+    else ผ่าน
+      be -> db : UPDATE web.site_courses ...
+      db --> be : บันทึกแล้ว
+      be --> spa : <b>200</b> ผลการบันทึก
+      spa --> editor : แจ้งว่าบันทึกสำเร็จ
+    end
+  end
+end
+
+== ด่านที่สาม: การลบใช้ด่านที่เข้มกว่า ==
+
+editor -> spa : กดลบหลักสูตร\n(ปุ่มนี้ถูกซ่อนไว้ แต่สมมติว่ายิงคำขอได้)
+spa -> caddy : DELETE /api/site-admin/courses/{id}
+caddy -> be : DELETE /site-admin/courses/{id}
+be -> be : get_current_user() -> ผ่าน
+be -> be : require_admin_role()\ncan_delete(role, status)
+be --> spa : <b>403</b> "เฉพาะผู้ดูแลระบบเท่านั้น"
+spa --> editor : แจ้งว่าไม่มีสิทธิ์
+
+@enduml

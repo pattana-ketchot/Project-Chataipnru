@@ -34,6 +34,22 @@ _LIST_LABEL = {"careers": "อาชีพที่สามารถประ�
                "objectives": "วัตถุประสงค์ของหลักสูตร",
                "admission": "คุณสมบัติของผู้เข้าศึกษา"}
 
+# ขอบเขตของคำตอบหัวข้อคุณสมบัติผู้เข้าศึกษา — ต้องต่อท้ายทุกครั้ง
+#
+# รายการที่ฐานเก็บไว้คือหัวข้อ "คุณสมบัติของผู้เข้าศึกษา" ของ มคอ.2 ฉบับนั้นเท่านั้น (หมวด 3 ข้อ 2.2
+# หรือหมวด 6 ข้อ 1 ตามแบบของเล่ม) · เล่มเดียวกันยังมีเนื้อหาเกี่ยวกับการรับเข้าอยู่หัวข้ออื่นด้วย
+# เช่น ข้อการรับเข้าศึกษาในหมวด 1 และภาคผนวกข้อบังคับของมหาวิทยาลัย การแสดงรายการนี้เฉย ๆ
+# จึงอ่านได้ว่าเป็นเงื่อนไขครบถ้วนในการสมัคร ซึ่งทำให้เข้าใจผิดโดยการละเว้น
+# (docs/MKO_PHASE2_FINAL_SHADOW_VALIDATION.md ข้อ B — เหตุที่ admission ถูกกันออกจาก user-facing เดิม)
+#
+# ข้อความนี้ไม่ได้เพิ่มข้อเท็จจริงใหม่: ตัวรายการเองลงท้ายว่า "เป็นไปตามประกาศ ระเบียบ และข้อบังคับ
+# ของมหาวิทยาลัยราชภัฏพระนคร" อยู่แล้ว · และ มคอ.2 หลายฉบับเป็นปี 2561-2568 เกณฑ์รับสมัครของ
+# ปีปัจจุบันจึงอาจต่างไป
+_ADMISSION_SCOPE = (
+    'หมายเหตุ: รายการนี้คือหัวข้อ "คุณสมบัติของผู้เข้าศึกษา" ที่เล่มหลักสูตร (มคอ.2) ฉบับนั้นระบุไว้ '
+    "ไม่ใช่ประกาศรับสมัครของปีปัจจุบัน และมหาวิทยาลัยอาจมีประกาศ ระเบียบ หรือข้อบังคับเพิ่มเติม"
+)
+
 _TITLE_YEAR = re.compile(r"25\d{2}")
 
 
@@ -161,6 +177,36 @@ def _edition_label(fact: EditionFact) -> str:
     return fact.course_title
 
 
+# "ไม่น้อยกว่า" กับตัวเลขที่ตามมา — ยอมให้มีช่องว่างหรือขึ้นบรรทัดใหม่คั่น เพราะข้อความ
+# ที่ยกมาจาก PDF บางฉบับตัดบรรทัดกลางวลี เช่น 'ไม่น้อยกว่า \n36 \nหน่วยกิต'
+_AT_LEAST = re.compile(r"ไม่น้อยกว่า\s*(\d+)")
+
+
+def _says_at_least(fact: EditionFact) -> bool:
+    """เอกสารต้นทางของค่านี้เขียนว่า "ไม่น้อยกว่า" ไว้หรือไม่"""
+    quote = (fact.source.quote if fact.source else None) or ""
+    m = _AT_LEAST.search(quote)
+    # เลขที่ตามหลังคำต้องเป็นค่าเดียวกับที่เก็บไว้ ไม่งั้นถือว่าข้อความที่ยกมาพูดถึงค่าอื่น
+    # (เช่นหน่วยกิตของหมวดวิชา) แล้วการเติมคำนี้จะเปลี่ยนความหมายของตัวเลขที่ตอบ
+    return m is not None and fact.value_int is not None and int(m.group(1)) == fact.value_int
+
+
+def _credit_phrase(facts: list[EditionFact]) -> str:
+    """
+    วลีหน่วยกิตของฉบับที่ค่าเท่ากัน เช่น "ไม่น้อยกว่า 130 หน่วยกิต"
+
+    เอกสาร มคอ. เขียนหน่วยกิตรวมเป็น "ขั้นต่ำ" ไม่ใช่ค่าที่ต้องได้พอดี การตอบด้วยตัวเลข
+    เปล่าเปลี่ยนความหมาย — นักเรียนที่อ่านว่า "130 หน่วยกิต" เข้าใจได้ว่าเรียนเกินไม่ได้
+    หรือเรียนไม่ถึงก็ไม่จบ ซึ่งไม่ใช่สิ่งที่เอกสารเขียน
+
+    อ่านคำนี้จากข้อความที่ยกมาจากเอกสารซึ่งเก็บไว้แล้วในคอลัมน์ quote ไม่ต้องเพิ่มคอลัมน์
+    ใหม่และไม่ต้องเผยแพร่ข้อมูลซ้ำ · ใช้คำนี้เมื่อ **ทุกฉบับ** ในกลุ่มเขียนไว้ตรงกัน
+    ฉบับที่เอกสารไม่ได้เขียนไว้จะตอบเป็นตัวเลขเปล่าตามเดิม ไม่เติมคำที่เอกสารไม่มี
+    """
+    number = facts[0].value_int
+    return f"ไม่น้อยกว่า {number} หน่วยกิต" if all(map(_says_at_least, facts)) else f"{number} หน่วยกิต"
+
+
 def _compose(field_key: str, programme: str, facts: list[EditionFact], missing: list[str]) -> tuple[str, list[str]]:
     lines: list[str] = []
     others: list[str] = []
@@ -168,16 +214,35 @@ def _compose(field_key: str, programme: str, facts: list[EditionFact], missing: 
         values = {f.value_int for f in facts}
         if len(facts) == 1 or len(values) == 1:
             titles = " และ ".join(_edition_label(f) for f in facts)
-            lines.append(f"{titles} มีจำนวนหน่วยกิตรวมตลอดหลักสูตร {facts[0].value_int} หน่วยกิต")
+            lines.append(f"{titles} มีจำนวนหน่วยกิตรวมตลอดหลักสูตร {_credit_phrase(facts)}")
         else:
             lines.append(f"จำนวนหน่วยกิตรวมตลอดหลักสูตรของ{programme} แยกตามหลักสูตร")
-            lines.extend(f"- {_edition_label(f)}: {f.value_int} หน่วยกิต" for f in facts)
+            lines.extend(f"- {_edition_label(f)}: {_credit_phrase([f])}" for f in facts)
     elif field_key == "edition_year":
         years = [f"พ.ศ. {f.value_int}" for f in facts]
         if len(facts) == 1:
             lines.append(f"{_edition_label(facts[0])} เป็นหลักสูตรฉบับ {years[0]}")
         else:
             lines.append(f"{programme} มีหลักสูตรฉบับ " + " และ ".join(years))
+    elif field_key == "admission":
+        # ตอบแยกทุกฉบับที่มีข้อมูล ไม่เลือกฉบับเดียวแทนผู้ใช้
+        #
+        # หัวข้อรายการอื่น (อาชีพ วัตถุประสงค์) ตอบฉบับเดียวแล้วชี้ว่ามีฉบับอื่นด้วย ซึ่งใช้ได้เพราะ
+        # ผู้ถามมักต้องการภาพรวม · แต่คุณสมบัติผู้สมัครคือเงื่อนไขที่ผู้ใช้เอาไปตัดสินใจสมัคร
+        # การเห็นของฉบับเดียวแล้วเข้าใจว่าเป็นของทั้งสาขาคือการเข้าใจผิดที่มีผลจริง
+        # เช่น IT ฉบับ 2566 รับผู้จบ ปวส. และปริญญาตรีด้วย ส่วนฉบับ 2561 ยังไม่มีข้อมูลที่ผ่านการตรวจ
+        blocks = []
+        for f in facts:
+            block = [f"{_LIST_LABEL[field_key]} ตาม{_edition_label(f)}"]
+            block.extend(f"{n}. {item}" for n, item in enumerate(f.items, start=1))
+            if f.source:
+                block.append("ที่มา: " + f.source.label())
+            blocks.append("\n".join(block))
+        lines.append("\n\n".join(blocks))
+        if missing:
+            lines.append("ยังไม่มีข้อมูลที่ผ่านการตรวจของ " + " และ ".join(missing))
+        lines.append(_ADMISSION_SCOPE)
+        return "\n".join(lines), []
     else:
         chosen, rest = facts[0], facts[1:]
         lines.append(f"{_LIST_LABEL[field_key]} ตาม{_edition_label(chosen)}")
@@ -228,6 +293,8 @@ def lookup(db: Session, intent: StructuredIntent) -> FactsResult:
     with_data = {f.course_id for f in facts}
     missing = sorted(titles[cid] for cid in ids if str(cid) not in with_data)
     answer, others = _compose(intent.field, intent.programme or "", facts, missing)
-    if intent.field in LIST_FIELDS:
+    # คำตอบของรายการอื่นอ้างฉบับเดียว จึงเหลือ fact เดียวให้ตรงกับที่มาในข้อความ
+    # ส่วน admission ตอบแยกทุกฉบับ ต้องคงไว้ทุก fact ไม่งั้นช่อง sources จะขาดฉบับที่คำตอบอ้างถึง
+    if intent.field in LIST_FIELDS and intent.field != "admission":
         facts = facts[:1]
     return FactsResult(ANSWERED, intent.field, facts, missing, others, publication_id, answer)

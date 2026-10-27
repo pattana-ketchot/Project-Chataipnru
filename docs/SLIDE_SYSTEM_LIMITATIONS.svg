@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="'Tahoma','Segoe UI','Leelawadee UI',sans-serif">
+<defs>
+<linearGradient id="hl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#22B8D8"/><stop offset="100%" stop-color="#2F6BE0"/></linearGradient>
+<radialGradient id="bgA" cx="0" cy="0" r="1"><stop offset="0%" stop-color="#DCE7FA"/><stop offset="100%" stop-color="#ffffff"/></radialGradient>
+<radialGradient id="bgB" cx="1" cy="1" r="1"><stop offset="0%" stop-color="#DFF3F8"/><stop offset="100%" stop-color="#ffffff"/></radialGradient>
+</defs>
+<rect width="1920" height="1080" fill="#ffffff"/>
+<rect width="1920" height="1080" fill="url(#bgA)" opacity="0.55"/>
+<rect width="1920" height="1080" fill="url(#bgB)" opacity="0.5"/>
+<rect x="46" y="28" width="1828" height="1024" rx="10" fill="#ffffff" opacity="0.92"/>
+<text x="100" y="70" font-size="19" fill="#64748B" font-weight="normal" text-anchor="start">Database Design</text>
+<text x="100" y="96" font-size="19" fill="#64748B">for the <tspan font-weight="bold" fill="#0F172A">SCI Advisor System</tspan></text>
+<text x="1820" y="70" font-size="21" fill="#0F172A" font-weight="bold" text-anchor="end">4123204</text>
+<text x="1820" y="96" font-size="19" fill="#64748B" font-weight="normal" text-anchor="end">Advanced Database</text>
+<text x="960.0" y="196" text-anchor="middle" font-size="52" font-weight="bold" fill="#0F172A">ข้อจำกัดและ<tspan fill="url(#hl)">จุดอ่อน</tspan>ของระบบในปัจจุบัน</text>
+<text x="960.0" y="238" font-size="21" fill="#64748B" font-weight="normal" text-anchor="middle">ข้อจำกัดต่อไปนี้วัดจากระบบที่ใช้งานจริง ทุกตัวเลขตรวจสอบย้อนกลับได้จากโค้ดและฐานข้อมูล</text>
+<rect x="70" y="288" width="428" height="536" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<rect x="94" y="312" width="58" height="58" rx="16" fill="#12A5BC"/>
+<circle cx="121" cy="339" r="9" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M128,346 L135,353" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="174" cy="341" r="18" fill="#0B7C90"/>
+<text x="174" y="348" font-size="19" fill="#ffffff" font-weight="bold" text-anchor="middle">1</text>
+<text x="94" y="406" font-size="20" fill="#0F172A" font-weight="bold" text-anchor="start">คำย่อและคำเรียกติดปาก</text>
+<text x="94" y="430" font-size="14.5" fill="#0B7C90" font-weight="normal" text-anchor="start">(Vocabulary Gap)</text>
+<text x="94" y="468" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">ระบบค้นข้อมูลด้วยการเทียบความหมายของ</text>
+<text x="94" y="495" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">เวกเตอร์เพียงอย่างเดียว ไม่มีการค้นด้วย</text>
+<text x="94" y="522" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">คำสำคัญ จึงจับคำพ้องความหมายได้ดี แต่</text>
+<text x="94" y="549" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">พลาดกับคำย่อและคำเรียกติดปาก เพราะ</text>
+<text x="94" y="576" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">เอกสาร มคอ.2 ใช้ชื่อทางการเสมอ</text>
+<rect x="90" y="613" width="388" height="187" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.4"/>
+<circle cx="114" cy="641" r="9" fill="#12A5BC"/>
+<path d="M114,636.5 v5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+<circle cx="114" cy="645 " r="1.3" fill="#ffffff"/>
+<text x="132" y="646" font-size="15.5" fill="#0B7C90" font-weight="bold" text-anchor="start">ตัวอย่าง / ผลกระทบ</text>
+<text x="104" y="675" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">“จบวิทคอมล่ะไปสายงานไหนได้บ้าง” ได้คะแนน</text>
+<text x="104" y="700" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">ความใกล้เคียง 0.531 ตกเกณฑ์ ส่วนถ้าพิมพ์</text>
+<text x="104" y="725" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">ชื่อเต็มได้ 0.720 ถามเรื่องเดียวกันแต่ตอบ</text>
+<text x="104" y="750" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">ได้อันเดียว แก้ด้วยตารางคำย่อ 51 คำ</text>
+<text x="104" y="775" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">ครอบคลุม 15 สาขา</text>
+<rect x="520" y="288" width="428" height="536" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<rect x="544" y="312" width="58" height="58" rx="16" fill="#12A5BC"/>
+<path d="M571,347 l-4,4 a6,6 0 0 1 -8.5,-8.5 l4,-4" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M575,335 l4,-4 a6,6 0 0 1 8.5,8.5 l-4,4" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M568,346 l10,-10" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="624" cy="341" r="18" fill="#0B7C90"/>
+<text x="624" y="348" font-size="19" fill="#ffffff" font-weight="bold" text-anchor="middle">2</text>
+<text x="544" y="406" font-size="20" fill="#0F172A" font-weight="bold" text-anchor="start">ชื่อหลักสูตรซ้ำกัน</text>
+<text x="544" y="430" font-size="14.5" fill="#0B7C90" font-weight="normal" text-anchor="start">(Name Disambiguation)</text>
+<text x="544" y="468" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">ระบบมี 24 หลักสูตร เพราะนับแยกตามปีที่</text>
+<text x="544" y="495" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">ปรับปรุง ทำให้มีชื่อซ้ำกันถึง 6 คู่ ถ้าคำถาม</text>
+<text x="544" y="522" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">ไม่ระบุปี ระบบอาจดึงเนื้อหาจากฉบับที่ไม่</text>
+<text x="544" y="549" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">ตรงกับที่ผู้ถามต้องการ โดยไม่มีสัญญาณ</text>
+<text x="544" y="576" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">เตือนว่าหยิบผิดฉบับ</text>
+<rect x="540" y="638" width="388" height="162" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.4"/>
+<circle cx="564" cy="666" r="9" fill="#12A5BC"/>
+<path d="M564,661.5 v5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+<circle cx="564" cy="670 " r="1.3" fill="#ffffff"/>
+<text x="582" y="671" font-size="15.5" fill="#0B7C90" font-weight="bold" text-anchor="start">ตัวอย่าง / ผลกระทบ</text>
+<text x="554" y="700" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">วิทยาการคอมพิวเตอร์มีทั้งฉบับ 2561 และ</text>
+<text x="554" y="725" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">2566 กรณียากที่สุดคือหลักสูตรการจัดการ</text>
+<text x="554" y="750" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">เทคโนโลยีการเกษตรฯ ที่มีทั้งปริญญาโท</text>
+<text x="554" y="775" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">และปริญญาเอก ปี 2568 เหมือนกัน</text>
+<rect x="970" y="288" width="428" height="536" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<rect x="994" y="312" width="58" height="58" rx="16" fill="#12A5BC"/>
+<path d="M1012,346 a6.5,6.5 0 0 1 1.5,-12.8 a8.5,8.5 0 0 1 16.2,-1.4 a6.5,6.5 0 0 1 0.8,12.9 z" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="1074" cy="341" r="18" fill="#0B7C90"/>
+<text x="1074" y="348" font-size="19" fill="#ffffff" font-weight="bold" text-anchor="middle">3</text>
+<text x="994" y="406" font-size="20" fill="#0F172A" font-weight="bold" text-anchor="start">พึ่งพาโมเดลภายนอก</text>
+<text x="994" y="430" font-size="14.5" fill="#0B7C90" font-weight="normal" text-anchor="start">(External LLM Dependency)</text>
+<text x="994" y="468" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">ขั้นตอนเรียบเรียงคำตอบเรียกใช้โมเดลภาษา</text>
+<text x="994" y="495" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">จากผู้ให้บริการภายนอก เวลาตอบจึงขึ้นกับ</text>
+<text x="994" y="522" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">บริการนั้น ซึ่งอยู่นอกการควบคุมของระบบ</text>
+<text x="994" y="549" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">และมีโควตาจำกัดต่อนาที</text>
+<rect x="990" y="638" width="388" height="162" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.4"/>
+<circle cx="1014" cy="666" r="9" fill="#12A5BC"/>
+<path d="M1014,661.5 v5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+<circle cx="1014" cy="670 " r="1.3" fill="#ffffff"/>
+<text x="1032" y="671" font-size="15.5" fill="#0B7C90" font-weight="bold" text-anchor="start">ตัวอย่าง / ผลกระทบ</text>
+<text x="1004" y="700" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">วัดจาก production คำถามที่ไม่เรียกโมเดล</text>
+<text x="1004" y="725" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">ตอบใน 0.158 วินาทีตามปกติ ขณะที่เรียก</text>
+<text x="1004" y="750" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">โมเดลตรง ๆ ด้วยโจทย์ “1+1” ใช้ 39–82</text>
+<text x="1004" y="775" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">วินาที ทั้งสี่โมเดล ความช้าอยู่ฝั่งผู้ให้บริการ</text>
+<rect x="1420" y="288" width="428" height="536" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<rect x="1444" y="312" width="58" height="58" rx="16" fill="#12A5BC"/>
+<path d="M1463,339 a10,10 0 0 1 17,-6.6 l3,3" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1483,343 a10,10 0 0 1 -17,6.6 l-3,-3" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1483,332 v4.4 h-4.4 M1463,350 v-4.4 h4.4" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="1524" cy="341" r="18" fill="#0B7C90"/>
+<text x="1524" y="348" font-size="19" fill="#ffffff" font-weight="bold" text-anchor="middle">4</text>
+<text x="1444" y="406" font-size="20" fill="#0F172A" font-weight="bold" text-anchor="start">ต้องนำเข้าข้อมูลเอง</text>
+<text x="1444" y="430" font-size="14.5" fill="#0B7C90" font-weight="normal" text-anchor="start">(No Automatic Sync)</text>
+<text x="1444" y="468" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">เมื่อมีเอกสารใหม่หรือฉบับแก้ไข ต้องอัปโหลด</text>
+<text x="1444" y="495" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">และสร้างเวกเตอร์ใหม่ก่อน ระบบไม่ได้ซิงก์</text>
+<text x="1444" y="522" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">อัตโนมัติจากต้นทาง ผู้ใช้จึงยังเห็นข้อมูล</text>
+<text x="1444" y="549" font-size="16.5" fill="#334155" font-weight="normal" text-anchor="start">เดิมจนกว่าจะมีการนำเข้ารอบใหม่</text>
+<rect x="1440" y="638" width="388" height="162" rx="14" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.4"/>
+<circle cx="1464" cy="666" r="9" fill="#12A5BC"/>
+<path d="M1464,661.5 v5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+<circle cx="1464" cy="670 " r="1.3" fill="#ffffff"/>
+<text x="1482" y="671" font-size="15.5" fill="#0B7C90" font-weight="bold" text-anchor="start">ตัวอย่าง / ผลกระทบ</text>
+<text x="1454" y="700" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">มีช่องทางอัปโหลดผ่านหน้าผู้ดูแล และมี</text>
+<text x="1454" y="725" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">corpus_version ไว้ล้างแคชคำตอบเมื่อคลัง</text>
+<text x="1454" y="750" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">เอกสารเปลี่ยน แต่ยังต้องมีคนกดดำเนินการ</text>
+<text x="1454" y="775" font-size="15.5" fill="#3E5060" font-weight="normal" text-anchor="start">ไม่ได้เกิดขึ้นเองอัตโนมัติ</text>
+<rect x="70" y="848" width="1780" height="116" rx="16" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.6"/>
+<path d="M114,896 a7.5,7.5 0 0 1 4.5,13.5 v2.5 h-9 v-2.5 A7.5,7.5 0 0 1 114,896 z" fill="none" stroke="#0B7C90" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M110.5,915 h7 M111.5,918 h5" fill="none" stroke="#0B7C90" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="148" y1="874" x2="148" y2="938" stroke="#CBE9F0" stroke-width="2"/>
+<text x="170" y="896" font-size="18" fill="#0B7C90" font-weight="bold" text-anchor="start">สรุป :</text>
+<text x="246" y="896" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">ข้อจำกัดทั้งสี่ข้อวัดได้จากระบบจริง ไม่ใช่การคาดการณ์  ปัจจุบันบรรเทาข้อ 1 ด้วยตารางขยายคำย่อที่เขียนด้วยมือ 51 คำ</text>
+<text x="246" y="930" font-size="17" fill="#334155" font-weight="normal" text-anchor="start">แนวทางพัฒนาต่อ — เพิ่ม Hybrid Search ผสมการค้นด้วยคำสำคัญเข้ากับการค้นด้วยเวกเตอร์ เพื่อให้จับคำย่อและชื่อเฉพาะได้เองโดยไม่ต้องเขียนตาราง</text>
+</svg>

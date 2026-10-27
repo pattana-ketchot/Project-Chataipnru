@@ -1,0 +1,119 @@
+@startuml dfd-level1
+' =====================================================================
+' DFD Level 1 (ก1) — เส้นทางของผู้ใช้ทั่วไป
+' ระบบแนะนำหลักสูตร SCI Advisor · ปรับปรุง 25 ต.ค. 2569 ตามผลตรวจทาน
+'
+' ชุดภาพ DFD ทั้งหมด
+'   dfd-level0        แผนภาพบริบท
+'   dfd-level1   (ก1) เส้นทางผู้ใช้ทั่วไป          P1 P2 P3   <- ไฟล์นี้
+'   dfd-level1a  (ก2) เส้นทางผู้ดูแลและงานตั้งเวลา  P4 P5 P6
+'   dfd-level1b  (ข)  เส้นทางเตรียมข้อมูล          P7 P8 P9
+'   dfd-level2-p2     ขยาย P2
+'
+' ทำไมแยก (ก) เป็นสองภาพ
+' ----------------------
+' ฉบับรวมกว้าง 2,637 px เมื่อย่อลงความกว้างหน้า A4 แนวนอน (ราว 250 มม.)
+' ตัวอักษรขนาด 13 px เหลือสูงราว 1.2 มม. ซึ่งอ่านไม่ออกในฉบับพิมพ์
+' วัดจากภาพที่ render จริงเมื่อ 25 ต.ค. 2569 ไม่ได้ประเมินจากการดูบนจอ
+'
+' สิ่งที่แก้จากฉบับก่อนตามผลตรวจ
+'   1. สัญลักษณ์มาตรฐาน วงรี = process, สี่เหลี่ยม = external entity, ทรงกระบอก = data store
+'   2. ชื่อเส้นเป็นชื่อข้อมูล ไม่ใช่คำว่าอ่าน/เขียน และแยกคำขอกับข้อมูลตอบกลับคนละเส้น
+'   3. เลขกระบวนการ P1-P9 ต่อเนื่องทั้ง Level 1 (ของเดิมมี P0 ซึ่งสงวนไว้ให้แผนภาพบริบท)
+'   4. ตัด Ollama ออกจากผู้กระทำภายนอก เพราะเป็นคอนเทนเนอร์ในระบบเอง
+'   5. ย้ายคำอธิบายยาวไปไว้ใต้ภาพใน SCI_ADVISOR_DIAGRAMS.md
+'
+' หลักฐาน (ตรวจ 25 ต.ค. 2569 แบบอ่านอย่างเดียว):
+'   P1 backend/app/api/routes/site.py
+'   P2 backend/app/api/routes/web_compat.py:173 และ backend/app/services/chat.py
+'   P3 backend/app/api/routes/recommend.py, compare.py, match.py
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam sequenceGroupBackgroundColor white
+skinparam sequenceGroupBorderColor black
+skinparam sequenceGroupHeaderFontColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam titleBackgroundColor white
+skinparam legendBackgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+skinparam ArrowFontSize 11
+skinparam defaultFontSize 13
+
+rectangle "นักเรียน /\nผู้สนใจ" as student
+rectangle "Google\nGemini API" as gemini
+
+usecase "P1\nให้ข้อมูลหลักสูตร\nและข่าวแก่หน้าเว็บ" as P1
+usecase "P2\nตอบคำถามด้วย AI" as P2
+usecase "P3\nแนะนำสาขา\nเปรียบเทียบ จับคู่" as P3
+
+database "D5 เนื้อหาหน้าเว็บ" as D5
+database "D6 ข้อมูลหลักสูตรที่เผยแพร่" as D6
+database "D2 คลังเอกสารและเวกเตอร์" as D2
+database "D3 บทสนทนา" as D3
+database "D4 แคชคำตอบ" as D4
+database "D8 สถิติการเรียกโมเดล" as D8
+
+student --> P1 : คำขอรายการ /\nรายละเอียดหลักสูตร
+P1 --> student : รายการหลักสูตร · ข่าว
+D5 --> P1 : ระเบียนหลักสูตร\nและข่าวของหน้าเว็บ
+D6 --> P1 : ข้อเท็จจริงหลักสูตร\nที่ตรวจรับแล้ว
+
+student --> P2 : คำถามภาษาไทย +\nประวัติบทสนทนา
+P2 --> student : ข้อความคำตอบ +\nชื่อไฟล์และเลขหน้า
+D6 --> P2 : ค่าหลักสูตร\nที่ตรวจรับแล้ว
+P2 --> gemini : คำถามที่เรียบเรียง +\nชิ้นส่วนเอกสาร
+gemini --> P2 : ข้อความคำตอบแบบสตรีม
+P2 --> D4 : คำถาม + รุ่นคลัง
+D4 --> P2 : คำตอบเดิม
+P2 --> D2 : เวกเตอร์คำถาม
+D2 --> P2 : ชิ้นส่วนเอกสาร
+P2 --> D3 : บทสนทนา
+P2 --> D8 : จำนวนครั้งที่เรียกโมเดล
+
+student --> P3 : คำตอบแบบสอบถาม /\nคู่สาขาที่จะเทียบ
+P3 --> student : ผลแนะนำ ·\nตารางเปรียบเทียบ
+D2 --> P3 : ชิ้นส่วนเอกสารประกอบ
+D6 --> P3 : ค่าหลักสูตร\nที่ตรวจรับแล้ว
+
+@enduml

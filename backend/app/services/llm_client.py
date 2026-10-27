@@ -27,6 +27,7 @@ if str(_REPO_ROOT) not in sys.path:
 from llm.connector import LLMConnectionError, OllamaConnector  # noqa: E402
 from llm.gemini import GeminiConnector  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
+from app.services import llm_usage  # noqa: E402
 
 settings = get_settings()
 logger = logging.getLogger("course_advisor")
@@ -100,9 +101,27 @@ class _SplitConnector:
             return self._chatter.chat(*args, **kwargs)
         except LLMConnectionError as e:
             if not allow_fallback:
+                llm_usage.record("fallback_declined")
                 raise LLMConnectionError(FALLBACK_DECLINED) from e
             logger.warning("เจ้าหลักตอบไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
-            return self._fallback.chat(*args, **self._fallback_kwargs(kwargs))
+            return self._call_fallback(*args, **self._fallback_kwargs(kwargs))
+
+    def _call_fallback(self, *args, **kwargs):
+        """
+        เรียกโมเดลในเครื่องพร้อมนับผลจริง — "เรียกตัวสำรอง" ไม่เท่ากับ "ผู้ใช้ได้คำตอบ"
+
+        โมเดลในเครื่องล้มได้เหมือนกัน โดยเฉพาะเมื่อเพดานเวลาของคำขอหมดก่อนมันเขียนจบ
+        ซึ่งเกิดได้จริงเพราะมันช้ากว่าเจ้าหลักมาก ถ้านับแค่ "ตกมาที่ตัวสำรอง" ครั้งเดียว
+        ความล้มเหลวจะถูกนับรวมเป็นความสำเร็จ แล้วตัวเลขจะบอกว่าระบบรับมือได้ดีกว่าจริง
+        """
+        llm_usage.record("fallback_local_attempt")
+        try:
+            out = self._fallback.chat(*args, **kwargs)
+        except Exception:
+            llm_usage.record("fallback_local_failed")
+            raise
+        llm_usage.record("fallback_local_ok")
+        return out
 
     def chat_stream(self, *args, allow_fallback: bool = True, **kwargs):
         """
@@ -119,11 +138,25 @@ class _SplitConnector:
             return
         except LLMConnectionError as e:
             if started:
+                llm_usage.record("stream_failed_midway")
                 raise
             if not allow_fallback:
+                llm_usage.record("fallback_declined")
                 raise LLMConnectionError(FALLBACK_DECLINED) from e
             logger.warning("เจ้าหลักสตรีมไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
-        yield from self._fallback.chat_stream(*args, **self._fallback_kwargs(kwargs))
+
+        # สตรีม "สำเร็จ" คือเดินจนจบโดยไม่โยนข้อผิดพลาด ไม่ใช่แค่เริ่มส่งตัวอักษรแรกได้
+        #
+        # ผู้ใช้ปิดหน้าเว็บกลางคันทำให้เกิด GeneratorExit ซึ่งไม่ใช่ทั้งความสำเร็จและ
+        # ความล้มเหลวของโมเดล จึงไม่นับทั้งสองทาง — `except Exception` ไม่จับมันอยู่แล้ว
+        # เพราะ GeneratorExit สืบทอดจาก BaseException ไม่ใช่ Exception
+        llm_usage.record("fallback_local_attempt")
+        try:
+            yield from self._fallback.chat_stream(*args, **self._fallback_kwargs(kwargs))
+        except Exception:
+            llm_usage.record("fallback_local_failed")
+            raise
+        llm_usage.record("fallback_local_ok")
 
     @property
     def chat_model(self) -> str:
@@ -155,6 +188,8 @@ def get_llm_connector():
                     api_key=settings.gemini_api_key,
                     chat_model=settings.gemini_model,
                     timeout_s=settings.llm_request_timeout_s,
+                    # แพ็กเกจ llm/ ไม่รู้จักฐานข้อมูลของเรา จึงส่งตัวนับเข้าไปจากที่นี่
+                    on_event=llm_usage.record,
                 ),
             )
         else:

@@ -69,7 +69,13 @@ from app.services.llm_client import get_llm_connector
 
 from llm.connector import ChatMessage as LLMMessage, LLMConnectionError  # noqa: E402
 
-from llm.prompts import MATCH_RATIONALE_SYSTEM_PROMPT, build_match_rationale_prompt  # noqa: E402
+from app.services.answer_claims import verify as verify_claims  # noqa: E402
+from app.services.answer_evidence import quote_is_supported  # noqa: E402
+from llm.prompts import (  # noqa: E402
+    MATCH_RATIONALE_SYSTEM_PROMPT,
+    NO_EVIDENCE_MARKER,
+    build_match_rationale_prompt,
+)
 
 logger = logging.getLogger("course_advisor")
 
@@ -525,6 +531,66 @@ def match_programs(
     ]
 
 
+def _verified_rationales(raw: dict, evidence: list[dict]) -> dict[str, str]:
+    """
+    รับเฉพาะเหตุผลที่มีข้อความอ้างอิงซึ่งอยู่ในเนื้อหาของหลักสูตรนั้นจริง
+
+    ตรวจเมื่อ 14 ต.ค. 2569 (ข้อ a1-05): คำแนะนำอ้างว่าวิทยาการคอมพิวเตอร์สอน
+    "ทั้งภาคทฤษฎีและปฏิบัติเพื่อพัฒนานวัตกรรมทางคอมพิวเตอร์" ซึ่งไม่ปรากฏใน cs66.pdf เลย
+    (วลี "ภาคทฤษฎีและปฏิบัติ" อยู่ในเอกสารของเทคโนโลยีสารสนเทศ) และอ้างว่าเทคโนโลยี
+    สารสนเทศเน้น "การออกแบบพัฒนาระบบสารสนเทศและคอมพิวเตอร์" ซึ่งก็ไม่ใช่ถ้อยคำในเล่มนั้น
+    อาการนี้คือการยืมข้อมูลข้ามหลักสูตรและการเติมถ้อยคำเกินเอกสาร
+
+    อนุญาตให้สรุปความได้ (ไม่บังคับให้ลอก) แต่ข้อความอ้างอิงต้องตรวจได้ · เหตุผลที่ไม่มี
+    ข้อความอ้างอิงหรืออ้างแล้วไม่ตรงจะถูกทิ้ง แล้วผู้เรียกใช้ข้อความมาตรฐานแทน
+    ซึ่งไม่เพิ่มข้อเท็จจริงใดที่เอกสารไม่ได้เขียนไว้
+    """
+    excerpt_of = {str(e["title"]): str(e.get("excerpt") or "") for e in evidence}
+    out: dict[str, str] = {}
+    for title, value in (raw or {}).items():
+        key = str(title)
+        if isinstance(value, dict):
+            reason = str(value.get("เหตุผล") or value.get("rationale") or "").strip()
+            quote = str(value.get("ข้อความอ้างอิง") or value.get("quote") or "").strip()
+        else:
+            reason, quote = str(value).strip(), ""
+        if not reason:
+            continue
+        if NO_EVIDENCE_MARKER in reason:
+            out[key] = reason
+            continue
+        source = excerpt_of.get(key) or _excerpt_like(key, excerpt_of)
+        if source is None:
+            logger.warning("เหตุผลอ้างหลักสูตรที่ไม่ได้ส่งหลักฐานไป: %r", key[:60])
+            continue
+        # ชั้นหนึ่ง: ข้อความที่ยกมาต้องอยู่ในเอกสารของหลักสูตรนั้นจริง
+        if not quote_is_supported(quote, source):
+            logger.warning("เหตุผลถูกลดชั้นเป็นการอนุมาน: ข้อความอ้างอิงไม่อยู่ในเอกสารของหลักสูตรนั้น — %r", key[:60])
+            out[key] = NO_EVIDENCE_MARKER
+            continue
+        # ชั้นสอง: ข้ออ้างในเหตุผลเองต้องมีหลักฐานรองรับ — quote ถูกอย่างเดียวไม่พอ
+        #
+        # เกิดขึ้นได้จริง: ยกข้อความมาถูกหนึ่งประโยค แต่เหตุผลเติมตัวเลขหรือเงื่อนไข
+        # ที่เอกสารไม่ได้เขียนไว้ ผู้อ่านจะเข้าใจว่าเอกสารระบุข้อนั้นไว้
+        claims = verify_claims(reason, [source])
+        if claims.unsupported:
+            logger.warning("เหตุผลถูกลดชั้นเป็นการอนุมาน: มีข้ออ้างที่เอกสารไม่รองรับ (%s) — %r",
+                           ", ".join(c.shown for c in claims.unsupported), key[:60])
+            out[key] = NO_EVIDENCE_MARKER
+            continue
+        out[key] = reason
+    return out
+
+
+def _excerpt_like(title: str, excerpt_of: dict[str, str]) -> str | None:
+    """เทียบชื่อหลักสูตรแบบหลวมเหมือน _rationale_for เพราะโมเดลเติม/ตัดคำนำหน้าได้"""
+    want = _rationale_key(title)
+    for k, v in excerpt_of.items():
+        if _rationale_key(k) == want:
+            return v
+    return None
+
+
 def _generate_rationales(connector, profile_text: str, evidence: list[dict]) -> dict[str, str]:
     """
     ให้โมเดลเขียนเหตุผลของแต่ละหลักสูตร คืน dict ว่างถ้าล้ม
@@ -566,7 +632,7 @@ def _generate_rationales(connector, profile_text: str, evidence: list[dict]) -> 
             num_predict=connector.answer_token_cap,
         )
         data = json.loads(raw)
-        out = {str(k): str(v) for k, v in data.get("rationales", {}).items()}
+        out = _verified_rationales(data.get("rationales", {}), evidence)
         if not out:
             # JSON ถูกต้องแต่ไม่มีเนื้อหา — คนละอาการกับเรียกโมเดลไม่ได้ และเป็นอาการ
             # ที่เคยเกิดจริงประมาณหนึ่งในสี่ของการเรียก โดยไม่มีร่องรอยอะไรทิ้งไว้เลย

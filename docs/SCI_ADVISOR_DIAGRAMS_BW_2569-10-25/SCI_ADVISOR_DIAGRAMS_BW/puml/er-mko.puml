@@ -1,0 +1,208 @@
+@startuml er-mko
+' =====================================================================
+' ER Diagram (ส่วนขยาย) — schema mko: สายงานสกัดข้อมูลจาก มคอ.2 พร้อมหลักฐาน
+'
+' ** ฉบับแก้ไข 25 ต.ค. 2569 ** — ฉบับก่อนวาดไว้ 8 กล่องจาก 22 ตาราง
+' รอบนี้ไล่จาก information_schema และ pg_constraint จริงจนครบทุกตาราง
+' และแก้ความสัมพันธ์กับ schema public ให้เป็น Foreign Key จริง (ฉบับก่อนวาดเป็นเส้นประ)
+'
+' หลักฐาน (ตรวจเมื่อ 25 ต.ค. 2569 แบบอ่านอย่างเดียว บนฐาน production):
+'   information_schema.tables / views  -> 22 ตาราง + 10 วิว
+'   pg_constraint contype='f'          -> FK ของ mko ทั้งหมด 52 ข้อ
+'   นับแถวด้วย query_to_xml ต่อทุกตาราง
+'
+' ** render ด้วย kroki.io เท่านั้น ** planttext.com และ plantuml.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 72
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam linetype ortho
+skinparam ranksep 55
+skinparam nodesep 30
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+' ขาวดำสำหรับรายงานจบ — บรรทัดนี้ทับสีที่เขียนไว้ด้านล่างทั้งหมด
+' **ลบบรรทัด monochrome ออกบรรทัดเดียว** ก็กลับมาเป็นภาพสีเหมือนเดิม
+' ชนิดขององค์ประกอบแยกด้วย *รูปทรง* ไม่ได้แยกด้วยสี จึงอ่านได้ครบในฉบับขาวดำ
+skinparam shadowing false
+hide circle
+
+package "มาจาก schema public (ไม่ได้อยู่ใน mko แต่ถูก FK ชี้ถึง)" #FFF9E8 {
+  entity "public.courses" as pcourses {
+    id : uuid <<PK>> · 24 แถว
+  }
+  entity "public.course_documents" as pdocs {
+    id : uuid <<PK>> · 31 แถว
+  }
+}
+
+package "ขั้นที่ 1 — เก็บเอกสารเป็นหน้า ๆ และรอบการสกัด" #F6FBFF {
+  entity "extraction_runs" as runs {
+    id : uuid <<PK>>
+    document_id : uuid <<FK -> public.course_documents>>
+  }
+  entity "document_pages" as pages {
+    document_id : uuid <<PK, FK -> public.course_documents>>
+    page_number : int <<PK>>
+  }
+  entity "document_sections" as sections {
+    id : uuid <<PK>>
+    document_id <<FK -> public.course_documents>>
+    run_id <<FK -> extraction_runs>>
+  }
+}
+
+package "ขั้นที่ 2 — หลักฐาน (หัวใจของสายงานนี้)" #F7FFF7 {
+  entity "evidence" as evid {
+    id : uuid <<PK>>
+    --
+    (document_id, page_start) <<FK ผสมชุดที่ 1>>
+    (document_id, page_end)   <<FK ผสมชุดที่ 2>>
+    section_id <<FK -> document_sections, SET NULL>>
+    run_id     <<FK -> extraction_runs>>
+  }
+}
+
+package "ขั้นที่ 3 — ค่าที่สกัดได้ (ยังไม่เผยแพร่)" #FFFDF5 {
+  entity "curricula" as curr {
+    id : uuid <<PK>>
+    course_id <<FK -> public.courses>>
+    primary_document_id <<FK -> public.course_documents>>
+    program_id <<FK -> programs>> (NULL ทั้งหมด)
+  }
+  entity "field_values" as fv {
+    id : uuid <<PK>>
+    curriculum_id, document_id, evidence_id, run_id <<FK>>
+  }
+  entity "field_value_evidence" as fve {
+    field_value_id <<FK>>
+    evidence_id <<FK>>
+  }
+  entity "list_items" as li {
+    id : uuid <<PK>>
+    curriculum_id, document_id, evidence_id, run_id <<FK>>
+  }
+  entity "review_decisions" as rev {
+    id : uuid <<PK>>
+    document_id <<FK -> public.course_documents>>
+  }
+}
+
+package "ขั้นที่ 4 — การเผยแพร่ (ระบบถาม-ตอบอ่านจากตรงนี้)" #F3E8FF {
+  entity "publications" as pubs {
+    id : uuid <<PK>>
+    published_at, published_by
+  }
+  entity "published_values" as pv {
+    (publication_id, course_id, field_key) <<PK ผสม>>
+    document_id <<FK>>
+  }
+  entity "published_list_items" as pli {
+    id / PK ผสม
+    publication_id, course_id, document_id <<FK>>
+  }
+  entity "published_subjects" as ps {
+    (publication_id, course_id, code) <<PK ผสม>>
+    document_id <<FK, SET NULL>>
+    --
+    requirement : required | elective | choose_group
+  }
+  entity "published_subject_prerequisites" as psp {
+    publication_id, course_id, document_id <<FK>>
+  }
+  entity "วิว v_live_* (5 วิว)" as views {
+    <b>v_live_publication</b> — การเผยแพร่ครั้งล่าสุด (1 แถว)
+    v_live_values · v_live_subjects
+    v_live_list_items · v_live_subject_prerequisites
+    ..
+    <b>ระบบถาม-ตอบอ่านจากตรงนี้</b>
+    ไม่ได้อ่านตาราง published_* โดยตรง
+  }
+  entity "วิวอื่น (5 วิว)" as views2 {
+    v_published_curricula
+    v_published_field_values
+    v_published_list_items
+    v_crawl_pending · v_crawl_queue
+  }
+}
+
+package "ขั้นเสริม — ครawler และการวัดผล" #F3F3F3 {
+  entity "crawl_sources" as cs {
+    id : uuid <<PK>>
+    document_id <<FK, SET NULL>>
+    staging_path, status
+  }
+  entity "crawl_decisions" as cd {
+    id : uuid <<PK>>
+    crawl_source_id <<FK>>
+    document_id <<FK, SET NULL>>
+    decision, superseded_at
+    ingest_started_at, ingest_finished_at
+    <b>หลักฐานการอนุมัติการนำเข้าอยู่ที่ตารางนี้</b>
+  }
+  entity "shadow_answers" as sh {
+    id : uuid <<PK>>
+    publication_id <<FK, SET NULL>>
+    ไว้เทียบกับคำตอบจริง (โหมด shadow)
+  }
+  entity "schema_migrations" as sm {
+    version : text <<PK>>
+    applied_at
+  }
+}
+
+package "ตารางที่ยังว่าง (0 แถว — โค้ดรองรับแล้วแต่ยังไม่ใช้)" #EEEEEE {
+  entity "programs · subjects\ncredit_groups · learning_outcomes" as empty {
+    programs           0 แถว  (curricula.program_id จึง NULL ทั้งหมด)
+    subjects           0 แถว
+    credit_groups      0 แถว
+    learning_outcomes  0 แถว
+    ..
+    ทั้งสี่ตารางมี FK ไป curricula / evidence / extraction_runs ครบ
+  }
+}
+
+pdocs ||--o{ runs : CASCADE
+pdocs ||--o{ pages : CASCADE
+pdocs ||--o{ sections : CASCADE
+pdocs ||--o{ rev : CASCADE
+pcourses ||--o{ curr : CASCADE
+pdocs ||--o| curr : primary_document_id\nNO ACTION
+
+runs ||--o{ sections : CASCADE
+runs ||--o{ evid : CASCADE
+pages ||--o{ evid : CASCADE\n<b>FK ผสม 2 ชุด</b>
+sections ||--o{ evid : SET NULL
+
+curr ||--o{ fv : CASCADE
+curr ||--o{ li : CASCADE
+evid ||--o{ fv : NO ACTION
+evid ||--o{ li : NO ACTION
+fv ||--o{ fve : CASCADE
+evid ||--o{ fve : CASCADE
+
+pubs ||--o{ pv : CASCADE
+pubs ||--o{ pli : CASCADE
+pubs ||--o{ ps : CASCADE
+pubs ||--o{ psp : CASCADE
+pubs ||--o{ sh : SET NULL
+pcourses ||--o{ pv : CASCADE
+pcourses ||--o{ pli : CASCADE
+pcourses ||--o{ ps : CASCADE
+pcourses ||--o{ psp : CASCADE
+
+pv .. views
+ps .. views
+pli .. views
+psp .. views
+
+cs ||--o{ cd : CASCADE
+pdocs ||--o| cs : SET NULL
+pdocs ||--o| cd : SET NULL
+
+curr ||--o{ empty : CASCADE
+evid ||--o{ empty : NO ACTION
+
+@enduml

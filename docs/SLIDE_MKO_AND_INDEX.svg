@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="'Tahoma','Segoe UI','Leelawadee UI',sans-serif">
+<defs><linearGradient id="hl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#22B8D8"/><stop offset="100%" stop-color="#2F6BE0"/></linearGradient><radialGradient id="bgA" cx="0" cy="0" r="1"><stop offset="0%" stop-color="#DCE7FA"/><stop offset="100%" stop-color="#ffffff"/></radialGradient><radialGradient id="bgB" cx="1" cy="1" r="1"><stop offset="0%" stop-color="#DFF3F8"/><stop offset="100%" stop-color="#ffffff"/></radialGradient></defs>
+<rect width="1920" height="1080" fill="#ffffff"/>
+<rect width="1920" height="1080" fill="url(#bgA)" opacity="0.55"/>
+<rect width="1920" height="1080" fill="url(#bgB)" opacity="0.5"/>
+<rect x="46" y="28" width="1828" height="1024" rx="10" fill="#ffffff" opacity="0.92"/>
+<text x="100" y="70" font-size="19" fill="#64748B" font-weight="normal" text-anchor="start">Database Design</text>
+<text x="100" y="96" font-size="19" fill="#64748B">for the <tspan font-weight="bold" fill="#0F172A">SCI Advisor System</tspan></text>
+<text x="1820" y="70" font-size="21" fill="#0F172A" font-weight="bold" text-anchor="end">4123204</text>
+<text x="1820" y="96" font-size="19" fill="#64748B" font-weight="normal" text-anchor="end">Advanced Database</text>
+<text x="960.0" y="192" text-anchor="middle" font-size="48" font-weight="bold" fill="#0F172A">schema <tspan fill="url(#hl)">mko</tspan> และกลยุทธ์การทำดัชนี</text>
+<text x="960.0" y="236" font-size="21" fill="#64748B" font-weight="normal" text-anchor="middle">ส่วนที่ทำให้ระบบตอบคำถามเชิงโครงสร้างได้ และค้นเนื้อหา 9,039 ท่อนได้ในระดับมิลลิวินาที</text>
+<rect x="70" y="288" width="880" height="560" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<circle cx="122" cy="342" r="21" fill="#0B7C90"/>
+<text x="122" y="350" font-size="21" fill="#ffffff" font-weight="bold" text-anchor="middle">1</text>
+<text x="158" y="336" font-size="23" fill="#0F172A" font-weight="bold" text-anchor="start">schema mko — ข้อมูลที่สกัดพร้อมหลักฐาน</text>
+<text x="158" y="362" font-size="16" fill="#0B7C90" font-weight="normal" text-anchor="start">18 ตาราง · 6 วิว แยกจาก schema public</text>
+<text x="102" y="416" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">เก็บค่าที่สกัดจากเอกสาร มคอ.2 ทีละค่า พร้อมชี้ว่าค่านั้นมาจากเอกสารไหน</text>
+<text x="102" y="446" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">หน้าไหน และผ่านการตรวจทานแล้วหรือยัง</text>
+<text x="102" y="506" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">โซ่หลักฐาน:  field_values → evidence → course_documents → courses</text>
+<text x="102" y="536" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">ทำให้ทุกค่าที่ระบบใช้ตอบ สาวกลับไปถึงไฟล์ต้นฉบับและเลขหน้าได้</text>
+<text x="102" y="596" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">ค่าจะถูกนำไปใช้ตอบก็ต่อเมื่อสถานะเป็น verified แล้วเท่านั้น</text>
+<text x="102" y="626" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">วิว v_live_values ทำหน้าที่กรองชั้นนี้ให้</text>
+<rect x="102" y="690" width="258" height="96" rx="12" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.4"/>
+<text x="231.0" y="736" font-size="34" fill="#0B7C90" font-weight="bold" text-anchor="middle">787</text>
+<text x="231.0" y="764" font-size="15.5" fill="#64748B" font-weight="normal" text-anchor="middle">หลักฐาน (evidence)</text>
+<rect x="380" y="690" width="258" height="96" rx="12" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.4"/>
+<text x="509.0" y="736" font-size="34" fill="#0B7C90" font-weight="bold" text-anchor="middle">403</text>
+<text x="509.0" y="764" font-size="15.5" fill="#64748B" font-weight="normal" text-anchor="middle">ค่าที่สกัดได้</text>
+<rect x="658" y="690" width="258" height="96" rx="12" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.4"/>
+<text x="787.0" y="736" font-size="34" fill="#0B7C90" font-weight="bold" text-anchor="middle">103</text>
+<text x="787.0" y="764" font-size="15.5" fill="#64748B" font-weight="normal" text-anchor="middle">ค่าที่เผยแพร่แล้ว</text>
+<rect x="970" y="288" width="880" height="560" rx="18" fill="#ffffff" stroke="#BFE6EE" stroke-width="1.8"/>
+<circle cx="1022" cy="342" r="21" fill="#0B7C90"/>
+<text x="1022" y="350" font-size="21" fill="#ffffff" font-weight="bold" text-anchor="middle">2</text>
+<text x="1058" y="336" font-size="23" fill="#0F172A" font-weight="bold" text-anchor="start">กลยุทธ์การทำดัชนี (Index)</text>
+<text x="1058" y="362" font-size="16" fill="#0B7C90" font-weight="normal" text-anchor="start">ดัชนีทั้งหมด 52 ตัว = ประกาศเอง 15 + เกิดจาก PK/UNIQUE 37</text>
+<text x="1002" y="416" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">ดัชนีสำคัญที่สุดคือดัชนีเวกเตอร์บน course_chunks.embedding</text>
+<text x="1002" y="446" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">ใช้ชนิด ivfflat ซึ่งค้นแบบประมาณ เร็วกว่าไล่เทียบทุกแถวมาก</text>
+<rect x="1002" y="488" width="816" height="66" rx="10" fill="#F5F7FA" stroke="#DDE3EC" stroke-width="1.4"/>
+<text x="1020" y="516" font-size="15.5" fill="#1F3D6B" font-family="Consolas,monospace">CREATE INDEX idx_course_chunks_embedding</text>
+<text x="1020" y="540" font-size="15.5" fill="#1F3D6B" font-family="Consolas,monospace">  ON course_chunks USING ivfflat (embedding vector_cosine_ops)</text>
+<rect x="1002" y="576" width="816" height="210" rx="12" fill="#FFF8E8" stroke="#F2D9A0" stroke-width="1.5"/>
+<text x="1024" y="612" font-size="19" fill="#8A6212" font-weight="bold" text-anchor="start">บทเรียนจากการใช้งานจริง</text>
+<text x="1024" y="644" font-size="16" fill="#6B5116" font-weight="normal" text-anchor="start">ดัชนี ivfflat เลือกผู้เข้าชิงจากดัชนีก่อน แล้วค่อยกรองด้วย WHERE</text>
+<text x="1024" y="670" font-size="16" fill="#6B5116" font-weight="normal" text-anchor="start">พอกรองให้เหลือหลักสูตรเดียว ผู้เข้าชิงที่ดัชนีเลือกมาอาจไม่มีของ</text>
+<text x="1024" y="696" font-size="16" fill="#6B5116" font-weight="normal" text-anchor="start">หลักสูตรนั้นเลย ผลคือคืนแถวว่างโดยไม่แจ้งข้อผิดพลาด</text>
+<text x="1024" y="748" font-size="16" fill="#6B5116" font-weight="normal" text-anchor="start">ทดสอบแล้วได้ 0 แถว ทั้งที่หลักสูตรนั้นมีข้อความอยู่จริง 422 ท่อน</text>
+<text x="1024" y="774" font-size="16" fill="#6B5116" font-weight="normal" text-anchor="start">แก้โดยปิดการใช้ดัชนีเฉพาะกรณีที่กรองแล้วเหลือน้อย</text>
+<rect x="70" y="886" width="1780" height="90" rx="16" fill="#EAF7FA" stroke="#CBE9F0" stroke-width="1.6"/>
+<circle cx="116" cy="931" r="17" fill="#0B7C90"/>
+<path d="M109,931 l5,5 l10,-11" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="150" y1="908" x2="150" y2="954" stroke="#CBE9F0" stroke-width="2"/>
+<text x="174" y="942" font-size="18" fill="#334155" font-weight="normal" text-anchor="start">สองส่วนนี้ทำงานคู่กัน — ดัชนีเวกเตอร์หาว่าเนื้อหาอยู่ตรงไหน ส่วน schema mko ตอบว่าค่านั้นคืออะไรและมาจากเอกสารหน้าไหน</text>
+</svg>

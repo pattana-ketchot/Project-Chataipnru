@@ -1,0 +1,32 @@
+INFO:course_advisor:timing /chat-web total=3649ms prepare=2234ms write_answer=1390ms persist=24ms | corpus_version=35ms gates=743ms structured_miss=3ms retrieve1=246ms decide=1205ms | source=rag status=answered outcome=ok q='ขอรายชื่อ 3 วิชาในกลุ่มฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ขอ'
+รอบ 1: รหัสครบ 3/3 · ขั้นต่ำ7=True · เลือก5=True · เตือน=True
+        ที่มา: (ตรวจแล้วรองรับบางส่วน): cs66_brief.pdf หน้า 31; cs66_brief.pdf หน้า 7 | ยังยืนยันไม่ได้จากหน้าที่อ้าง: มีรายวิชาดังนี้
+INFO:course_advisor:เติมหน้าที่ยืนยันข้ออ้างที่ยังค้าง: cs66_brief.pdf หน้า 30 -> ['ไม่น้อยกว่า 7 หน่วยกิต']
+INFO:course_advisor:timing /chat-web total=3003ms prepare=1936ms write_answer=1054ms persist=13ms | corpus_version=6ms gates=630ms structured_miss=3ms retrieve1=241ms decide=1054ms | source=rag status=answered outcome=ok q='ขอรายชื่อ 3 วิชาในกลุ่มฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ขอ'
+รอบ 2: รหัสครบ 3/3 · ขั้นต่ำ7=True · เลือก5=True · เตือน=False
+        ที่มา: : cs66_brief.pdf หน้า 31; cs66_brief.pdf หน้า 30
+INFO:course_advisor:timing /chat-web total=3109ms prepare=1920ms write_answer=1169ms persist=20ms | corpus_version=5ms gates=702ms structured_miss=2ms retrieve1=237ms decide=971ms | source=rag status=answered outcome=ok q='ขอรายชื่อ 3 วิชาในกลุ่มฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ขอ'
+รอบ 3: รหัสครบ 3/3 · ขั้นต่ำ7=True · เลือก5=True · เตือน=False
+        ที่มา: : cs66_brief.pdf หน้า 7
+INFO:course_advisor:เติมหน้าที่ยืนยันข้ออ้างที่ยังค้าง: cs66_brief.pdf หน้า 30 -> ['ไม่น้อยกว่า 7 หน่วยกิต']
+INFO:course_advisor:timing /chat-web total=3518ms prepare=2347ms write_answer=1150ms persist=21ms | corpus_version=5ms gates=1105ms structured_miss=3ms retrieve1=227ms decide=1005ms | source=rag status=answered outcome=ok q='ขอรายชื่อ 3 วิชาในกลุ่มฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ขอ'
+รอบ 4: รหัสครบ 3/3 · ขั้นต่ำ7=True · เลือก5=True · เตือน=True
+        ที่มา: (ตรวจแล้วรองรับบางส่วน): cs66_brief.pdf หน้า 31; cs66_brief.pdf หน้า 30 | ยังยืนยันไม่ได้จากหน้าที่อ้าง: มีรายวิชาดังนี้
+INFO:course_advisor:timing /chat-web total=3423ms prepare=2057ms write_answer=1336ms persist=30ms | corpus_version=5ms gates=753ms structured_miss=2ms retrieve1=234ms decide=1060ms | source=rag status=answered outcome=ok q='ขอรายชื่อ 3 วิชาในกลุ่มฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ขอ'
+รอบ 5: รหัสครบ 3/3 · ขั้นต่ำ7=True · เลือก5=True · เตือน=True
+        ที่มา: (ตรวจแล้วรองรับบางส่วน): cs66_brief.pdf หน้า 7 | ยังยืนยันไม่ได้จากหน้าที่อ้าง: มีเงื่อนไขต้องผ่านวิชาบังคับก่อน
+INFO:llm.gemini:429 เป็นเพดานต่อนาที (เจอ PerMinute ในเนื้อความ)
+WARNING:llm.gemini:พักโมเดล gemini-3.5-flash-lite ไว้ 45 วินาที จะไปใช้ตัวถัดไปก่อน
+INFO:llm.gemini:ตอบด้วยโมเดลสำรอง gemini-3.1-flash-lite
+INFO:llm.gemini:สตรีมด้วยโมเดลสำรอง gemini-3.1-flash-lite
+INFO:course_advisor:เติมหน้าที่ยืนยันข้ออ้างที่ยังค้าง: cs66_brief.pdf หน้า 30 -> ['ไม่น้อยกว่า 7 หน่วยกิต']
+INFO:course_advisor:timing /chat-web total=4739ms prepare=3217ms write_answer=1510ms persist=13ms | corpus_version=5ms gates=779ms structured_miss=3ms retrieve1=230ms decide=2198ms | source=rag status=answered outcome=ok q='ขอรายชื่อ 3 วิชาในกลุ่มฝึกประสบการณ์วิชาชีพหรือสหกิจศึกษา ขอ'
+รอบ 6: รหัสครบ 3/3 · ขั้นต่ำ7=True · เลือก5=True · เตือน=True
+        ที่มา: (ตรวจแล้วรองรับบางส่วน): cs66_brief.pdf หน้า 31; cs66.pdf หน้า 17; cs66_brief.pdf หน้า 30 | ยังยืนยันไม่ได้จากหน้าที่อ้า
+
+=== สรุป 6 รอบ ===
+  รหัสครบ 3 วิชา: 6/6
+  บอกขั้นต่ำ 7 หน่วยกิต: 6/6
+  บอกกติกาเลือก 5 หน่วยกิต: 6/6
+  อ้าง cs66.pdf หน้า 19: 0/6
+  ขึ้นข้อความเตือน: 4/6

@@ -1,0 +1,141 @@
+@startuml sequence-doc-ingest
+' =====================================================================
+' Sequence Diagram — การนำเข้าเอกสาร มคอ.2 เข้าคลังความรู้ (RAG)
+' ปรับปรุง 25 ต.ค. 2569 ตามผลตรวจทาน
+'
+' สิ่งที่แก้จากฉบับก่อน
+' --------------------
+' 1. กรณีสัญญา embedding ไม่ตรง และกรณี sha256 ไม่ตรง เคยวาดด้วย alt ที่มีแต่ทางล้มเหลว
+'    ทำให้อ่านได้ว่า "ถ้าไม่ตรงก็แจ้งแล้วทำต่อ" ซึ่งผิด — ของจริง **หยุดทั้งงาน**
+'    รอบนี้ใช้ break ซึ่งเป็นสัญลักษณ์ของ UML ที่หมายถึงออกจากลำดับทันที
+' 2. ลดความกว้างของภาพ (ฉบับก่อน 2,198 px ย่อลง A4 แล้วตัวอักษรเหลือ 1.48 มม.)
+'    ด้วยการย่อชื่อผู้มีส่วนร่วมและย้ายรายละเอียดไปคำอธิบายใต้ภาพ
+'
+' หลักฐาน (ตรวจ 25 ต.ค. 2569 แบบอ่านอย่างเดียว):
+'   backend/app/api/routes/crawl_review.py          หน้าตรวจรับของผู้ดูแล
+'   backend/app/services/crawl_review.py:225        เงื่อนไขการถอนการอนุมัติ
+'   pipeline/crawl/approve.py                       docstring: ยึดงานด้วย row lock ตลอดงาน
+'   pipeline/crawl/approve.py:103                   check_embedding_contract()
+'   pipeline/crawl/approve.py:176                   validate_pdf() เทียบ sha256
+'   pipeline/crawl/approve.py:202                   lock_existing_course() FOR SHARE
+'   pipeline/ingest.py                              PDF > extract > clean > chunk > embed > insert
+'   pipeline/ingest.py:186                          already_ingested() กันการ embed ซ้ำ
+'   pipeline/chunker.py:30-31                       1000 ตัวอักษร ซ้อน 150
+'   docker-compose.worker.yml                       profiles: ["worker"] · advisor_ingest
+'   docker ps                                       ไม่มีคอนเทนเนอร์ ingest-worker ทำงานอยู่
+'
+' ** render ด้วย kroki.io ** — plantuml.com และ planttext.com ไม่มีฟอนต์ไทย
+' =====================================================================
+skinparam dpi 100
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam sequenceGroupBackgroundColor white
+skinparam sequenceGroupBorderColor black
+skinparam sequenceGroupHeaderFontColor black
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam titleBackgroundColor white
+skinparam legendBackgroundColor white
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam database {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam folder {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam class {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam participant {
+  BackgroundColor white
+  BorderColor black
+}
+' ขาวดำสำหรับรายงานจบ — ลบบรรทัดนี้บรรทัดเดียวก็กลับเป็นภาพสี
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam defaultFontSize 13
+
+actor "ผู้ดูแล" as admin
+actor "ผู้ดูแล\nเซิร์ฟเวอร์" as ops
+participant "backend" as be
+participant "worker" as w
+participant "ingest.py" as ing
+participant "Ollama" as ol
+database "PostgreSQL" as db
+participant "ดิสก์" as disk
+
+== 1. คนอนุมัติ ==
+
+admin -> be : เปิดหน้าตรวจรับ
+be -> db : อ่าน v_crawl_pending
+db --> be : รายการไฟล์ที่รออนุมัติ
+be --> admin : รายชื่อไฟล์ + sha256
+admin -> be : กดอนุมัติ
+be -> db : เขียน crawl_decisions\n(decision = approve)
+
+== 2. คนสั่งรัน worker ==
+
+ops -> w : docker compose run --rm ingest-worker
+
+w -> ol : ตรวจสัญญา embedding
+ol --> w : ชื่อโมเดลและขนาดเวกเตอร์
+
+break โมเดลไม่ใช่ bge-m3 หรือขนาดไม่ใช่ 1024
+  w --> ops : หยุดทันที ไม่ยึดงานใด
+end
+
+w -> db : ยึดงานด้วย SELECT ... FOR UPDATE\n(ถือ row lock ไว้ตลอดงาน)
+w -> disk : อ่านไฟล์จาก staging (อ่านอย่างเดียว)
+w -> w : เทียบ sha256 ของไฟล์จริง\nกับค่าที่บันทึกตอนอนุมัติ
+
+break sha256 ไม่ตรง
+  w --> ops : หยุด — ไม่ใช่ไฟล์ที่ถูกอนุมัติ
+end
+
+w -> db : ล็อกหลักสูตรที่มีอยู่ FOR SHARE
+w -> disk : คัดลอกไฟล์ไป documents/
+
+== 3. สายงานนำเข้าเดิม ==
+
+w -> ing : run()
+ing -> ing : ถอดข้อความทีละหน้า (เก็บเลขหน้า)
+ing -> db : already_ingested(sha256)?
+db --> ing : เคยนำเข้าหรือยัง
+
+alt ยังไม่เคยนำเข้า
+  opt มีหน้าที่เป็นภาพสแกน
+    ing -> ing : เติมข้อความจากผล OCR ที่เตรียมไว้ล่วงหน้า
+  end
+  ing -> ing : ทำความสะอาด แล้วตัดชิ้น 1,000 ตัวอักษร ซ้อนกัน 150
+  loop ทุกชิ้น
+    ing -> ol : embed(ข้อความของชิ้น)
+    ol --> ing : เวกเตอร์ 1024 มิติ
+  end
+  ing -> db : INSERT courses / course_documents / course_chunks\nหนึ่ง transaction ต่อเอกสาร (advisor_ingest)
+  db --> ing : สำเร็จ
+else เคยนำเข้าแล้ว (sha256 ตรงกับของเดิม)
+  ing -> ing : คืนค่าโดยไม่ embed ซ้ำ
+end
+
+ing --> w : จำนวนชิ้นที่เขียน
+
+w -> db : บันทึก ingest_finished_at แล้ว COMMIT\n(ปล่อย row lock ตรงนี้)
+w --> ops : รายงานผล · ออกด้วยรหัส 1 ถ้ามีงานล้ม
+
+@enduml

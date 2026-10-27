@@ -1,0 +1,58 @@
+%% ER (ส่วนขยาย) — schema mko: สายงานสกัดข้อมูลจาก มคอ.2 พร้อมหลักฐาน
+%% ฉบับ Mermaid สำหรับนำเข้า lucid.app  ·  ซอร์สต้นทาง: docs/diagrams/er-mko.puml
+%% แยกจาก er.mmd เพราะรวมกันแล้วภาพกว้างเกินไปจนอ่านไม่ออก
+%% ---
+%% ข้อมูลประกอบที่ Mermaid ไม่มีที่วาง (PlantUML ใส่ไว้ในบล็อก legend):
+%%   evidence มี Foreign Key แบบหลายคอลัมน์ ในรายการ FK จึงเห็นชื่อ evidence
+%%     ซ้ำหลายบรรทัด นั่นไม่ใช่ FK หลายเส้น แต่เป็น FK สองข้อที่แต่ละข้อใช้สองคอลัมน์
+%%   ตารางที่ยังว่างเปล่า 0 แถว ยังไม่ใช้งาน: programs · subjects · credit_groups ·
+%%     learning_outcomes · crawl_decisions  (curricula.program_id จึงเป็น NULL ทั้งหมด)
+%%   จำนวนแถวนับจากฐานข้อมูล production เมื่อ 16 ต.ค. 2569
+
+erDiagram
+    document_pages {
+        uuid document_id PK "PK ผสมสองคอลัมน์ · 4129 แถว"
+        int page_number PK
+    }
+    evidence {
+        uuid id PK "787 แถว"
+        uuid document_id FK "FK ผสมชุดที่ 1 คู่กับ page_start"
+        int page_start FK "FK ผสมชุดที่ 1"
+        int page_end FK "FK ผสมชุดที่ 2 คู่กับ document_id"
+    }
+    curricula {
+        uuid id PK "24 แถว"
+        uuid program_id FK "ชี้ไป programs ซึ่งยังว่าง จึง NULL ทั้งหมด"
+    }
+    field_values {
+        uuid id PK "403 แถว"
+        uuid curriculum_id FK
+        uuid evidence_id FK "NO ACTION"
+    }
+    publications {
+        uuid id PK "5 แถว"
+    }
+    published_values {
+        uuid publication_id PK "PK ผสมสามคอลัมน์ · 501 แถว"
+        uuid course_id PK
+        text field_key PK
+    }
+    published_subjects {
+        uuid publication_id PK "PK ผสมสามคอลัมน์ · 82 แถว"
+        uuid course_id PK
+        text code PK
+        text requirement "required | elective | choose_group"
+    }
+    v_live_views {
+        text name "VIEW: v_live_values / v_live_subjects"
+        text note "ระบบถาม-ตอบอ่านจากตรงนี้ ไม่ได้อ่านตาราง published_* โดยตรง"
+        text rule "วิวอ่านการเผยแพร่ครั้งล่าสุดครั้งเดียว"
+    }
+
+    document_pages ||--o{ evidence : "CASCADE · FK ผสม 2 ชุด"
+    curricula ||--o{ field_values : "CASCADE"
+    evidence ||--o{ field_values : "evidence_id NO ACTION"
+    publications ||--o{ published_values : "CASCADE"
+    publications ||--o{ published_subjects : "CASCADE"
+    published_values ||..o{ v_live_views : "อ่านผ่านวิว"
+    published_subjects ||..o{ v_live_views : "อ่านผ่านวิว"
