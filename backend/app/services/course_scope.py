@@ -337,6 +337,49 @@ def _names_for_alias(alias: str, full: str, by_name: dict[str, list[uuid.UUID]])
     return sorted(direct, key=len, reverse=True) + sorted(family, key=len, reverse=True)
 
 
+def ambiguous_degree_level(db: Session, question: str) -> tuple[str, list[str]] | None:
+    """
+    คำถามเอ่ยชื่อหลักสูตรที่มีหลายระดับปริญญา แต่ **ไม่ได้บอกว่าระดับไหน** หรือไม่
+    คืน (ชื่อหลักสูตร, รายชื่อระดับที่มี) เรียงจากต่ำไปสูง
+
+    คู่กับ missing_degree_level() ซึ่งดูกรณี "ระบุระดับที่ไม่มี"
+    อันนี้ดูกรณี "ไม่ระบุทั้งที่มีให้เลือกมากกว่าหนึ่ง"
+
+    ทำไมต้องถามกลับแทนที่จะตอบ
+    ---------------------------
+    คลังนี้มีสาขาที่ชื่อสาขาและปีเดียวกันแต่คนละระดับ (การจัดการเทคโนโลยีการเกษตรและ
+    บริหารทรัพยากรชุมชน พ.ศ. 2568 มีทั้งปริญญาโท 36 หน่วยกิต และปริญญาเอก 48 หน่วยกิต)
+    ขอบเขตจะเหลือทั้งสองเล่ม แล้วส่งต่อให้เส้นทางเอกสารเขียนคำตอบจากทั้งคู่
+
+    ผลคือคำตอบอาจเอาตัวเลขของสองระดับมาปนกัน หรือหยิบเล่มใดเล่มหนึ่งมาตอบโดยไม่บอก
+    ว่าเป็นระดับไหน ซึ่งผู้อ่านแยกไม่ออกว่าได้คำตอบของระดับที่ตัวเองถามหรือเปล่า
+    **การถามกลับหนึ่งประโยคถูกกว่าการตอบผิดโดยไม่มีสัญญาณเตือน**
+
+    คืน None เมื่อ: คำถามระบุระดับแล้ว · ไม่เอ่ยถึงหลักสูตรใด · หรือหลักสูตรนั้นมีระดับเดียว
+    (หลักสูตรปริญญาตรีที่มีหลายฉบับปีจึงไม่เข้าเงื่อนไขนี้ เพราะทุกฉบับระดับเดียวกัน)
+    """
+    if requested_degree_level(question) is not None:
+        return None
+
+    courses = db.scalars(select(Course).where(Course.is_active.is_(True))).all()
+    titles = {c.id: c.title for c in courses}
+    by_name: dict[str, list[uuid.UUID]] = {}
+    for c in courses:
+        by_name.setdefault(_distinctive_name(c.title), []).append(c.id)
+
+    candidates = _candidate_names(question, by_name)
+    if not candidates:
+        return None
+
+    ids = [cid for name in candidates for cid in by_name[name]]
+    have = degree_levels_of(ids, titles)
+    if len(have) < 2:
+        return None
+
+    order = {"bachelor": 0, "master": 1, "doctoral": 2}
+    return candidates[0], sorted(have, key=lambda lv: order.get(lv, 99))
+
+
 def missing_degree_level(db: Session, question: str) -> tuple[str, str] | None:
     """
     คำถามระบุระดับปริญญาที่หลักสูตรนั้น **ไม่มี** หรือไม่ · คืน (ชื่อหลักสูตร, ระดับที่ขอ)
@@ -488,6 +531,23 @@ _LEVEL_LABEL = {"bachelor": "ปริญญาตรี", "master": "ปริ�
 
 def degree_level_label(level: str) -> str:
     return _LEVEL_LABEL.get(level, level)
+
+
+def without_degree_level(text: str) -> str:
+    """
+    ข้อความที่ตัดคำบอกระดับปริญญาออก
+
+    ใช้ดูว่า "ข้อความนี้พูดแค่ระดับปริญญา หรือมีเรื่องอื่นด้วย" — เมื่อระบบถามกลับว่า
+    เอาระดับไหน แล้วผู้ใช้ตอบสั้น ๆ ว่า "ปริญญาโท" ข้อความจะไม่เหลืออะไรหลังตัด
+    ซึ่งแปลว่าเป็นคำตอบของคำถามที่ระบบถาม ไม่ใช่คำถามใหม่
+
+    **เรียกหลังตัดชื่อหลักสูตรออกแล้วเท่านั้น** เพราะรูปแบบของระดับปริญญาตรีคือ
+    ชื่อปริญญาที่ลงท้ายด้วย "บัณฑิต" ซึ่งกินชื่อหลักสูตรอย่าง
+    "การแพทย์แผนไทยประยุกต์บัณฑิต" ไปทั้งชื่อถ้าเรียกก่อน
+    """
+    for pattern, _level in _DEGREE_LEVEL_PATTERNS:
+        text = pattern.sub(" ", text)
+    return text
 
 
 def _build(ids: list[uuid.UUID], name: str, question: str, strip: str | None = None) -> CourseScope:

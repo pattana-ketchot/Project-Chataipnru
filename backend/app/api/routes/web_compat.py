@@ -36,6 +36,7 @@ from app.services.curriculum_facts import LIST_FIELDS
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
 from app.services.program_names import program_about, program_facts
+from app.services.course_scope import degree_level_of, degree_of_title
 from app.services.web_compat import canonical_labels, label_of, match_by_title, normalise_title, shared_user
 
 from llm.connector import LLMConnectionError  # noqa: E402
@@ -84,6 +85,12 @@ class WebChatRequest(BaseModel):
 class WebCourse(BaseModel):
     id: str
     title: str = ""
+    # ระดับการศึกษาที่หน้าเว็บส่งมา ("ปริญญาโท" / "ปริญญาเอก" / "ปริญญาตรี")
+    #
+    # จำเป็นเพราะคณะมีสาขาที่ชื่อและปีเดียวกันแต่คนละระดับปริญญา ถ้าไม่มีช่องนี้
+    # match_by_title() จะเลือกเล่มเดียวกันให้ทั้งสองรายการ แล้วเอาเล่มนั้นมาเทียบ
+    # กับตัวเอง · ค่าว่างยังรับได้ ผู้เรียกรุ่นเก่าจึงไม่พัง
+    level: str = ""
 
 
 class WebCompareRequest(BaseModel):
@@ -444,6 +451,11 @@ def career_lists_web(db: Session = Depends(get_db)) -> dict:
     return {"programmes": programmes}
 
 
+def _rank_key(title: str) -> tuple[str, str | None]:
+    """คีย์เทียบชื่อสาขาที่แยกระดับปริญญาด้วย — ใช้จับคู่อันดับกลับไปที่การ์ดบนหน้าเว็บ"""
+    return normalise_title(title), degree_level_of(degree_of_title(title))
+
+
 def _row_value(rows, dimension: str, index: int) -> str | None:
     for row in rows:
         if row["dimension"] == dimension:
@@ -466,9 +478,12 @@ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db
 
     if len(matched) < 2:
         names = ", ".join(c["title"] for c in unmatched) or "ที่เลือกมา"
+        # สาขาที่มีหลายระดับปริญญาแต่ไม่ได้บอกระดับมา จะอยู่ใน unmatched เช่นกัน
+        # ข้อความต้องบอกทางออกให้ด้วย ไม่ใช่บอกแค่ว่าไม่มีเอกสาร ซึ่งไม่จริงในกรณีนี้
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"ยังไม่มีเอกสารหลักสูตรของสาขา: {names} จึงเปรียบเทียบให้ไม่ได้",
+            f"ยังไม่มีเอกสารหลักสูตรของสาขา: {names} จึงเปรียบเทียบให้ไม่ได้ "
+            f"(ถ้าสาขานั้นเปิดสอนหลายระดับปริญญา ต้องระบุระดับมาด้วย)",
         )
 
     try:
@@ -536,12 +551,14 @@ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_
     # เทียบกลับด้วยชื่อ ไม่ใช่รหัสของหลักสูตร เพราะการจัดอันดับมองเอกสารทุกฉบับรวม
     # ฉบับเก่า แต่ตารางจับคู่เก็บเฉพาะฉบับล่าสุด — เทียบด้วยรหัสจะทำให้อันดับที่ชนะ
     # ด้วยเอกสารฉบับเก่าหายไปเงียบๆ
-    back = {normalise_title(course.title): item["id"] for item, course in matched}
+    # คีย์รวมระดับปริญญาด้วย เพราะ normalise_title() ตัดชื่อปริญญาทิ้ง สาขาที่มีทั้ง
+    # โทและเอกจะได้คีย์เดียวกันแล้วทับกันเหลือใบเดียว
+    back = {_rank_key(course.title): item["id"] for item, course in matched}
 
     ranked: list[tuple[str, object]] = []
     used: set[str] = set()
     for m in matches:
-        web_id = back.get(normalise_title(m.title))
+        web_id = back.get(_rank_key(m.title))
         # เอกสารสองฉบับของสาขาเดียวกันชี้ไปที่การ์ดใบเดียวกัน แสดงซ้ำไม่ได้
         if web_id is None or web_id in used:
             continue

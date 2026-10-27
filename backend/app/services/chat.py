@@ -41,6 +41,7 @@ from app.services.follow_up import explicit_programmes, rewrite_keeps_explicit, 
 from app.services.course_scope import (
     _distinctive_name,
     degree_level_label,
+    ambiguous_degree_level,
     missing_degree_level,
     missing_edition_year,
     more_specific_unknown_name,
@@ -1430,6 +1431,30 @@ def prepare_answer(
                f"หรือสอบถามฝ่ายวิชาการของคณะโดยตรง"
                if thai_q else
                f"{programme} at {level} level is not in this system's data yet.")
+        return replace(_blank(session.id, message, version, history),
+                       status="answered", canned=say, cacheable=False, stages=stages)
+
+    # --- 0.7155 มีหลายระดับปริญญาแต่ไม่ได้บอกว่าระดับไหน -> ถามกลับ ไม่เดาให้ ---
+    #
+    # ต่างจาก 0.715 ตรงที่นั่นคือ "ขอระดับที่ไม่มี" ส่วนนี่คือ "ไม่ขอทั้งที่มีให้เลือก"
+    #
+    # ถ้าไม่ถาม ขอบเขตจะเหลือทั้งสองเล่มแล้วส่งต่อให้เส้นทางเอกสาร ซึ่งอาจเอาตัวเลข
+    # ของสองระดับมาปนกัน (โท 36 หน่วยกิต / เอก 48 หน่วยกิต) หรือหยิบเล่มเดียวมาตอบ
+    # โดยไม่บอกว่าระดับไหน — ผู้อ่านแยกไม่ออกว่าได้คำตอบของระดับที่ถามหรือเปล่า
+    #
+    # วัดเมื่อ 27 ต.ค. 2569: ถาม "การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน
+    # เรียนกี่หน่วยกิต" ขอบเขตเหลือทั้งเล่มโทและเอก และ structured_intent คืนเหตุผล
+    # multiple_degree_levels แล้วตกไปเส้นทางเอกสารโดยไม่มีใครบอกผู้ใช้
+    if (amb := ambiguous_degree_level(db, message)) is not None:
+        programme, levels = amb
+        thai_q = written_in_thai(message)
+        names = [degree_level_label(lv) for lv in levels]
+        joined_th = " และ ".join(names)
+        say = (f"หลักสูตร{programme} มีทั้งระดับ{joined_th} "
+               f"ช่วยระบุระดับที่ต้องการด้วยครับ จะได้ตอบจากเล่มที่ถูกระดับ"
+               if thai_q else
+               f"{programme} is offered at more than one level ({', '.join(levels)}). "
+               f"Please say which level you mean.")
         return replace(_blank(session.id, message, version, history),
                        status="answered", canned=say, cacheable=False, stages=stages)
 

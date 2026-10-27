@@ -32,6 +32,7 @@ from app.models.course import Course
 from app.models.user import User
 # ใช้ตัวย่อชื่อตัวเดียวกับที่ตารางค่าเทอมใช้ เพื่อให้การเทียบชื่อสาขาทั้งระบบให้ผล
 # เหมือนกัน รวมถึงกรณีที่ชื่อสาขาเป็นคำเดียวกับชื่อปริญญา (การแพทย์แผนไทยประยุกต์)
+from app.services.course_scope import degree_level_of, degree_of_title
 from app.services.tuition import _normalise as normalise_title
 
 # อีเมลของบัญชีกลาง ไม่ได้ใช้ส่งอีเมลจริง เป็นเพียงคีย์ที่หาแถวเดิมเจอทุกครั้ง
@@ -205,29 +206,70 @@ def match_by_title(db: Session, sent: list[dict]) -> tuple[list[tuple[dict, Cour
 
     ถ้าระบุปีมาแล้วไม่มีเล่มของปีนั้น จะถือว่า "จับคู่ไม่ได้" ไม่ใช่ถอยไปเล่มอื่นเงียบๆ
 
+    **ระดับปริญญาก็ต้องตรงด้วย** คลังนี้มีสาขาที่ชื่อและปีเดียวกันแต่คนละระดับ
+    (การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน พ.ศ. 2568 มีทั้งโทและเอก)
+    และ normalise_title() ตัดชื่อปริญญาทิ้ง ทั้งสองเล่มจึงได้คีย์เดียวกัน
+    ผู้เรียกส่งระดับมาในช่อง level หรือให้ชื่อขึ้นต้นด้วย "(ปริญญาโท)" ก็ได้
+    ถ้าไม่บอกระดับทั้งที่ชื่อนั้นมีหลายระดับ จะถือว่าจับคู่ไม่ได้ แทนการเดาให้
+
     คืนทั้งรายการที่จับคู่ได้และไม่ได้ ผู้เรียกต้องบอกผู้ใช้ว่าสาขาไหนไม่มีเอกสาร
     ไม่ใช่เงียบๆ แล้วตอบเฉพาะที่เหลือ
     """
     latest: dict[str, Course] = {}
     by_edition: dict[tuple[str, int], Course] = {}
+    # ดัชนีที่แยกระดับปริญญา — normalise_title() ตัดชื่อปริญญาทิ้ง เล่มโทกับเล่มเอก
+    # ของสาขาเดียวกันจึงได้คีย์เดียวกัน ถ้าไม่มีดัชนีนี้จะเลือกเล่มเดียวให้ทั้งสองรายการ
+    latest_by_level: dict[tuple[str, str], Course] = {}
+    by_edition_level: dict[tuple[str, int, str], Course] = {}
+    levels_of_key: dict[str, set[str]] = {}
+
     for c in db.scalars(select(Course).where(Course.is_active)).all():
         key = normalise_title(c.title)
-        by_edition[(key, _edition_year(c.title))] = c
+        year = _edition_year(c.title)
+        by_edition[(key, year)] = c
         seen = latest.get(key)
-        if seen is None or _edition_year(c.title) > _edition_year(seen.title):
+        if seen is None or year > _edition_year(seen.title):
             latest[key] = c
+
+        level = degree_level_of(degree_of_title(c.title))
+        if level is not None:
+            levels_of_key.setdefault(key, set()).add(level)
+            by_edition_level[(key, year, level)] = c
+            seen_lv = latest_by_level.get((key, level))
+            if seen_lv is None or year > _edition_year(seen_lv.title):
+                latest_by_level[(key, level)] = c
 
     matched: list[tuple[dict, Course]] = []
     unmatched: list[dict] = []
     for item in sent:
         title = item.get("title", "")
         year = _edition_year(title)
-        if year:
+        keys = _keys_for(title)
+        # ระดับที่ผู้เรียกบอก — จากช่อง level ก่อน ถ้าไม่มีจึงอ่านจากชื่อที่ส่งมา
+        # (ชื่อบนหน้าเว็บอาจขึ้นต้นด้วย "(ปริญญาโท)" ซึ่งบอกระดับอยู่ในตัว)
+        want = degree_level_of(item.get("level") or "") or degree_level_of(title)
+
+        if want is not None:
+            if year:
+                hit = next((by_edition_level[(k, year, want)] for k in keys
+                            if (k, year, want) in by_edition_level), None)
+            else:
+                hit = next((latest_by_level[(k, want)] for k in keys
+                            if (k, want) in latest_by_level), None)
+        elif any(len(levels_of_key.get(k, ())) > 1 for k in keys):
+            # ชื่อนี้มีหลายระดับปริญญา แต่ผู้เรียกไม่ได้บอกว่าระดับไหน
+            #
+            # **ถือว่าจับคู่ไม่ได้ ไม่ใช่หยิบเล่มล่าสุดมาให้**
+            # เดิมหยิบเล่มแรกที่เจอ ผลคือการเปรียบเทียบ "โท vs เอก" ได้เล่มโททั้งสองคอลัมน์
+            # คือเอาเล่มเดียวมาเทียบกับตัวเอง โดยไม่มีอะไรบอกผู้ใช้ (ตรวจพบ 27 ต.ค. 2569)
+            # ผู้เรียกเห็น unmatched แล้วไปบอกผู้ใช้ได้ว่าต้องระบุระดับ
+            hit = None
+        elif year:
             # ระบุปีมา → หาเฉพาะเล่มปีนั้น ไม่มีก็ถือว่าจับคู่ไม่ได้
-            hit = next((by_edition[(k, year)] for k in _keys_for(title)
-                        if (k, year) in by_edition), None)
+            hit = next((by_edition[(k, year)] for k in keys if (k, year) in by_edition), None)
         else:
-            hit = next((latest[k] for k in _keys_for(title) if k in latest), None)
+            hit = next((latest[k] for k in keys if k in latest), None)
+
         if hit is not None:
             matched.append((item, hit))
         else:
