@@ -1,0 +1,15 @@
+ฐาน course_advisor_test · http://127.0.0.1:8000 · โหมด gemini
+
+=== 7. เลือก Gemini — คำตอบต้องมาจาก Gemini จริง ===
+  [ผ่าน] เซิร์ฟเวอร์นี้มี GEMINI_API_KEY
+  [ผ่าน] บันทึกตัวเลือก gemini ได้ — HTTP 200
+  [ผ่าน] ที่ใช้จริงเป็น gemini — {'provider': 'gemini', 'model': 'gemini-3.5-flash-lite', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] ทำตามค่าที่บันทึก — {'provider': 'gemini', 'model': 'gemini-3.5-flash-lite', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] embedding ยังเป็น bge-m3 — {'model': 'bge-m3', 'changeable': False}
+    · HTTP 200 · 2.6s · status=answered · answer_model=gemini:gemini-3.5-flash-lite
+  [ผ่าน] คำตอบมาจาก gemini — answer_model=gemini:gemini-3.5-flash-lite status=answered
+  [ผ่าน] ตัวนับฝั่ง gemini ขยับ — gemini_ok ก่อน=87 หลัง=89
+  [ผ่าน] ไม่ได้ไปเรียกโมเดลในเครื่องเป็นตัวหลัก — ก่อน=86 หลัง=86
+  [ผ่าน] ไม่ได้ใช้ตัวสำรองเลย — ก่อน=4 หลัง=4
+
+ตรวจ 9 ข้อ · ตก 0 ข้อ

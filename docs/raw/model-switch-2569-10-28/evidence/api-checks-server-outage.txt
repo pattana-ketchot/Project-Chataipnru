@@ -1,0 +1,12 @@
+ฐาน course_advisor_test · http://127.0.0.1:8000 · โหมด outage
+
+=== 8. Gemini ล้มแบบจำลอง — ตัวสำรองในเครื่องต้องได้เวลาใช้จริง ===
+  [ผ่าน] ปลายทางของ Gemini ถูกจำลองให้ติดต่อไม่ได้
+  [ผ่าน] เลือก gemini ไว้สำหรับการจำลอง — HTTP 200
+    · HTTP 503 · 30.1s · reply[:70]='None'
+  [ผ่าน] ไม่มีคำตอบใดมาจาก Gemini — gemini_ok +0
+  [ผ่าน] ตกมาที่ตัวสำรองในเครื่องจริง — fallback_local_attempt +3
+  [ผ่าน] ตัวสำรองได้ทำงานจบอย่างน้อยหนึ่งขั้น (ผลของ patch) — fallback_local_ok +2 · fallback_local_failed +1 — ถ้า ok เป็น 0 และ failed เท่ากับ attempt คือยังถูกเพดานเวลาปฏิเสธก่อนยิงคำขอแรก
+    ตัวนับที่ขยับ: fallback_declined +1, fallback_local_attempt +3, fallback_local_failed +1, fallback_local_ok +2
+
+ตรวจ 5 ข้อ · ตก 0 ข้อ

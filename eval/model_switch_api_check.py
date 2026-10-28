@@ -77,6 +77,14 @@ DOC_QUESTIONS = [
     "สาขาสาธารณสุขศาสตร์มีวิชาบังคับอะไรบ้าง",
 ]
 
+# คำถามของโหมด outage — ตั้งใจ **ไม่เอ่ยชื่อหลักสูตร** เพื่อให้ตัวคัดกรองขอบเขตทำงาน
+#
+# คำถามที่เอ่ยชื่อหลักสูตรจะข้ามตัวคัดกรองไปเลย (ดู chat._names_a_program) คำขอนั้นจึง
+# เรียกโมเดลครั้งแรกที่ "ด่านตรวจหลักฐาน" ซึ่งพรอมต์ใหญ่มากและโมเดลในเครื่องของเซิร์ฟเวอร์
+# (ไม่มีการ์ดจอ) ทำไม่ทันเวลาที่กันไว้อยู่แล้ว · ถ้าใช้คำถามแบบนั้น ตัวสำรองจะไม่มีขั้นใด
+# ที่ทำจบได้เลย แล้วเราจะแยกไม่ออกระหว่าง "ยังถูกเพดานปฏิเสธ" กับ "ได้เวลาแต่โมเดลช้าเกิน"
+OUTAGE_QUESTION = "มีทุนการศึกษาอะไรบ้าง"
+
 
 def check(label: str, ok: bool, detail: str = "") -> None:
     global CHECKS
@@ -112,9 +120,31 @@ def psql(sql: str) -> str:
 
 
 def usage() -> dict[str, int]:
-    """ตัวนับของวันนี้บนฐานทดสอบ · เธรดเบื้องหลังเขียนทุก 30 วินาที จึงสั่ง flush ก่อนอ่าน"""
+    """ตัวนับของวันนี้บนฐานทดสอบ — อ่านเฉพาะที่ถูกเขียนลงฐานแล้ว"""
     rows = psql("select event, n from public.llm_usage_daily where day = current_date")
     return {r.split("|")[0]: int(r.split("|")[1]) for r in rows.splitlines() if "|" in r}
+
+
+# ตัวนับบวกในหน่วยความจำของโปรเซสที่ตอบคำถาม แล้วเธรดเบื้องหลังเขียนลงฐานทุก
+# llm_usage.FLUSH_EVERY_S = 30 วินาที (ดู services/llm_usage.py) · อ่านฐานทันทีหลัง
+# คำขอจบจึงได้ตัวเลขเดิม ซึ่งเคยทำให้ข้อ "ตัวนับฝั่ง gemini ขยับ" ตกทั้งที่คำตอบมาจาก
+# Gemini จริง (วัดเมื่อ 28 ต.ค. 2569 บนเซิร์ฟเวอร์: gemini_ok 83 -> 83)
+FLUSH_WAIT_S = 35.0
+
+
+def usage_after_flush(before: dict[str, int]) -> dict[str, int]:
+    """
+    รอให้เธรดเบื้องหลังเขียนตัวนับลงฐานให้ครบรอบก่อนอ่านซ้ำ
+
+    **ห้ามคืนค่าทันทีที่เห็นตัวเลขขยับ** — เหตุการณ์ของคำขอเดียวถูกบันทึกต่างเวลากัน
+    (fallback_local_attempt ตอนเริ่มเรียก · fallback_local_ok/failed ตอนจบ) ถ้ารอบการ
+    เขียนคร่อมระหว่างนั้น การอ่านทันทีจะเห็นแค่ attempt แล้วสรุปผิดว่าตัวสำรอง
+    "ไม่จบและไม่ล้ม" · วัดจริงบนเซิร์ฟเวอร์ 28 ต.ค. 2569: attempt +1 โดย ok และ
+    failed เป็น +0 ทั้งคู่ ซึ่งเป็นไปไม่ได้ในโค้ด (ดู llm_client._call_fallback)
+    จึงรอให้ครบรอบเสมอ แล้วค่อยอ่านครั้งเดียว
+    """
+    time.sleep(FLUSH_WAIT_S)
+    return usage()
 
 
 def token() -> str:
@@ -329,7 +359,7 @@ def section_gemini_real(api: Api) -> None:
     v = api.get_settings()
     has_key = v["defaults"]["has_gemini_key"]
     check("เซิร์ฟเวอร์นี้มี GEMINI_API_KEY", bool(has_key),
-          "ไม่มีคีย์ — ข้อนี้ยืนยันไม่ได้บนเครื่องนี้ ต้องรันบนเซิร์ฟเวอร์ที่ตั้งคีย์ไว้")
+          "" if has_key else "ไม่มีคีย์ — ข้อนี้ยืนยันไม่ได้บนเครื่องนี้ ต้องรันบนเซิร์ฟเวอร์ที่ตั้งคีย์ไว้")
     if not has_key:
         return
 
@@ -346,7 +376,7 @@ def section_gemini_real(api: Api) -> None:
     got = body.get("answer_model") if isinstance(body, dict) else None
     status = body.get("status") if isinstance(body, dict) else None
     print(f"    · HTTP {code} · {spent:.1f}s · status={status} · answer_model={got}")
-    after = usage()
+    after = usage_after_flush(before)
     check("คำตอบมาจาก gemini", code == 200 and isinstance(got, str) and got.startswith("gemini:"),
           f"answer_model={got} status={status}")
     check("ตัวนับฝั่ง gemini ขยับ", after.get("gemini_ok", 0) > before.get("gemini_ok", 0),
@@ -383,7 +413,7 @@ def section_fallback_on_outage(api: Api) -> None:
     except Exception:  # noqa: BLE001 — ต่อไม่ได้คือสิ่งที่ต้องการ
         blocked = True
     check("ปลายทางของ Gemini ถูกจำลองให้ติดต่อไม่ได้", blocked,
-          "ต่อถึง generativelanguage.googleapis.com ได้ — ยังไม่ได้ตั้ง --add-host ของคอนเทนเนอร์ทดสอบ")
+          "" if blocked else "ต่อถึง generativelanguage.googleapis.com ได้ — ยังไม่ได้ตั้ง --add-host ของคอนเทนเนอร์ทดสอบ")
     if not blocked:
         return
 
@@ -392,10 +422,10 @@ def section_fallback_on_outage(api: Api) -> None:
     check("เลือก gemini ไว้สำหรับการจำลอง", r.status_code == 200, f"HTTP {r.status_code}")
 
     before = usage()
-    code, body, spent = api.ask(DOC_QUESTIONS[0])
+    code, body, spent = api.ask(OUTAGE_QUESTION)
     reply = body.get("reply") if isinstance(body, dict) else str(body)
     print(f"    · HTTP {code} · {spent:.1f}s · reply[:70]={str(reply)[:70]!r}")
-    after = usage()
+    after = usage_after_flush(before)
 
     def grew(event: str) -> int:
         return after.get(event, 0) - before.get(event, 0)
