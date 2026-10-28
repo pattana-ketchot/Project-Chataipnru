@@ -221,7 +221,8 @@ build อิมเมจใหม่โดย **ซ้อน 11 ไฟล์ท�
 ยิงจากในคอนเทนเนอร์ backend ไปที่ตัวเอง ไม่ผ่านเว็บสาธารณะ:
 
 ```bash
-docker exec -e PYTHONPATH=/app/backend -w /app/backend \n  course-advisor-system-backend-1 python - <<'EOF'
+docker exec -i -e PYTHONPATH=/app/backend -w /app/backend \
+  course-advisor-system-backend-1 python - <<'EOF'
 import httpx
 from sqlalchemy import text
 from app.core.security import create_access_token
@@ -245,6 +246,11 @@ print("citations    =", len(d.get("citations") or []))
 print("reply[:200]  =", (d.get("reply") or "")[:200])
 EOF
 ```
+
+
+**ต้องมี `-i`** — `docker exec` ที่ไม่มี `-i` ไม่ต่อ stdin เข้าไปในคอนเทนเนอร์
+สคริปต์ Python ที่ส่งผ่าน heredoc จะไม่ถูกอ่านเลย `python -` เห็น EOF แล้วจบเงียบ ๆ
+ด้วยรหัสออก 0 ซึ่งดูเหมือนผ่านทั้งที่ไม่ได้ยิงคำถามอะไรเลย
 
 **เกณฑ์ผ่าน ต้องครบทุกข้อ**
 
