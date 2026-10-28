@@ -96,7 +96,7 @@ echo
 echo "[5/7] รันชุดทดสอบในอิมเมจใหม่ (ฐานทดสอบ ไม่ mount ไฟล์ใด)"
 # ชุดที่ครอบส่วนที่รอบนี้แตะ: สวิตช์ · ตัวนับ · ตัวสำรองเมื่อเจ้าหลักล่ม ·
 # รูปแบบ SSE และเพดานเวลาของการสตรีม (เพราะเพิ่มช่องในเหตุการณ์ done)
-for t in test_model_switch test_llm_usage_counter test_gemini_overload_fallback \
+for t in test_model_switch test_local_fallback_gets_time test_llm_usage_counter test_gemini_overload_fallback \
          test_model_outage_n1 test_sse_format test_chatweb_stream_budget \
          test_request_budget; do
   echo "  --- $t ---"

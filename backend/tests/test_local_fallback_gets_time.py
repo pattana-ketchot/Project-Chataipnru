@@ -250,6 +250,10 @@ def main() -> int:
     print(f"\nตรวจ {CHECKS} ข้อ · ตก {len(FAILURES)} ข้อ")
     for f in FAILURES:
         print(f"  - {f}")
+    # ต้องพิมพ์คำว่า "ผ่านทั้งหมด" ด้วย เพราะ deploy_backend.sh ตัดสินว่าชุดไหนผ่าน
+    # จากการ grep คำนี้ใน log ไม่ได้ดูรหัสออกของโปรเซส — ชุดอื่นทุกชุดพิมพ์แบบนี้
+    if not FAILURES:
+        print("ผ่านทั้งหมด")
     return 1 if FAILURES else 0
 
 
