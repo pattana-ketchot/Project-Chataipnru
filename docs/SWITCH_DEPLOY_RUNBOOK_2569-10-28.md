@@ -7,6 +7,25 @@
 `SWITCH_PLUS_FALLBACK_READINESS_2569-10-28.md` · ที่มาของตัวเลขอยู่ใน
 `MODEL_SWITCH_2569-10-28.md` และ `LOCAL_FALLBACK_FIX_2569-10-28.md`
 
+## ชุดปล่อยคือ commit ไหน
+
+| | ค่า |
+|---|---|
+| branch | `feature/model-switch-fallback-budget` (head ของ PR #2) |
+| **commit สุดท้ายที่แตะของที่ deploy จริง** | **`e1ef9e8`** — `fix(release): run the fallback test in the deploy gate, and add the deploy runbook` |
+| commit หลังจากนั้น | **เอกสารล้วน** ไม่แตะโค้ด สคริปต์ หรือชุดซ้อนอิมเมจ จึงไม่เปลี่ยนสิ่งที่ deploy |
+| ตัวระบุเนื้อหาที่แท้จริง | `backend-release/SHA256SUMS` — 11 ไฟล์ที่ซ้อนทับอิมเมจ · ด่านทุกด่านตรวจจากไฟล์นี้ ไม่ได้ตรวจจากเลข commit |
+
+**ก่อนเริ่ม** ให้จดเลข commit ที่ใช้ทำ archive จริงลงใน log ของรอบ deploy:
+
+```bash
+git rev-parse feature/model-switch-fallback-budget        # ต้องตรงกับ head ของ PR #2
+git log --oneline -1 feature/model-switch-fallback-budget
+```
+
+ถ้าเลขที่ได้ไม่ตรงกับ head ของ PR #2 บน GitHub แปลว่ามีคนเพิ่ม commit หลังรีวิว
+— **หยุด** แล้วทบทวน diff ใหม่ก่อน ไม่ใช่ deploy ต่อ
+
 ---
 
 ## 0. หลังจาก deploy แล้วระบบจะใช้โมเดลอะไร
@@ -38,12 +57,22 @@
 | `/home/ubuntu/release-switch-2569-10-28` | ยังไม่มี — `deploy_backend.sh` สร้างเอง |
 | `sha256sum -c SHA256SUMS` ของชุดซ้อนที่ PR head | **ผ่าน 11/11** |
 
-**สองโฟลเดอร์ชื่อคล้ายกันมาก อย่าสลับ**
+### พาธทั้งหมดที่สคริปต์ใช้จริง
 
-* `/home/ubuntu/switch-release-2569-10-28/` — **ที่วางชุดที่อัปขึ้นไป** (คนทำเป็นคนสร้าง)
-* `/home/ubuntu/release-switch-2569-10-28/` — **บริบท build + ที่เก็บ compose pin**
-  (`deploy_backend.sh` สร้างเองด้วย `mkdir -p` แล้วคัดลอก `backend-release/` ลงไป)
-  `rollback_backend.sh` อ่านไฟล์ rollback จากโฟลเดอร์นี้ **ห้ามลบทิ้งหลัง deploy**
+**สองโฟลเดอร์แรกชื่อคล้ายกันมาก สลับเมื่อไหร่ rollback จะหาไฟล์ไม่เจอ**
+
+| พาธ | ใคร/อะไรใช้ | ใครสร้าง |
+|---|---|---|
+| `/home/ubuntu/switch-release-2569-10-28/` | **ที่วางชุดและที่รันสคริปต์** — หัวสคริปต์ทุกตัวเขียนว่า `cd /home/ubuntu/switch-release-2569-10-28 && ./xxx.sh` · สคริปต์อ้างตัวเองด้วย `$HERE` และเก็บผลลัพธ์ไว้ที่นี่ (`db-run-*`, `backend-run-*`, `web-run-*`, `db-rollback-*`) | **คนทำสร้างเอง** ตอนแตกชุด |
+| `/home/ubuntu/release-switch-2569-10-28/` | **บริบท build + ที่เก็บ compose pin** · `deploy_backend.sh` ใช้เป็น `$REL`: `mkdir -p` แล้วคัดลอก `backend-release/` ลงไป แล้ว `docker build` จากโฟลเดอร์นี้ · `rollback_backend.sh` อ่าน `$REL/compose.rollback-backend-followup.yml` | `deploy_backend.sh` สร้างเอง · **ห้ามลบหลัง deploy** |
+| `/home/ubuntu/course-advisor-system/` | โปรเจกต์ของ production (`$PROJ`) — อ่าน `.env` และ compose หลัก | มีอยู่แล้ว |
+| `/home/ubuntu/course-advisor-system/web/` | รากไฟล์ static ที่ `deploy_web.sh` วางของ (`$WEB`) | มีอยู่แล้ว |
+| `/home/ubuntu/course-advisor-system/backups/` | ที่เก็บไฟล์สำรองฐาน (ขั้นที่ 0) | มีอยู่แล้ว |
+| `/home/ubuntu/release-*/compose.pin-*.yml` (13 ไฟล์) | `compose-args.txt` อ้างถึงทั้งหมด ตรวจแล้วว่าครบ | มีอยู่แล้ว |
+
+**ย้อนหน้าเว็บต้องใช้โฟลเดอร์ผลของรอบนั้น** — `deploy_web.sh` พิมพ์บรรทัด
+`ย้อนกลับด้วย : ./rollback_web.sh --run /home/ubuntu/switch-release-2569-10-28/web-run-<เวลา>`
+ตอนจบ · **จดบรรทัดนั้นไว้** ไม่งั้นย้อนหน้าเว็บไม่ได้
 
 **ยังตรวจไม่ได้จากที่นี่ (ต้องอ่านฐาน production)** — สองข้อนี้ `deploy_db.sh` ตรวจเองอยู่แล้ว
 และหยุดให้ถ้าไม่ผ่าน จึงไม่ใช่ความเสี่ยงที่ลอยอยู่:
@@ -51,9 +80,9 @@
 1. คอลัมน์ `provider` ยังไม่มีบนฐาน production (ถ้ามีแล้วแปลว่าเคยลง migration ไปแล้ว)
 2. role `advisor_api` อ่านคอลัมน์ใหม่ได้ — สคริปต์ตรวจหลัง migration และ die ถ้าอ่านไม่ได้
 
-**ข้อแนะนำ**: สำรองฐานเต็มก่อนเริ่ม ไฟล์ล่าสุดใน `backups/` คือ 16 ต.ค. (ห่าง 12 วัน)
-แม้ migration นี้จะเป็น DDL ล้วนบนตารางเดียวและ `deploy_db.sh` สำรองตารางนั้นให้อีกชั้น
-(`web.ai_settings_backup_switch`)
+**ไฟล์สำรองล่าสุดใน `backups/` คือ 16 ต.ค. (ห่าง 12 วัน)** — ขั้นที่ 0 ข้างล่างจึงเป็น
+**ขั้นบังคับ** ไม่ใช่ข้อแนะนำ · `deploy_db.sh` สำรองเฉพาะตาราง `web.ai_settings`
+(`web.ai_settings_backup_switch`) ซึ่งไม่ช่วยอะไรถ้าเกิดเรื่องนอกตารางนั้น
 
 ---
 
@@ -62,15 +91,43 @@
 ทำตามลำดับนี้เท่านั้น เหตุผลอยู่ใน `MODEL_SWITCH` ข้อ 7
 (โค้ดใหม่อ่านคอลัมน์ `provider` · หน้าเว็บรุ่นใหม่เรียก `/ai-settings/check` ที่โค้ดเก่าไม่มี)
 
+### ขั้น 0 — สำรองฐานเต็มและตรวจไฟล์สำรอง (**บังคับ ห้ามข้าม**)
+
 ```bash
-# อัปชุดขึ้นเซิร์ฟเวอร์ (ทำจากเครื่องพัฒนา · -c core.autocrlf=false กัน CRLF)
-git -c core.autocrlf=false archive --format=tar.gz -o /tmp/switch.tar.gz <commit ของ PR #2>
+cd /home/ubuntu/course-advisor-system
+./scripts/backup_db.sh                      # pg_dump ฐาน course_advisor -> backups/*.sql.gz
+BK=$(ls -t backups/course_advisor_*.sql.gz | head -1); echo "$BK"
+
+# ตรวจไฟล์สำรอง — ห้ามไปต่อถ้าข้อใดไม่ผ่าน
+gzip -t "$BK"                               # ไฟล์ไม่เสีย (ไม่มี output = ผ่าน)
+ls -lh "$BK"                                # ต้องไม่ใช่ขนาดไม่กี่ KB
+zcat "$BK" | head -5                        # ต้องขึ้นหัว PostgreSQL database dump
+zcat "$BK" | grep -c "CREATE TABLE"         # ต้องได้เลขสองหลักขึ้นไป
+zcat "$BK" | grep -c "COPY public.course_chunks"   # ต้องได้ 1
+sha256sum "$BK" | tee -a ~/switch-release-2569-10-28/backup-sha256.txt
+```
+
+จด path กับ sha256 ของไฟล์สำรองไว้ใน log ของรอบ deploy · ถ้าขั้นใดข้างบนไม่ผ่าน
+**หยุด** แล้วแก้เรื่องสำรองก่อน อย่าเริ่มขั้นที่ 1
+
+### อัปชุดขึ้นเซิร์ฟเวอร์
+
+```bash
+# จากเครื่องพัฒนา · -c core.autocrlf=false กัน CRLF ทำให้ด่าน sha256sum ล้มทุกไฟล์
+git -c core.autocrlf=false archive --format=tar.gz -o /tmp/switch.tar.gz <commit ของชุดปล่อย>
 scp -i <ไฟล์กุญแจ> /tmp/switch.tar.gz ubuntu@<IP>:~/
 
-# บนเซิร์ฟเวอร์
-mkdir -p ~/switch-release-2569-10-28 && tar xzf ~/switch.tar.gz -C ~/switch-release-2569-10-28
-cd ~/switch-release-2569-10-28/docs/raw/model-switch-2569-10-28
-( cd backend-release && sha256sum -c SHA256SUMS )     # ต้องผ่าน 11/11 ก่อนไปต่อ
+# บนเซิร์ฟเวอร์ — ต้องให้สคริปต์ไปอยู่ที่ /home/ubuntu/switch-release-2569-10-28/ ตรง ๆ
+# (ไม่ใช่ลึกลงไปใน docs/raw/... ไม่งั้นโฟลเดอร์ผล db-run-*/web-run-* จะไปโผล่คนละที่
+#  กับที่หัวสคริปต์และคำสั่ง rollback เขียนไว้)
+rm -rf ~/switch-unpack && mkdir -p ~/switch-unpack && tar xzf ~/switch.tar.gz -C ~/switch-unpack
+mkdir -p ~/switch-release-2569-10-28
+cp -r ~/switch-unpack/docs/raw/model-switch-2569-10-28/. ~/switch-release-2569-10-28/
+chmod +x ~/switch-release-2569-10-28/*.sh
+
+cd /home/ubuntu/switch-release-2569-10-28
+ls                                          # ต้องเห็น deploy_*.sh rollback_*.sh backend-release/ web-release/ sql/ compose-args.txt
+( cd backend-release && sha256sum -c SHA256SUMS )   # ต้องผ่าน 11/11 ก่อนไปต่อ
 
 ./deploy_db.sh        # ขั้น 1
 ./deploy_backend.sh   # ขั้น 2
@@ -116,6 +173,7 @@ build อิมเมจใหม่โดย **ซ้อน 11 ไฟล์ท�
 
 หยุดทันทีและอย่าไปขั้นถัดไป เมื่อ:
 
+* ขั้นที่ 0 ไม่ผ่าน — ไฟล์สำรองเสีย ขนาดผิดปกติ หรือไม่มีตาราง `course_chunks`
 * `sha256sum -c` ไม่ผ่านแม้ไฟล์เดียว → ชุดบนเซิร์ฟเวอร์ไม่ตรงกับที่ตรวจ (มักเป็น CRLF ตอนย้ายไฟล์)
 * ชุดทดสอบในอิมเมจใหม่ไม่ขึ้น `ผ่านทั้งหมด` แม้ไฟล์เดียว
 * `--dry-run` บอกว่าจะแตะบริการอื่นนอกจาก backend
@@ -144,22 +202,79 @@ build อิมเมจใหม่โดย **ซ้อน 11 ไฟล์ท�
 
 ---
 
-## 5. ตรวจหลัง deploy (อ่านอย่างเดียว ไม่ต้องยิงคำถามใส่เว็บจริง)
+## 5. ตรวจหลัง deploy
+
+### 5.1 ตรวจแบบอ่านอย่างเดียว
 
 1. `docker inspect course-advisor-system-backend-1 --format '{{.Config.Image}}'`
    → ต้องเป็น `course-advisor-system-backend:switch-2569-10-28`
 2. health ของ backend ต้องเป็น 200
 3. หน้าผู้ดูแล → ช่องตั้งค่า AI ต้องแสดง `ที่ใช้จริง = gemini` · ที่มา `env` ·
    `embedding = bge-m3 (เปลี่ยนไม่ได้)` · และ **ไม่มีค่าคีย์โผล่ในคำตอบของเส้นทางนั้น**
-4. ตัวนับของวันนั้น: `gemini_ok` ยังเพิ่มตามปกติ และ `local_primary_*` ไม่ขึ้น
-   (ถ้าขึ้นแปลว่ามีคนสลับไป Ollama แล้ว)
+
+### 5.2 ยิงหนึ่งคำถามที่เรียก Gemini จริง (**บังคับ**)
+
+ข้อ 5.1 บอกได้แค่ว่าอิมเมจสลับแล้วและหน้าตั้งค่าอ่านค่าถูก **บอกไม่ได้ว่าระบบยังตอบ
+คำถามได้จริง** จึงต้องยิงหนึ่งคำถามที่ต้องอ้างอิงเอกสาร (ไม่ใช่คำถามที่ฐานหลักสูตร
+ตอบได้เอง ซึ่งจะได้ `answer_model = null` แล้วดูเหมือนผ่านทั้งที่ไม่เคยแตะโมเดลเลย)
+
+ยิงจากในคอนเทนเนอร์ backend ไปที่ตัวเอง ไม่ผ่านเว็บสาธารณะ:
+
+```bash
+docker exec -e PYTHONPATH=/app/backend -w /app/backend \n  course-advisor-system-backend-1 python - <<'EOF'
+import httpx
+from sqlalchemy import text
+from app.core.security import create_access_token
+from app.db.session import SessionLocal
+
+with SessionLocal() as db:
+    uid = db.execute(text(
+        "select id from users where role in ('admin','editor') "
+        "and status = 'approved' and is_active order by created_at limit 1")).scalar()
+
+tok = create_access_token(str(uid))
+r = httpx.post("http://127.0.0.1:8000/chat",
+               headers={"Authorization": f"Bearer {tok}"},
+               json={"message": "หลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไร"},
+               timeout=60)
+d = r.json()
+print("HTTP", r.status_code)
+print("status       =", d.get("status"))
+print("answer_model =", d.get("answer_model"))
+print("citations    =", len(d.get("citations") or []))
+print("reply[:200]  =", (d.get("reply") or "")[:200])
+EOF
+```
+
+**เกณฑ์ผ่าน ต้องครบทุกข้อ**
+
+| ตรวจ | ต้องได้ |
+|---|---|
+| HTTP | `200` |
+| `status` | `answered` |
+| `answer_model` | ขึ้นต้นด้วย **`gemini:`** เช่น `gemini:gemini-3.5-flash-lite` · ถ้าเป็น `null` แปลว่าไม่ได้เรียกโมเดล (ตอบจากฐานหรือจากแคช) ให้เปลี่ยนคำถามแล้วยิงใหม่ · ถ้าขึ้นต้นด้วย `ollama:` แปลว่าสวิตช์ไม่ได้อยู่ที่ Gemini **ให้ย้อน** |
+| `citations` | มากกว่า 0 |
+| `reply` | คำตอบที่อ่านรู้เรื่องและอ้างเอกสาร **ไม่ใช่** ข้อความบริการขัดข้อง หรือ "ไม่พบข้อมูลนี้ในเอกสารหลักสูตร" |
+
+**ผลข้างเคียงของการยิงคำถามนี้ ยอมรับได้และคาดไว้แล้ว**: สร้างบทสนทนาหนึ่งรายการใน
+`chat_sessions` / `chat_messages` ของ production · อาจเขียนแคชคำตอบหนึ่งแถว ·
+ตัวนับ `gemini_ok` เพิ่มราวสองครั้ง (ด่านตรวจหลักฐาน + ขั้นเขียนคำตอบ)
+
+### 5.3 ตัวนับ
 
 ```sql
 select event, n from public.llm_usage_daily where day = current_date order by event;
 ```
 
-5. คำถามชุดแรกหลัง deploy จะช้ากว่าปกติ เพราะตัวระบุรุ่นของแคชรวมชื่อโมเดลเข้าไปด้วย
-   แคชเดิมจึงกลายเป็นของรุ่นเก่าทั้งหมดครั้งเดียว — **คาดไว้แล้ว ไม่ใช่อาการผิดปกติ**
+* `gemini_ok` ต้องเพิ่มขึ้นหลังข้อ 5.2
+* `local_primary_*` **ต้องไม่ขึ้น** (ถ้าขึ้นแปลว่ามีคนสลับไป Ollama แล้ว)
+* `fallback_local_*` ขึ้นได้ถ้า Gemini สะดุดชั่วคราว — ดูคู่กัน ถ้า `ok` ขยับแปลว่า
+  patch ทำงาน ถ้า `failed` เท่ากับ `attempt` ตลอดแปลว่ายังถูกเพดานเวลาปฏิเสธ
+
+### 5.4 เรื่องที่คาดไว้แล้ว
+
+คำถามชุดแรกหลัง deploy จะช้ากว่าปกติ เพราะตัวระบุรุ่นของแคชรวมชื่อโมเดลเข้าไปด้วย
+แคชเดิมจึงกลายเป็นของรุ่นเก่าทั้งหมดครั้งเดียว — **ไม่ใช่อาการผิดปกติ**
 
 ---
 
