@@ -217,7 +217,92 @@ patch ตัวสำรองในเครื่องจะไม่ขึ�
    แต่ **ไม่พอสำหรับด่านตรวจหลักฐาน** ซึ่งเป็นผลที่ตั้งใจ — ให้ตัวสำรองได้ลองจริงและทำให้
    ตัวนับเลิกโกหก ไม่ใช่ทำให้ด่านตรวจหลักฐานสำเร็จบนโมเดลในเครื่อง
 
-## 8. ของที่สร้างไว้บนเครื่องนี้ (ลบได้)
+## 8. วิธีรันสองข้อที่เหลือบนเซิร์ฟเวอร์ (ยังไม่ได้รัน)
+
+สองข้อนี้ยืนยันบนเครื่องพัฒนาไม่ได้ (ไม่มีคีย์ Gemini) จึงเตรียมให้รันบนเซิร์ฟเวอร์
+**ในคอนเทนเนอร์แยก ไม่แตะคอนเทนเนอร์หรืออิมเมจของ production และไม่แตะฐานข้อมูลจริง**
+
+ชุดที่ใช้คือ commit `7392006` · `eval/model_switch_api_check.py` มีด่านกันไว้สองชั้น:
+ปฏิเสธถ้าชื่อฐานไม่ลงท้าย `_test` และปฏิเสธถ้า `--api` ไม่ใช่ localhost
+
+**ค่าคีย์ไม่ถูกแสดงที่ใดเลย** — ส่งผ่าน `--env-file` ของ docker เท่านั้น สคริปต์อ่านแค่
+`has_gemini_key` ที่เป็น true/false และตรวจแล้วว่าคำตอบของเส้นทางตั้งค่าไม่มีคำว่า
+`api_key` หรือค่าที่ขึ้นต้นด้วย `AIza` ปนออกมา (ข้อตรวจในหัวข้อ 1 ของสคริปต์)
+
+```bash
+# 1) บนเครื่องพัฒนา — ทำชุดจาก commit โดยไม่ให้ CRLF ติดไป (ดูกับดักในหัวข้อ 6)
+git -c core.autocrlf=false archive --format=tar.gz -o /tmp/switch-7392006.tar.gz 7392006
+scp -i <ไฟล์กุญแจ> /tmp/switch-7392006.tar.gz ubuntu@<IP>:~/
+
+# 2) บนเซิร์ฟเวอร์ — แตกชุดและตรวจด่าน hash ก่อน build
+mkdir -p ~/switch-7392006 && tar xzf ~/switch-7392006.tar.gz -C ~/switch-7392006
+cd ~/switch-7392006/docs/raw/model-switch-2569-10-28/backend-release
+sha256sum -c SHA256SUMS                       # ต้องผ่านครบ 11 ไฟล์
+
+# 3) build อิมเมจ "สำหรับตรวจ" ด้วย tag ของตัวเอง ไม่ใช่ tag ของ release
+docker build -t course-advisor-system-backend:switch-check-2569-10-28 .
+
+# 4) อ่านค่าทรัพยากรของ production มาใช้ให้เท่ากัน
+docker inspect course-advisor-system-backend-1 \
+  --format 'cpus={{.HostConfig.NanoCpus}} memory={{.HostConfig.Memory}}'
+
+# 5) คอนเทนเนอร์ตรวจ — ไม่ publish port · ไม่ตั้ง RAG_TIME_BUDGET_S (ค่าตั้งต้น 30 = production)
+docker run -d --name switch-check --network course-advisor-system_default \
+  --env-file ~/course-advisor-system/.env \
+  -e DATABASE_URL='postgresql+psycopg://postgres:<รหัส>@postgres:5432/course_advisor_test' \
+  -e CHAT_TOP_K=25 \
+  --cpus <เท่า production> --memory <เท่า production> \
+  course-advisor-system-backend:switch-check-2569-10-28
+
+# 6) ข้อที่ 7 — สวิตช์ Gemini จริง
+docker cp ~/switch-7392006/eval/model_switch_api_check.py switch-check:/app/eval_check.py
+docker exec -w /app -e PYTHONPATH=/app/backend \
+  -e SWITCH_CHECK_DSN='postgresql://postgres:<รหัส>@postgres:5432/course_advisor_test' \
+  switch-check python eval_check.py --api http://127.0.0.1:8000 --mode gemini
+
+# 7) ข้อที่ 8 — Gemini ล้มแบบจำลอง ต้องเป็นคอนเทนเนอร์อีกตัว
+#    198.51.100.1 คือที่อยู่ช่วงเอกสาร (TEST-NET-2) ที่ไม่มีเส้นทางไปถึง
+#    คำขอของ Gemini จึงค้างจนชน timeout ที่เพดานเวลาบีบไว้ = รูปร่างเดียวกับของจริง
+docker run -d --name switch-check-outage --network course-advisor-system_default \
+  --add-host generativelanguage.googleapis.com:198.51.100.1 \
+  --env-file ~/course-advisor-system/.env \
+  -e DATABASE_URL='postgresql+psycopg://postgres:<รหัส>@postgres:5432/course_advisor_test' \
+  -e CHAT_TOP_K=25 \
+  --cpus <เท่า production> --memory <เท่า production> \
+  course-advisor-system-backend:switch-check-2569-10-28
+docker cp ~/switch-7392006/eval/model_switch_api_check.py switch-check-outage:/app/eval_check.py
+docker exec -w /app -e PYTHONPATH=/app/backend \
+  -e SWITCH_CHECK_DSN='postgresql://postgres:<รหัส>@postgres:5432/course_advisor_test' \
+  switch-check-outage python eval_check.py --api http://127.0.0.1:8000 --mode outage
+
+# 8) เก็บของ
+docker rm -f switch-check switch-check-outage
+docker rmi course-advisor-system-backend:switch-check-2569-10-28
+```
+
+ต้องมีผู้ใช้ที่เป็นผู้ดูแลบนฐานทดสอบชื่อ `switch-check@test.local` (สคริปต์ใช้ออก token เอง
+จาก `JWT_SECRET` ของคอนเทนเนอร์ ไม่ต้องรู้รหัสผ่าน) ถ้ายังไม่มี:
+
+```sql
+insert into users (email, password_hash, full_name, is_active, is_admin, role, status)
+values ('switch-check@test.local', 'ไม่ใช้รหัสผ่านในชุดนี้', 'ผู้ตรวจสวิตช์',
+        true, true, 'admin', 'approved')
+on conflict (email) do nothing;
+```
+
+**อ่านผลอย่างไร**
+
+| โหมด | ผ่าน = |
+|---|---|
+| `--mode gemini` | `answer_model` ขึ้นต้นด้วย `gemini:` · `gemini_ok` ขยับ · `local_primary_*` และ `fallback_*` **ไม่ขยับเลย** |
+| `--mode outage` | `gemini_ok` ไม่ขยับ · `fallback_local_attempt` ขยับ · **`fallback_local_ok` ขยับ** ← ข้อนี้คือผลของ patch · ถ้า `ok` เป็น 0 และ `failed` เท่ากับ `attempt` แปลว่ายังถูกเพดานเวลาปฏิเสธก่อนยิงคำขอแรก คือ patch ไม่ได้ผล |
+
+คาดไว้ล่วงหน้าว่าโหมด `outage` คำขอนั้นจะยังจบด้วย HTTP 503 และผู้ใช้ไม่ได้คำตอบ
+เพราะขั้นเขียนคำตอบที่ต้องอ้างอิงเอกสาร **ปฏิเสธโมเดลสำรองโดยเจตนา** (`fallback_declined`)
+สิ่งที่ patch เปลี่ยนคือขั้นช่วยต่าง ๆ ได้ใช้โมเดลในเครื่องจริง และตัวนับเลิกรายงานเท็จ
+— ไม่ใช่ทำให้ผู้ใช้ได้คำตอบตอน Gemini ล่ม (เรื่องนั้นเป็นการตัดสินใจเชิงนโยบาย ยังไม่ทำ)
+
+## 9. ของที่สร้างไว้บนเครื่องนี้ (ลบได้)
 
 * ฐาน `course_advisor_test` บนคอนเทนเนอร์ `course-advisor-system-postgres-1` (**ของ local ไม่ใช่ production**)
 * โมเดล `qwen2.5:0.5b` ที่ `ollama pull` มาเพื่อทดสอบการสลับรุ่น (`ollama rm qwen2.5:0.5b`)

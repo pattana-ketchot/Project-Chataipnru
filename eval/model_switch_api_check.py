@@ -41,8 +41,32 @@ import httpx
 
 CHECKS = 0
 FAILURES: list[str] = []
-PG = "course-advisor-system-postgres-1"
-DB = "course_advisor_test"
+
+# คอนเทนเนอร์ฐานข้อมูล — **ชื่อเดียวกันทั้งเครื่อง local และเซิร์ฟเวอร์ production**
+# docker exec ที่ไม่ได้ผ่าน ssh จึงยิงโดนของ local เงียบ ๆ และบนเซิร์ฟเวอร์ก็ยิงโดน
+# คอนเทนเนอร์ของ production ตรง ๆ · ตัวที่กันไม่ให้แตะข้อมูลจริงคือ "ชื่อฐาน" ข้างล่าง
+PG = os.getenv("SWITCH_CHECK_PG", "course-advisor-system-postgres-1")
+
+# ชุดนี้ **เขียน** ฐานข้อมูล: ล้าง chat_answer_cache และตั้ง/ลบแถว web.ai_settings
+# จึงรับได้เฉพาะฐานที่ชื่อลงท้าย _test (ดู require_test_db) ห้ามชี้ไปที่ course_advisor
+DB = os.getenv("SWITCH_CHECK_DB", "course_advisor_test")
+
+
+def require_test_db() -> None:
+    """
+    หยุดทันทีถ้าฐานที่ชี้ไม่ใช่ฐานทดสอบ — กันการล้างแคชของ production โดยไม่ตั้งใจ
+
+    ตรวจทั้งชื่อฐานที่ใช้กับ docker exec และชื่อฐานใน DSN เพราะสองทางนี้ตั้งแยกกันได้
+    """
+    names = [DB]
+    if dsn := os.getenv("SWITCH_CHECK_DSN"):
+        names.append((urlparse(dsn).path or "").lstrip("/"))
+    for name in names:
+        if not name.endswith("_test"):
+            raise SystemExit(
+                "ปฏิเสธ: ชุดนี้เขียนฐานข้อมูล (ล้างแคชคำตอบ ตั้งค่าสวิตช์) จึงรับได้เฉพาะฐาน"
+                f"ที่ชื่อลงท้าย _test · ได้รับ {name!r}"
+            )
 
 # คำถามที่ต้องให้โมเดลตอบจากเอกสาร ไม่ใช่คำถามที่ฐานหลักสูตรตอบได้เอง
 # (คำถามอย่าง "คุณสมบัติผู้สมัคร" ตอบจากฐานได้ answer_model จะเป็น null
@@ -65,6 +89,21 @@ def check(label: str, ok: bool, detail: str = "") -> None:
 
 
 def psql(sql: str) -> str:
+    """
+    สั่ง SQL กับฐานทดสอบ — ผ่าน psycopg เมื่อมี SWITCH_CHECK_DSN ไม่งั้นผ่าน docker exec
+
+    ต้องมีทางผ่าน DSN เพราะตอนรันในคอนเทนเนอร์ทดสอบบนเซิร์ฟเวอร์จะไม่มี docker CLI
+    ให้เรียก (และไม่ควรมี) ส่วนตอนรันบนเครื่องพัฒนา docker exec สะดวกกว่าเพราะไม่ต้อง
+    ส่งรหัสผ่านฐานข้อมูลเข้ามา
+    """
+    dsn = os.getenv("SWITCH_CHECK_DSN")
+    if dsn:
+        import psycopg  # นำเข้าเมื่อใช้จริง เพื่อให้เส้นทาง docker exec ไม่ต้องมี psycopg
+        with psycopg.connect(dsn, autocommit=True) as conn, conn.cursor() as cur:
+            cur.execute(sql)
+            if cur.description is None:
+                return ""
+            return "\n".join("|".join("" if v is None else str(v) for v in row) for row in cur.fetchall())
     out = subprocess.run(["docker", "exec", PG, "psql", "-U", "postgres", "-d", DB, "-t", "-A", "-c", sql],
                          capture_output=True, text=True, encoding="utf-8")
     if out.returncode != 0:
@@ -278,10 +317,104 @@ def section_stream(api: Api, model: str) -> None:
               f"answer_model={done.get('answer_model')}")
 
 
+# ───────────── 7. Gemini จริง (ต้องมีคีย์) ─────────────
+
+def section_gemini_real(api: Api) -> None:
+    """
+    เลือก Gemini แล้วคำตอบต้องมาจาก Gemini จริง — รันได้เฉพาะที่ที่มี GEMINI_API_KEY
+
+    ไม่ข้ามเงียบ ๆ เมื่อไม่มีคีย์ แต่ให้ตก เพราะ "ข้าม" กับ "ผ่าน" ต้องไม่ดูเหมือนกัน
+    """
+    print("\n=== 7. เลือก Gemini — คำตอบต้องมาจาก Gemini จริง ===")
+    v = api.get_settings()
+    has_key = v["defaults"]["has_gemini_key"]
+    check("เซิร์ฟเวอร์นี้มี GEMINI_API_KEY", bool(has_key),
+          "ไม่มีคีย์ — ข้อนี้ยืนยันไม่ได้บนเครื่องนี้ ต้องรันบนเซิร์ฟเวอร์ที่ตั้งคีย์ไว้")
+    if not has_key:
+        return
+
+    model = v["defaults"]["gemini_model"]
+    r = api.put_settings(provider="gemini", model=model)
+    check("บันทึกตัวเลือก gemini ได้", r.status_code == 200, f"HTTP {r.status_code}")
+    v = api.get_settings()
+    check("ที่ใช้จริงเป็น gemini", v["effective"]["provider"] == "gemini", str(v["effective"]))
+    check("ทำตามค่าที่บันทึก", v["effective"]["honoured"] is True, str(v["effective"]))
+    check("embedding ยังเป็น bge-m3", v["embedding"]["model"].startswith("bge-m3"), str(v["embedding"]))
+
+    before = usage()
+    code, body, spent = api.ask(DOC_QUESTIONS[0])
+    got = body.get("answer_model") if isinstance(body, dict) else None
+    status = body.get("status") if isinstance(body, dict) else None
+    print(f"    · HTTP {code} · {spent:.1f}s · status={status} · answer_model={got}")
+    after = usage()
+    check("คำตอบมาจาก gemini", code == 200 and isinstance(got, str) and got.startswith("gemini:"),
+          f"answer_model={got} status={status}")
+    check("ตัวนับฝั่ง gemini ขยับ", after.get("gemini_ok", 0) > before.get("gemini_ok", 0),
+          f"gemini_ok ก่อน={before.get('gemini_ok', 0)} หลัง={after.get('gemini_ok', 0)}")
+    check("ไม่ได้ไปเรียกโมเดลในเครื่องเป็นตัวหลัก",
+          after.get("local_primary_attempt", 0) == before.get("local_primary_attempt", 0),
+          f"ก่อน={before.get('local_primary_attempt', 0)} หลัง={after.get('local_primary_attempt', 0)}")
+    check("ไม่ได้ใช้ตัวสำรองเลย",
+          after.get("fallback_local_attempt", 0) == before.get("fallback_local_attempt", 0),
+          f"ก่อน={before.get('fallback_local_attempt', 0)} หลัง={after.get('fallback_local_attempt', 0)}")
+
+
+# ───────────── 8. Gemini ล้มแบบจำลอง — ตัวสำรองต้องได้เวลาใช้จริง ─────────────
+
+def section_fallback_on_outage(api: Api) -> None:
+    """
+    จำลอง Gemini ล้มแบบ "กินเวลาแล้วค่อยล้ม" แล้วตรวจว่าตัวสำรองในเครื่องได้ทำงานจริง
+
+    วิธีจำลอง **ไม่แก้โค้ด** — รันคอนเทนเนอร์ทดสอบด้วย
+        --add-host generativelanguage.googleapis.com:198.51.100.1
+    ซึ่งเป็นที่อยู่ในช่วงสำหรับเอกสาร (TEST-NET-2) ที่ไม่มีเส้นทางไปถึง คำขอของ Gemini
+    จึงค้างที่การเชื่อมต่อจนชน timeout ที่ http_timeout() บีบไว้ตามเวลาที่เหลือ —
+    รูปร่างเดียวกับของจริงที่ Gemini กินเพดานเวลาไปจนหมดแล้วค่อยโยนข้อผิดพลาด
+
+    สิ่งที่ตรวจคือ **fallback_local_ok ต้องขยับ** ไม่ใช่แค่ fallback_local_attempt
+    ก่อนมี patch ตัวสำรองจะถูก check_budget ปฏิเสธก่อนยิงคำขอแรก ตัวนับจึงขึ้น
+    attempt กับ failed เท่า ๆ กันโดยไม่มีไบต์ใดถึง Ollama (ดู LOCAL_FALLBACK_FIX ข้อ 1)
+    """
+    print("\n=== 8. Gemini ล้มแบบจำลอง — ตัวสำรองในเครื่องต้องได้เวลาใช้จริง ===")
+    # ยืนยันเงื่อนไขก่อน ไม่ใช่สมมติว่าจำลองไว้แล้ว
+    blocked = False
+    try:
+        httpx.get("https://generativelanguage.googleapis.com/", timeout=3)
+    except Exception:  # noqa: BLE001 — ต่อไม่ได้คือสิ่งที่ต้องการ
+        blocked = True
+    check("ปลายทางของ Gemini ถูกจำลองให้ติดต่อไม่ได้", blocked,
+          "ต่อถึง generativelanguage.googleapis.com ได้ — ยังไม่ได้ตั้ง --add-host ของคอนเทนเนอร์ทดสอบ")
+    if not blocked:
+        return
+
+    v = api.get_settings()
+    r = api.put_settings(provider="gemini", model=v["defaults"]["gemini_model"])
+    check("เลือก gemini ไว้สำหรับการจำลอง", r.status_code == 200, f"HTTP {r.status_code}")
+
+    before = usage()
+    code, body, spent = api.ask(DOC_QUESTIONS[0])
+    reply = body.get("reply") if isinstance(body, dict) else str(body)
+    print(f"    · HTTP {code} · {spent:.1f}s · reply[:70]={str(reply)[:70]!r}")
+    after = usage()
+
+    def grew(event: str) -> int:
+        return after.get(event, 0) - before.get(event, 0)
+
+    check("ไม่มีคำตอบใดมาจาก Gemini", grew("gemini_ok") == 0, f"gemini_ok +{grew('gemini_ok')}")
+    check("ตกมาที่ตัวสำรองในเครื่องจริง", grew("fallback_local_attempt") > 0,
+          f"fallback_local_attempt +{grew('fallback_local_attempt')}")
+    check("ตัวสำรองได้ทำงานจบอย่างน้อยหนึ่งขั้น (ผลของ patch)", grew("fallback_local_ok") > 0,
+          f"fallback_local_ok +{grew('fallback_local_ok')} · "
+          f"fallback_local_failed +{grew('fallback_local_failed')} — "
+          "ถ้า ok เป็น 0 และ failed เท่ากับ attempt คือยังถูกเพดานเวลาปฏิเสธก่อนยิงคำขอแรก")
+    print(f"    ตัวนับที่ขยับ: " + ", ".join(
+        f"{k} +{grew(k)}" for k in sorted(set(before) | set(after)) if grew(k)))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--api", default="http://127.0.0.1:8099")
-    ap.add_argument("--mode", choices=["prod", "slow"], default="prod")
+    ap.add_argument("--mode", choices=["prod", "slow", "server", "gemini", "outage"], default="prod")
     ap.add_argument("--model", default="qwen2.5:3b")
     ap.add_argument("--second-model", default="qwen3:8b")
     ap.add_argument("--allow-remote", action="store_true")
@@ -292,9 +425,21 @@ def main() -> int:
         print(f"ปฏิเสธ: --api ชี้ไปที่ {host} ซึ่งไม่ใช่เครื่อง local (ใส่ --allow-remote ถ้าตั้งใจ)")
         return 2
 
+    require_test_db()
     api = Api(a.api, token())
     print(f"ฐาน {DB} · {a.api} · โหมด {a.mode}")
     try:
+        # สามโหมดนี้คือข้อที่เครื่อง local ยืนยันไม่ได้ ไม่รันซ้ำส่วนที่ผ่านแล้ว
+        #
+        # แยก gemini กับ outage เพราะต้องรันในคอนเทนเนอร์ต่างกัน (คอนเทนเนอร์ของ outage
+        # ตั้ง --add-host ให้ต่อ Gemini ไม่ได้) ถ้ารวมเป็นโหมดเดียว ข้อของอีกฝั่งจะตก
+        # ตามสภาพแวดล้อมเสมอ แล้วคนอ่านผลต้องเดาว่าข้อไหนตกเพราะอะไร
+        if a.mode in ("server", "gemini"):
+            section_gemini_real(api)
+        if a.mode in ("server", "outage"):
+            section_fallback_on_outage(api)
+        if a.mode in ("server", "gemini", "outage"):
+            return finish()
         section_env_default(api)
         section_gemini_without_key(api)
         section_pick_ollama(api, a.model)
@@ -307,6 +452,10 @@ def main() -> int:
     finally:
         psql("delete from web.ai_settings where id = 1")
 
+    return finish()
+
+
+def finish() -> int:
     print(f"\nตรวจ {CHECKS} ข้อ · ตก {len(FAILURES)} ข้อ")
     for f in FAILURES:
         print(f"  - {f}")
