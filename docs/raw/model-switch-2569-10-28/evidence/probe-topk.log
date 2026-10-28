@@ -1,0 +1,49 @@
+
+######## CHAT_TOP_K=25 ########
+  --- ผลตรวจของปุ่มตรวจการเชื่อมต่อ ---
+      hello ok=True 366 ms
+      work  ok=True 160135 ms · เนื้อหา 18178 ตัวอักษร
+      error: -
+  --- ถามจริงสามคำถาม (ดู answer_model) ---
+      233.1s status=not_found    answer_model=None
+      248.9s status=not_found    answer_model=None
+        0.0s status=answered     answer_model=None
+
+######## CHAT_TOP_K=12 ########
+  --- ผลตรวจของปุ่มตรวจการเชื่อมต่อ ---
+      hello ok=True 592 ms
+      work  ok=True 6823 ms · เนื้อหา 8588 ตัวอักษร
+      error: -
+  --- ถามจริงสามคำถาม (ดู answer_model) ---
+      261.3s status=answered     answer_model=ollama:qwen2.5:3b
+       95.6s status=not_found    answer_model=None
+        0.0s status=answered     answer_model=None
+
+######## CHAT_TOP_K=8 ########
+  --- ผลตรวจของปุ่มตรวจการเชื่อมต่อ ---
+      hello ok=True 452 ms
+      work  ok=True 14696 ms · เนื้อหา 6233 ตัวอักษร
+      error: -
+  --- ถามจริงสามคำถาม (ดู answer_model) ---
+      130.4s status=answered     answer_model=ollama:qwen2.5:3b
+Traceback (most recent call last):
+  File "<stdin>", line 13, in <module>
+  File "/usr/lib/python3.10/urllib/request.py", line 216, in urlopen
+    return opener.open(url, data, timeout)
+  File "/usr/lib/python3.10/urllib/request.py", line 519, in open
+    response = self._open(req, data)
+  File "/usr/lib/python3.10/urllib/request.py", line 536, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+  File "/usr/lib/python3.10/urllib/request.py", line 496, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.10/urllib/request.py", line 1377, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+  File "/usr/lib/python3.10/urllib/request.py", line 1352, in do_open
+    r = h.getresponse()
+  File "/usr/lib/python3.10/http/client.py", line 1404, in getresponse
+    response.begin()
+  File "/usr/lib/python3.10/http/client.py", line 323, in begin
+    version, status, reason = self._read_status()
+  File "/usr/lib/python3.10/http/client.py", line 292, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+http.client.RemoteDisconnected: Remote end closed connection without response

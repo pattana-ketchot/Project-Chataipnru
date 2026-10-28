@@ -1,0 +1,9 @@
+ column_name | is_nullable 
+-------------+-------------
+ id          | NO
+ model       | YES
+ updated_by  | YES
+ updated_at  | NO
+ provider    | YES
+(5 rows)
+

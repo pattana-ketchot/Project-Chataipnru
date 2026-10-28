@@ -1,0 +1,7 @@
+image=course-advisor-system-backend:followup-2569-10-28 state=running started=2026-10-27T21:32:52.383339779Z
+ id |         model         | updated_by |         updated_at         
+----+-----------------------+------------+----------------------------
+  1 | gemini-3.1-flash-lite |            | 2026-08-25 18:27:06.019+00
+(1 row)
+
+เว็บจริง หน้าแรก = 200

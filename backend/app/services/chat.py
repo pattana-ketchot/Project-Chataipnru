@@ -52,7 +52,8 @@ from app.services.course_scope import (
     without_programme_names,
 )
 from app.services.answer_cache import corpus_version, lookup as cache_lookup, store as cache_store
-from app.services.llm_client import get_llm_connector, no_fallback_kwargs
+from app.services.llm_client import (answer_model_label, get_llm_connector,
+                                     no_fallback_kwargs)
 from app.services.program_list import asks_for_program_list, program_list_answer
 from app.services.program_names import english_name
 from app.services.query_expansion import expand_query, thai_only_query
@@ -483,6 +484,16 @@ class Prepared:
     # คำตอบสำเร็จรูปที่คืนก่อนถึงขั้นตีความจะเป็นค่าว่าง แล้วโหมด shadow ใช้ข้อความของผู้ใช้แทน
     interpreted: str = ""
     has_history: bool = False
+    # connector ที่ขั้นก่อนหน้าใช้ — ขั้นเขียนคำตอบต้องใช้ตัวเดียวกัน
+    #
+    # ผู้ดูแลเปลี่ยนผู้ให้บริการได้ระหว่างที่คำขอยังทำงาน (ดู services/ai_settings.py)
+    # ถ้าขั้นเขียนคำตอบไปขอ connector ใหม่เอง คำขอเดียวจะใช้เจ้าหนึ่งตรวจหลักฐาน
+    # แล้วใช้อีกเจ้าเขียนคำตอบ — คำตอบถูกเขียนบนคำตัดสินของโมเดลอื่น
+    # เจอจริงตอนทดสอบ 28 ต.ค. 2569: เริ่มด้วย ollama สลับเป็น gemini กลางคำขอ
+    # แล้วคำตอบรายงานว่ามาจาก gemini
+    #
+    # None สำหรับเส้นทางที่ตอบด้วยข้อความสำเร็จรูป ซึ่งไม่มีขั้นเขียนคำตอบ
+    connector: object | None = None
     # คำตอบนี้มาจากไหน: SERVED_RAG (ระบบเดิม) หรือ SERVED_STRUCTURED (ฐานข้อมูลหลักสูตร ในโหมด STRUCTURED_ANSWERS=on)
     served_source: str = SERVED_RAG
     # เอกสารต้นฉบับของคำตอบ {"document_id": ..., "page_start": ...} มีเฉพาะคำตอบจากฐานข้อมูล
@@ -1351,7 +1362,8 @@ def prepare_answer(
     # ให้อ่านจากฐานข้อมูลตามเดิม
     history = list(prior[-HISTORY_LIMIT:]) if prior else _load_history(db, session.id)
 
-    version = corpus_version(db, TOP_K_CHUNKS)
+    # ผูกแคชไว้กับโมเดลที่จะเขียนคำตอบ ไม่งั้นสลับโมเดลแล้วคำถามเดิมได้คำตอบเดิม
+    version = corpus_version(db, TOP_K_CHUNKS, answer_model_label(connector))
     stages.mark("corpus_version")
 
     # --- 0. คำทักทาย/ขอบคุณ/ถามตัวตน -> ตอบทันทีโดยไม่ค้นเอกสารและไม่เรียก LLM ---
@@ -1823,6 +1835,7 @@ def prepare_answer(
         stages=stages,
         interpreted=interpreted,
         has_history=bool(history),
+        connector=connector,
     )
 
 
@@ -2137,6 +2150,8 @@ def answer_question(
     p: Prepared | None = None
     outcome = "ok"
     rag_sources: list[dict] = []
+    # โมเดลที่ถูกสั่งให้เขียนคำตอบนี้ — None เมื่อคำตอบนี้ไม่ได้เรียกโมเดลเลย
+    answer_model: str | None = None
     try:
         p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
         outer.mark("prepare")
@@ -2145,7 +2160,9 @@ def answer_question(
         else:
             # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
             # มากกว่าความหลากหลายของสำนวน
-            connector = get_llm_connector()
+            # ตัวเดียวกับที่ขั้นก่อนหน้าใช้ ไม่ขอใหม่ (ดู Prepared.connector)
+            connector = p.connector or get_llm_connector()
+            answer_model = answer_model_label(connector)
             reply_text = connector.chat(
                 p.messages,
                 temperature=0.1,
@@ -2189,6 +2206,7 @@ def answer_question(
         source=p.source,
         # คำตอบจากฐานหลักสูตรใช้ p.sources เดิม · คำตอบจากการค้นเอกสารใช้ชิ้นที่รองรับคำตอบจริง
         sources=rag_sources,
+        answer_model=answer_model,
     )
 
 
@@ -2287,13 +2305,17 @@ def _stream_answer_events(
 
     # เหตุผลเดียวกับใน answer_question — ขั้นเขียนคำตอบล้มได้ ต้องบันทึกเวลาเสมอ
     outcome = "ok"
+    # โมเดลที่ถูกสั่งให้เขียน — ออกไปกับเหตุการณ์ done เพราะ meta ส่งก่อนจะรู้ว่าใช้อะไร
+    answer_model: str | None = None
     try:
         if p.canned is not None:
             yield _sse("token", {"t": p.canned})
             reply_text = p.canned
         else:
             parts: list[str] = []
-            connector = get_llm_connector()
+            # ตัวเดียวกับที่ขั้นก่อนหน้าใช้ ไม่ขอใหม่ (ดู Prepared.connector)
+            connector = p.connector or get_llm_connector()
+            answer_model = answer_model_label(connector)
             for chunk in connector.chat_stream(
                 p.messages,
                 temperature=0.1,
@@ -2330,7 +2352,7 @@ def _stream_answer_events(
     # ดูหมายเหตุเดียวกันใน answer_question — ส่งหลังตัวอักษรสุดท้ายถึงผู้ใช้แล้ว ไม่หน่วงหรือเปลี่ยนคำตอบ
     shadow_submit(question=message, interpreted=p.interpreted, has_history=p.has_history,
                   served_status=p.status, served_reply=reply_text, served_source=p.served_source)
-    yield _sse("done", {})
+    yield _sse("done", {"answer_model": answer_model})
 
 
 def _sse(event: str, data: dict) -> str:

@@ -1,0 +1,5 @@
+ provider |   model    
+----------+------------
+ ollama   | qwen2.5:3b
+(1 row)
+

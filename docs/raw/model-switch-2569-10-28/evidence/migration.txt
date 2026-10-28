@@ -1,0 +1,6 @@
+NOTICE:  column "provider" of relation "ai_settings" already exists, skipping
+ALTER TABLE
+ALTER TABLE
+DO
+COMMENT
+COMMENT

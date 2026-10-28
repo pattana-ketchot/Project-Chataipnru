@@ -1,0 +1,521 @@
+    --- test_model_switch ---
+
+test_bad_env_provider_does_not_crash
+  [ผ่าน] LLM_PROVIDER ผิด -> ใช้ ollama
+
+test_canned_answer_reports_no_model
+LLM_PROVIDER='chatgpt' ไม่ใช่ค่าที่รองรับ (gemini, ollama) — ใช้ ollama
+  [ผ่าน] คำตอบสำเร็จรูปไม่เรียกโมเดลเลย
+  [ผ่าน] answer_model เป็น None
+  [ผ่าน] ยังได้ข้อความคำตอบตามเดิม
+
+test_connector_cache_is_bounded
+  [ผ่าน] จำนวน connector ที่เก็บไว้ไม่เกินเพดาน
+
+test_connector_type_matches_provider
+  [ผ่าน] เลือก gemini -> ได้ตัวที่แยกเจ้า embedding กับเจ้าเขียนคำตอบ
+  [ผ่าน] เลือก gemini -> รุ่นที่ใช้เขียนคำตอบตรงกับที่เลือก
+  [ผ่าน] เลือก gemini -> ฝั่ง embedding ยังเป็น bge-m3
+  [ผ่าน] เลือก ollama -> ได้ตัวที่ใช้โมเดลในเครื่องเป็นตัวหลัก
+  [ผ่าน] เลือก ollama -> รุ่นที่ใช้เขียนคำตอบตรงกับที่เลือก
+  [ผ่าน] เลือก ollama -> ฝั่ง embedding ยังเป็น bge-m3
+  [ผ่าน] เปลี่ยนค่าแล้วได้ connector ตัวใหม่โดยไม่ต้อง restart
+  [ผ่าน] connector ที่แจกไปแล้วยังชี้ผู้ให้บริการเดิม
+  [ผ่าน] สลับกลับได้ และใช้ตัวเดิมซ้ำ (ไม่สร้าง httpx client ใหม่)
+
+test_db_error_does_not_break_answering
+อ่าน web.ai_settings ไม่ได้ — ใช้ค่าจาก env
+Traceback (most recent call last):
+  File "/app/backend/app/services/ai_settings.py", line 115, in resolve
+    row = db.execute(_SELECT).mappings().first()
+          ^^^^^^^^^^^^^^^^^^^
+  File "/app/backend/tests/test_model_switch.py", line 63, in execute
+    raise RuntimeError("ฐานข้อมูลล่ม")
+RuntimeError: ฐานข้อมูลล่ม
+  [ผ่าน] ฐานล่ม -> ยังได้ตัวเลือกจาก env
+  [ผ่าน] ฐานล่ม -> แจ้งว่าอ่านค่าที่บันทึกไม่ได้
+
+test_embed_model_never_comes_from_the_switch
+  [ผ่าน] ตั้งรุ่นเขียนคำตอบได้
+  [ผ่าน] รุ่น embedding ยังมาจาก env
+  [ผ่าน] เป็น OllamaConnector ตัวจริง
+
+test_gemini_without_key_is_reported_not_pretended
+เลือก gemini ไว้แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY — ใช้ ollama
+  [ผ่าน] ไม่มีคีย์ -> ที่ใช้จริงคือโมเดลในเครื่อง
+  [ผ่าน] ไม่มีคีย์ -> ยังบอกว่าผู้ดูแลเลือก gemini ไว้
+  [ผ่าน] ไม่มีคีย์ -> ไม่ถือว่าทำตามที่เลือก
+  [ผ่าน] ไม่มีคีย์ -> แจ้งว่าต้องตั้งคีย์
+
+test_local_primary_failure_is_not_counted_as_success
+  [ผ่าน] ล้ม -> ไม่นับเป็นสำเร็จ
+
+test_local_primary_has_no_cloud_fallback
+  [ผ่าน] ล้มแล้วโยนข้อผิดพลาดออกมา
+  [ผ่าน] ไม่มีคำสั่งห้ามตัวสำรองให้ต้องส่ง (เพราะไม่มีตัวสำรอง)
+
+test_local_primary_stream_counts_only_when_finished
+  [ผ่าน] สตรีมจนจบ -> นับสำเร็จ
+  [ผ่าน] สตรีมล้ม -> นับล้ม
+
+test_local_primary_success_is_counted
+  [ผ่าน] ตอบได้ -> นับทั้งเรียกและสำเร็จ
+
+test_no_row_uses_env
+  [ผ่าน] ไม่มีแถว -> ใช้ผู้ให้บริการจาก env
+  [ผ่าน] ไม่มีแถว -> ใช้รุ่นจาก env
+  [ผ่าน] ไม่มีแถว -> ที่มาคือ env
+  [ผ่าน] ไม่มีแถว -> ไม่ถือว่าทำตามค่าที่บันทึก
+
+test_one_request_uses_one_provider_end_to_end
+  [ผ่าน] ขั้นเขียนคำตอบเรียกตัวที่ขั้นก่อนหน้าใช้
+  [ผ่าน] ไม่ไปขอ connector ใหม่เองกลางคำขอ
+  [ผ่าน] answer_model รายงานตัวที่เขียนจริง
+
+test_saved_choice_is_used
+  [ผ่าน] เลือก ollama -> ใช้ ollama
+  [ผ่าน] เลือกรุ่น -> ใช้รุ่นนั้น
+  [ผ่าน] ที่มาคือค่าที่บันทึก
+  [ผ่าน] ถือว่าทำตามค่าที่บันทึก
+
+test_saved_model_without_provider_is_not_used
+  [ผ่าน] มีแต่ model ไม่มี provider -> ยังใช้รุ่นจาก env
+  [ผ่าน] มีแต่ model ไม่มี provider -> ที่มายังเป็น env
+  [ผ่าน] บอกค่าที่บันทึกไว้กลับไปด้วย
+  [ผ่าน] มีคำอธิบายว่าทำไมค่าที่บันทึกยังไม่มีผล
+
+test_saved_provider_without_model_uses_provider_default
+  [ผ่าน] เลือก ollama ไม่ระบุรุ่น -> ได้รุ่นของ ollama
+  [ผ่าน] มีคำอธิบายว่าใช้รุ่นตั้งต้น
+
+test_unknown_provider_falls_back_to_env
+  [ผ่าน] provider ไม่รองรับ -> ใช้ env
+  [ผ่าน] provider ไม่รองรับ -> ไม่เอารุ่นของมันมาใช้
+  [ผ่าน] provider ไม่รองรับ -> แจ้งเหตุผล
+
+test_warmup_is_not_counted_as_usage
+provider ที่บันทึกไว้ ('openai') ไม่รองรับ — ใช้ค่าจาก env
+  [ผ่าน] อุ่นโมเดล -> ไม่นับอะไรเลย
+  [ผ่าน] อุ่นโมเดล -> แตะโมเดลจริง
+
+ตรวจทั้งหมด 51 จุด
+ผ่านทั้งหมด
+    --- test_llm_usage_counter ---
+
+test_all_models_failing_is_counted_once
+429 เป็นโควตารายวัน (เจอ PerDay ในเนื้อความ)
+พักโมเดล gemini-3.5-flash-lite ไว้ 14400 วินาที จะไปใช้ตัวถัดไปก่อน
+429 เป็นโควตารายวัน (เจอ PerDay ในเนื้อความ)
+พักโมเดล gemini-3.1-flash-lite ไว้ 14400 วินาที จะไปใช้ตัวถัดไปก่อน
+429 เป็นโควตารายวัน (เจอ PerDay ในเนื้อความ)
+พักโมเดล gemini-3.5-flash ไว้ 14400 วินาที จะไปใช้ตัวถัดไปก่อน
+429 เป็นโควตารายวัน (เจอ PerDay ในเนื้อความ)
+พักโมเดล gemini-3.6-flash ไว้ 14400 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] ทุกโมเดลล้มแล้วนับ gemini_all_failed หนึ่งครั้ง
+  [ผ่าน] นับโควตาของทุกโมเดลที่ลอง
+
+test_backup_model_is_named_in_the_event
+429 เป็นโควตารายวัน (เจอ PerDay ในเนื้อความ)
+พักโมเดล gemini-3.5-flash-lite ไว้ 14400 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] โควตารายวันของตัวหลักถูกนับพร้อมชื่อโมเดล
+  [ผ่าน] ตัวสำรองที่ตอบได้ถูกนับพร้อมชื่อโมเดล
+  [ผ่าน] ไม่นับเป็น gemini_ok เมื่อคนตอบคือตัวสำรอง
+
+test_broken_callback_does_not_break_the_answer
+  [ผ่าน] callback พังแล้วยังได้คำตอบ
+
+test_declined_fallback_is_counted_separately
+  [ผ่าน] ขั้นที่ห้ามใช้ตัวสำรองนับเป็น fallback_declined
+
+test_event_name_is_capped
+  [ผ่าน] ชื่อเหตุการณ์ถูกตัดไม่ให้ยาวเกินกำหนด
+
+test_every_call_ends_with_exactly_one_terminal_event
+เจ้าหลักตอบไม่ได้ (เจ้าหลักล้มในชุดทดสอบ) — ใช้โมเดลในเครื่องแทน
+  [ผ่าน] คลาวด์ตอบได้: นับเหตุการณ์ปลายทาง 0 ครั้ง
+  [ผ่าน] ตกไปตัวสำรอง: นับเหตุการณ์ปลายทาง 1 ครั้ง
+  [ผ่าน] ไม่ยอมใช้ตัวสำรอง: นับเหตุการณ์ปลายทาง 1 ครั้ง
+  [ผ่าน] สตรีมล้มกลางคัน: นับเหตุการณ์ปลายทาง 1 ครั้ง
+
+test_failed_write_returns_counts_to_the_queue
+บันทึกตัวนับการใช้โมเดลไม่สำเร็จ 1 ครั้งติดกัน จะลองใหม่รอบหน้า
+Traceback (most recent call last):
+  File "/app/backend/app/services/llm_usage.py", line 293, in flush
+    db.execute(_UPSERT, {"day": day, "event": event, "n": n})
+  File "/app/backend/tests/test_llm_usage_counter.py", line 94, in execute
+    raise RuntimeError("ฐานข้อมูลล่มในชุดทดสอบ")
+RuntimeError: ฐานข้อมูลล่มในชุดทดสอบ
+  [ผ่าน] เขียนไม่สำเร็จแล้วตัวเลขยังอยู่ครบ
+
+test_fallback_failure_is_not_counted_as_success
+เจ้าหลักตอบไม่ได้ (เจ้าหลักล้มในชุดทดสอบ) — ใช้โมเดลในเครื่องแทน
+  [ผ่าน] ตัวสำรองล้มแล้วนับ fallback_local_failed
+  [ผ่าน] ไม่นับเป็นสำเร็จ
+
+test_fallback_to_local_counts_attempt_and_success
+เจ้าหลักตอบไม่ได้ (เจ้าหลักล้มในชุดทดสอบ) — ใช้โมเดลในเครื่องแทน
+  [ผ่าน] นับทั้งการพยายามเรียกและผลสำเร็จ
+  [ผ่าน] ผู้ใช้ยังได้คำตอบ
+
+test_flusher_writes_on_schedule_without_new_events
+  [ผ่าน] เขียนเองตามเวลาโดยไม่ต้องมีเหตุการณ์ใหม่
+  [ผ่าน] เขียนค่าที่นับไว้จริง
+  [ผ่าน] กองรอว่างหลังเขียน
+
+test_overload_is_its_own_event
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash-lite
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] 503 ถูกนับเป็น overload ไม่ใช่โควตา
+
+test_per_minute_limit_is_separated_from_daily_quota
+พักโมเดล gemini-3.5-flash-lite ไว้ 45 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] 429 ต่อนาทีถูกนับเป็น quota_minute
+  [ผ่าน] 429 ต่อนาทีไม่ถูกนับเป็น quota_day
+
+test_primary_success_counts_as_gemini_ok
+  [ผ่าน] ตัวหลักตอบได้ นับเป็น gemini_ok
+
+test_record_does_not_touch_the_database_while_the_flusher_runs
+  [ผ่าน] record() ไม่เปิด session ฐานข้อมูลเลย
+  [ผ่าน] ตัวเลขยังอยู่ในกองรอครบ
+
+test_record_does_not_wait_for_the_database
+  [ผ่าน] record() ไม่รอฐานข้อมูลที่ค้าง
+
+test_record_never_raises_when_database_is_down
+  [ผ่าน] ฐานข้อมูลล่มแล้ว record() กับ flush() ไม่โยนข้อผิดพลาด
+
+test_shutdown_gives_up_instead_of_blocking
+บันทึกตัวนับการใช้โมเดลไม่สำเร็จ 1 ครั้งติดกัน จะลองใหม่รอบหน้า
+Traceback (most recent call last):
+  File "/app/backend/app/services/llm_usage.py", line 293, in flush
+    db.execute(_UPSERT, {"day": day, "event": event, "n": n})
+  File "/app/backend/tests/test_llm_usage_counter.py", line 94, in execute
+    raise RuntimeError("ฐานข้อมูลล่มในชุดทดสอบ")
+RuntimeError: ฐานข้อมูลล่มในชุดทดสอบ
+  [ผ่าน] ตอนปิดรอไม่เกินเพดานที่ตั้งไว้
+
+test_stream_counts_the_model_that_answered
+  [ผ่าน] สตรีมสำเร็จจากตัวหลัก นับเป็น gemini_ok
+
+test_stream_failing_midway_is_counted_and_not_swapped
+  [ผ่าน] ล้มหลังส่งตัวอักษรแรกแล้วนับ stream_failed_midway
+  [ผ่าน] ไม่สลับไปโมเดลในเครื่องกลางคัน
+
+test_stream_fallback_counts_success_only_when_the_stream_ends
+เจ้าหลักสตรีมไม่ได้ (เจ้าหลักล้มในชุดทดสอบ) — ใช้โมเดลในเครื่องแทน
+  [ผ่าน] สตรีมสำรองจบตามปกติแล้วนับสำเร็จ
+  [ผ่าน] ผู้ใช้ยังได้คำตอบจากสตรีมสำรอง
+
+test_stream_fallback_failing_after_first_chunk_is_a_failure
+เจ้าหลักสตรีมไม่ได้ (เจ้าหลักล้มในชุดทดสอบ) — ใช้โมเดลในเครื่องแทน
+  [ผ่าน] สตรีมสำรองล้มกลางคันแล้วนับ fallback_local_failed
+  [ผ่าน] ส่งตัวอักษรที่เขียนได้ออกไปตามปกติ
+
+test_successful_cloud_call_is_not_counted_twice
+  [ผ่าน] คลาวด์ตอบได้ ชั้นนี้ไม่นับอะไรเพิ่ม
+
+test_successful_write_clears_the_queue_and_sums_per_event
+  [ผ่าน] นับครบทุกครั้งที่เรียก ไม่ขาดไม่เกิน
+  [ผ่าน] นับเหตุการณ์อื่นแยกกัน
+  [ผ่าน] รวมเป็นก้อน ไม่ใช่เขียนทีละครั้ง
+  [ผ่าน] เขียนสำเร็จแล้วกองรอว่าง
+  [ผ่าน] วันที่อยู่ในรูปแบบ YYYY-MM-DD
+
+test_viewer_closing_the_page_is_counted_as_neither
+เจ้าหลักสตรีมไม่ได้ (เจ้าหลักล้มในชุดทดสอบ) — ใช้โมเดลในเครื่องแทน
+  [ผ่าน] ปิดกลางคันนับแค่การพยายามเรียก
+
+ตรวจทั้งหมด 43 จุด
+ผ่านทั้งหมด
+    --- test_gemini_overload_fallback ---
+test_all_models_overloaded_raises_clear_error
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash-lite
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.1-flash-lite
+พักโมเดล gemini-3.1-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash
+พักโมเดล gemini-3.5-flash ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.6-flash
+พักโมเดล gemini-3.6-flash ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] ทุกโมเดล 503 ต้องโยน LLMConnectionError
+  [ผ่าน] ข้อความบอกว่าใช้ไม่ได้ทุกตัว
+
+test_api_key_is_not_in_repr
+  [ผ่าน] ค่าคีย์ไม่อยู่ใน repr
+  [ผ่าน] ชื่อฟิลด์ api_key ไม่อยู่ใน repr
+  [ผ่าน] ยังอ่านชื่อโมเดลจาก repr ได้
+  [ผ่าน] ยังสร้างด้วย api_key= ได้ปกติ
+
+test_client_error_does_not_move_model
+  [ผ่าน] 400 ต้องโยนออกทันที
+  [ผ่าน] 400 ไม่ไล่ยิงโมเดลอื่น
+
+test_not_found_explains_the_model_name
+  [ผ่าน] 404 ต้องโยนออกและบอกชื่อโมเดล
+
+test_overload_moves_to_fallback_model
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash-lite
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] ได้คำตอบจากโมเดลสำรอง
+  [ผ่าน] ยิงรวมน้อยครั้ง (ย้ายทันที ไม่วนซ้ำ)
+  [ผ่าน] ลองตัวหลักก่อนแล้วจึงย้าย
+  [ผ่าน] ไม่ลองซ้ำตัวที่ 503 เลย
+
+test_quota_still_moves_model
+429 ไม่ได้บอกชนิดโควตามา เดาว่าเป็นรายวัน — เนื้อความ: '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"quota"}}'
+พักโมเดล gemini-3.5-flash-lite ไว้ 14400 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] 429 ยังย้ายโมเดลเหมือนเดิม
+  [ผ่าน] 429 ไม่ลองซ้ำตัวเดิม
+
+test_second_call_skips_the_parked_model
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash-lite
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] คำขอที่สองไม่กลับไปยิงตัวที่ถูกพัก
+  [ผ่าน] คำขอที่สองยิงน้อยครั้งกว่าคำขอแรก
+
+test_stream_all_overloaded_raises
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+พักโมเดล gemini-3.1-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+พักโมเดล gemini-3.5-flash ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] สตรีมที่ 503 ทุกตัวต้องโยน
+
+test_stream_overload_moves_to_fallback
+พักโมเดล gemini-3.6-flash ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] สตรีมย้ายไปตัวสำรองได้
+  [ผ่าน] สตรีมลองตัวหลักก่อน
+
+ชุดทดสอบ 9 ชุด · จุดตรวจ 20 จุด
+ผ่านทั้งหมด
+    --- test_model_outage_n1 ---
+/usr/local/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+n1-05 คำถามที่ต้องค้นเอกสาร ขณะโมเดลล่มทุกตัว
+INFO:course_advisor:timing /chat-web total=26ms  | ไม่ได้จับเวลารายขั้น | source=- status=- outcome=ล้มตอนเตรียม:LLMConnectionError q='หลักสูตรวิทยาการคอมพิวเตอร์เรียนกี่ปี'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] คำถามนี้ต้องพึ่งโมเดลจริง (ฐานตอบไม่ได้) — เรียก ['embed']
+  [ผ่าน] บอกสถานะบริการขัดข้องอย่างชัดเจน — เจอ ['ระบบตอบไม่ได้ในขณะนี้', 'ลองใหม่'] · ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง
+  [ผ่าน] ไม่เดาระยะเวลาการศึกษาจากความรู้ทั่วไป — ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง
+  [ผ่าน] ไม่อ้างที่มาของเอกสารทั้งที่อ่านเอกสารไม่ได้ — ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง
+  [ผ่าน] ไม่เกินเพดานเวลา 30 วินาที (เผื่อ 5) — 0.08s
+
+n1-05ก "บริการขัดข้อง" ต้องไม่ถูกรายงานเป็น "ไม่มีข้อมูลในเอกสาร"
+INFO:course_advisor:timing /chat-web total=13ms  | ไม่ได้จับเวลารายขั้น | source=- status=- outcome=ล้มตอนเตรียม:LLMConnectionError q='หลักสูตรวิทยาการคอมพิวเตอร์มีทุนการศึกษาอะไรบ้าง'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] บอกสถานะบริการขัดข้อง — เจอ ['ระบบตอบไม่ได้ในขณะนี้', 'ลองใหม่'] · ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง
+  [ผ่าน] ไม่สรุปว่าเอกสารไม่มีข้อมูลนี้ — ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง
+  [ผ่าน] ไม่เดารายชื่อทุน — ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง
+
+n1-06 คำถามที่ตอบจากฐานได้ ขณะโมเดลล่มทุกตัว
+INFO:course_advisor:timing /chat-web total=17ms prepare=14ms persist=2ms | corpus_version=5ms structured_fast_early=8ms | source=structured status=answered outcome=ok q='หลักสูตรคณิตศาสตร์ต้องเรียนทั้งหมดกี่หน่วยกิต'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] ยังตอบได้ — จำนวนหน่วยกิตรวมตลอดหลักสูตรของคณิตศาสตร์ แยกตามหลักสูตร
+- หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569): ไม่น
+  [ผ่าน] มีตัวเลขของฉบับ 2569 (124) — จำนวนหน่วยกิตรวมตลอดหลักสูตรของคณิตศาสตร์ แยกตามหลักสูตร
+- หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569): ไม่น้อยกว่า 124 หน่วยกิต
+- หลักสูตรวิทยาศาสต
+  [ผ่าน] มีตัวเลขของฉบับ 2564 (130) — จำนวนหน่วยกิตรวมตลอดหลักสูตรของคณิตศาสตร์ แยกตามหลักสูตร
+- หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569): ไม่น้อยกว่า 124 หน่วยกิต
+- หลักสูตรวิทยาศาสต
+  [ผ่าน] คงคำว่าไม่น้อยกว่า — จำนวนหน่วยกิตรวมตลอดหลักสูตรของคณิตศาสตร์ แยกตามหลักสูตร
+- หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569): ไม่น้อยกว่า 124 หน่วยกิต
+- หลักสูตรวิทยาศาสต
+  [ผ่าน] ไม่มีข้อความบริการขัดข้อง — จำนวนหน่วยกิตรวมตลอดหลักสูตรของคณิตศาสตร์ แยกตามหลักสูตร
+- หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2569): ไม่น้อยกว่า 124 หน่วยกิต
+- หลักสูตรวิทยาศาสต
+  [ผ่าน] อ้างที่มาครบสองไฟล์ — พ.ศ. 2569): ไม่น้อยกว่า 124 หน่วยกิต
+- หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์ (พ.ศ. 2564): ไม่น้อยกว่า 130 หน่วยกิต
+ที่มา: ma69.pdf หน้า 1; ma64.pdf หน้า 6
+  [ผ่าน] ไม่เรียกโมเดลเลย — เรียก []
+  [ผ่าน] ตอบเร็วกว่า 5 วินาที — 0.02s
+
+จุดตรวจ 16 จุด
+เรียกโมเดลทั้งหมด 3 ครั้ง (ล้มทุกครั้งตามที่จำลอง)
+ผ่านทั้งหมด
+    --- test_sse_format ---
+/usr/local/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+ชิ้นหลักฐานที่คัดข้อความมา: หน้า 31 ของ หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566)
+
+1. คำตอบจากฐานข้อมูล (ไม่เรียกโมเดล) — ลำดับและคีย์ของเหตุการณ์ต้องเหมือนเดิม
+INFO:course_advisor:ใช้โมเดลเขียนคำตอบ: gemini / gemini-3.5-flash-lite (ที่มา: env)
+INFO:course_advisor:timing /chat-web total=41ms prepare=37ms persist=3ms | corpus_version=28ms structured_fast_early=9ms | source=structured status=answered outcome=ok q='หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2561 ต้องเรียนทั้งหมดกี่หน่'
+INFO:httpx:HTTP Request: POST http://testserver/chat/stream "HTTP/1.1 200 OK"
+  [ผ่าน] ได้สถานะ 200 — code=200
+  [ผ่าน] ชนิดข้อมูลเป็น text/event-stream — text/event-stream; charset=utf-8
+  [ผ่าน] ลำดับเหตุการณ์ถูกต้อง — meta -> token -> sources -> done
+  [ผ่าน] meta มีคีย์เดิมครบ — ขาด []
+  [ผ่าน] meta.status = answered — answered
+  [ผ่าน] meta.top_score เป็นตัวเลข — 0.0
+  [ผ่าน] ผู้รับที่อ่านเฉพาะ token ได้คำตอบครบ — หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต
+  [ผ่าน] ที่มาของคำตอบจากฐานอยู่ในข้อความเหมือนเดิม — (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต / ที่มา: cs61.pdf หน้า 6
+
+2. คำตอบจากการค้นเอกสาร — token ก้อนที่มาและเหตุการณ์ sources
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat-web total=219ms prepare=209ms persist=9ms | corpus_version=5ms gates=6ms structured_miss=2ms retrieve1=192ms decide=2ms | source=rag status=answered outcome=ok q='หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2566 มีการฝึกประสบการณ์วิชา'
+INFO:httpx:HTTP Request: POST http://testserver/chat/stream "HTTP/1.1 200 OK"
+  [ผ่าน] ได้สถานะ 200 — code=200
+  [ผ่าน] ลำดับเหตุการณ์ถูกต้อง — meta -> token -> token -> token -> token -> token -> sources -> done
+  [ผ่าน] ขั้นเขียนคำตอบเรียกปลายทางโมเดลจริง — ['chat', 'chat', 'chat_stream']
+  [ผ่าน] meta มีคีย์เดิมครบ — ขาด []
+  [ผ่าน] meta.citations ไม่ว่าง (คำตอบนี้มาจากการค้น) — 25
+  [ผ่าน] คำตอบถูกทยอยส่งหลายก้อน — 5 ก้อน
+  [ผ่าน] ผู้รับที่อ่านเฉพาะ token ได้ทั้งคำตอบและบรรทัดที่มา — ศึกษา ปฏิบัติงานในสถานประกอบการเสมือนหนึ่งเป็นพนักงานของสถานประกอบการ ใน ตำแหน่งตามที่ตรง /  / ที่มา: cs66_brief.pdf หน้า 31
+  [ผ่าน] บรรทัดที่มาเป็นก้อนสุดท้ายและขึ้นบรรทัดใหม่สองครั้ง — '\n\nที่มา: cs66_brief.pdf หน้า 31'
+  [ผ่าน] มีเหตุการณ์ sources
+  [ผ่าน] sources เป็นรายการที่มีไฟล์และหน้า — [{'file': 'cs66_brief.pdf', 'page_start': 31, 'page_end': 31, 'course_title': 'หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2566)', 'document_id':
+  [ผ่าน] หน้าที่อ้างคือหน้าของชิ้นที่ข้อความมาจากจริง — ได้ [31] ต้องมี 31
+  [ผ่าน] ทุกรายการบอกสถานะการตรวจข้ออ้าง — ['ไม่มีข้ออ้างที่ตรวจได้']
+  [ผ่าน] ข้ออ้างของคำตอบที่คัดจากเอกสารต้องรองรับได้ครบ — [('ไม่มีข้ออ้างที่ตรวจได้', [])]
+
+3. /chat-web (ข้อความล้วน) ต้องได้ข้อความเดียวกับที่ประกอบจาก token
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat-web total=234ms prepare=225ms write_answer=1ms persist=7ms | corpus_version=6ms gates=6ms structured_miss=2ms retrieve1=209ms decide=1ms | source=rag status=answered outcome=ok q='หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2566 มีการฝึกประสบการณ์วิชา'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] ได้สถานะ 200 — code=200
+  [ผ่าน] ชนิดข้อมูลยังเป็น text/plain — text/plain; charset=utf-8
+  [ผ่าน] ไม่มีเศษรูปแบบ SSE หลุดไปหน้าเว็บ — วิชาบังคับก่อน : 4124813 การเตรียมความพร ้อม ฝกประสบการณวิชาชีพและสหกิจศึกษา ปฏิบัติงานในสถานประกอบการเสมือนหนึ่งเป็นพนั
+  [ผ่าน] หน้าเว็บได้บรรทัดที่มาด้วย — ศึกษา ปฏิบัติงานในสถานประกอบการเสมือนหนึ่งเป็นพนักงานของสถานประกอบการ ใน ตำแหน่งตามที่ตรง /  / ที่มา: cs66_brief.pdf หน้า 31
+  [ผ่าน] ข้อความที่หน้าเว็บได้ตรงกับที่ประกอบจาก token — เว็บ 191 ตัวอักษร · สตรีม 191 ตัวอักษร
+
+จุดตรวจ 26 จุด
+ผ่านทั้งหมด
+    --- test_chatweb_stream_budget ---
+/usr/local/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+1. คำถามที่ตอบจากฐานข้อมูล ต้องไม่มีข้อความบริการขัดข้องต่อท้าย
+   (บั๊กเดิมทำให้ทุกคำขอมีข้อความนี้ต่อท้ายคำตอบที่ถูกต้องแล้ว)
+INFO:course_advisor:ใช้โมเดลเขียนคำตอบ: gemini / gemini-3.5-flash-lite (ที่มา: env)
+INFO:course_advisor:timing /chat-web total=60ms prepare=56ms write_answer=1ms persist=3ms | corpus_version=43ms structured_fast_early=13ms | source=structured status=answered outcome=ok q='หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2561 ต้องเรียนทั้งหมดกี่หน่'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] ได้สถานะ 200 — code=200
+  [ผ่าน] มีตัวเลขหน่วยกิตถูกต้อง — หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต
+  [ผ่าน] ยังมีคำว่าไม่น้อยกว่า — หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต
+  [ผ่าน] มีที่มา — หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต
+  [ผ่าน] ไม่มีข้อความบริการขัดข้องต่อท้าย — เจอ [] · กสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ (พ.ศ. 2561) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต
+ที่มา: cs61.pdf หน้า 6
+  [ผ่าน] ไม่มี log ว่าล้มกลางสตรีม
+  [ผ่าน] ตอบเร็วตามเป้าคำถามจากฐาน (<=5s) — 0.11s
+
+2. เพดานเวลาต้องถูกบังคับข้าม step ของการสตรีม (ปลายทางสตรีมจริงไม่หยุด)
+INFO:httpx:HTTP Request: POST http://127.0.0.1:47421/api/chat "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://127.0.0.1:47421/api/chat "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://127.0.0.1:47421/api/chat "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat-web total=6231ms prepare=224ms | corpus_version=7ms gates=8ms structured_miss=2ms retrieve1=203ms decide=3ms | source=rag status=answered outcome=ล้ม:LLMBudgetExceeded q='หลักสูตรวิทยาการคอมพิวเตอร์ พ.ศ. 2566 มีทุนการศึกษาอะไรบ้าง '
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] ไม่ได้ผ่านเพราะแคช — ต้องไม่มี cache_hit ใน timing log
+  [ผ่าน] คำถามนี้เข้าถึงโมเดลจริง — ปลายทางโมเดลได้รับคำขอ — คำขอที่ปลายทางโมเดล ['once', 'once', 'stream'] · ได้: c0 c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16 c17 c18 c19 c20 c21 c22 c23 
+
+ระ
+  [ผ่าน] เพดานถูกบังคับระหว่างอ่านสตรีมคำตอบ (ไม่ใช่ล้มก่อนถึงขั้นสตรีม) — คำขอที่ปลายทางโมเดล ['once', 'once', 'stream']
+  [ผ่าน] ได้สถานะ 200 (ไม่ใช่ 500) — code=200
+  [ผ่าน] จบภายในเพดาน 6s + ผ่อน 4s — 6.24s
+  [ผ่าน] ไม่จบเร็วกว่าเพดานอย่างผิดสังเกต — 6.24s
+  [ผ่าน] บอกผู้ใช้ว่าบริการขัดข้อง ไม่เงียบและไม่เดาคำตอบ — c13 c14 c15 c16 c17 c18 c19 c20 c21 c22 c23 
+
+ระบบใช้เวลาตอบนานเกินเพดานที่ตั้งไว้ จึงหยุดรอครับ ตอนนี้ผู้ให้บริการโมเดลขัดข้อง รบกวนลองใหม่อีกครั้งในอีกสักครู่
+  [ผ่าน] ไม่มี ValueError เรื่องข้ามบริบท
+  [ผ่าน] สาเหตุที่บันทึกคือเกินเพดานเวลา — INFO:timing /chat-web total=6231ms prepare=224ms | corpus_version=7ms gates=8ms structured_miss=2ms retrieve1=203ms decide=3ms | source=rag status=answered outc
+  [ผ่าน] ลองโมเดลสำรองหลังหมดเพดานแล้วไม่ยืดเวลาออกไป — 6.24s
+
+3. หลังเคสเกินเพดาน คำขอถัดไปต้องกลับมาตอบได้ปกติ (เพดานไม่รั่วข้ามคำขอ)
+INFO:course_advisor:timing /chat-web total=17ms prepare=14ms persist=2ms | corpus_version=5ms structured_fast_early=8ms | source=structured status=answered outcome=ok q='หลักสูตรเทคโนโลยีสารสนเทศ พ.ศ. 2566 เรียนกี่หน่วยกิต'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] ได้สถานะ 200 — code=200
+  [ผ่าน] ตอบได้ มีที่มา — หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (พ.ศ. 2566) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า 130 หน่วยกิต
+ท
+  [ผ่าน] ไม่มีข้อความบริการขัดข้อง — เจอ []
+
+จุดตรวจ 20 จุด
+ผ่านทั้งหมด
+    --- test_request_budget ---
+test_budget_does_not_block_a_fast_answer
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash-lite
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] ตัวหลัก 503 ตัวสำรองว่าง -> ยังได้คำตอบในเพดาน
+  [ผ่าน] ใช้เวลาน้อยกว่าเพดานมาก
+
+test_budget_helpers
+  [ผ่าน] ยังไม่ตั้งเพดาน -> ไม่จำกัด
+  [ผ่าน] ตั้งแล้วเหลือเวลาใกล้ค่าที่ตั้ง
+  [ผ่าน] ยังไม่หมดเวลา -> check_budget ไม่โยน
+  [ผ่าน] คืนค่าแล้วกลับเป็นไม่จำกัด
+  [ผ่าน] ตั้งเพดานติดจริง (เหลือเวลาติดลบ)
+  [ผ่าน] หมดเวลาแล้วต้องโยน
+  [ผ่าน] ข้อความบอกว่าเกินเพดานและกำลังทำอะไร
+  [ผ่าน] เป็นชนิดย่อยของ LLMConnectionError (ผู้เรียกเดิมรับมือได้)
+  [ผ่าน] ตั้งเพดาน 0 = ปิดการจำกัด
+
+test_budget_skips_the_cooldown_wait
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash-lite
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.1-flash-lite
+พักโมเดล gemini-3.1-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash
+พักโมเดล gemini-3.5-flash ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.6-flash
+พักโมเดล gemini-3.6-flash ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] ต้องไม่หลับรอจนครบช่วงพัก
+  [ผ่าน] บอกเหตุว่าเวลาไม่พอรอ หรือเกินเพดาน
+
+test_budget_stops_model_chain
+  [ผ่าน] ตั้งเพดานติดจริงก่อนไล่โมเดล
+  [ผ่าน] หมดเวลาแล้วต้องไม่ยิงโมเดลเลย
+
+test_cancelled_request_is_recorded
+  [ผ่าน] มีบรรทัดเวลาแม้คำขอถูกยกเลิก
+  [ผ่าน] outcome บอกว่าถูกยกเลิก (GeneratorExit)
+
+test_context_is_reset_on_success_failure_and_cancel
+  [ผ่าน] สำเร็จแล้วคืนค่าได้
+  [ผ่าน] ล้มแล้วคืนค่าได้
+  [ผ่าน] ยกเลิกกลางคันแล้วคืนค่าได้
+
+test_exception_identity_through_the_real_import_path
+  [ผ่าน] LLMConnectionError ที่ chat.py ใช้ เป็นตัวแม่ของ LLMBudgetExceeded
+  [ผ่าน] มี llm.connector ใน sys.modules
+  [ผ่าน] คลาสจาก sys.modules เป็นตัวเดียวกับที่ import ตรง
+  [ผ่าน] โค้ดจริงที่ดักจับ LLMConnectionError จับข้อยกเว้นเพดานได้
+
+test_hanging_endpoint_is_cut_at_the_remaining_budget
+  [ผ่าน] มีการส่ง timeout ไปกับคำขอ
+  [ผ่าน] timeout ถูกบีบให้ไม่เกินเวลาที่เหลือ 1 วินาที
+  [ผ่าน] ไม่ใช่ timeout เดิม 120 วินาที
+  [ผ่าน] ไม่ตั้งเพดาน -> ใช้ timeout เดิมของตัวเชื่อมต่อ
+
+test_http_timeout_follows_the_remaining_budget
+  [ผ่าน] ไม่ตั้งเพดาน -> ใช้ค่าตั้งต้น
+  [ผ่าน] เหลือ 5 วินาที -> timeout ต้องไม่เกิน 5
+  [ผ่าน] และต้องมากกว่า 0
+  [ผ่าน] หมดเวลาแล้ว http_timeout ต้องโยน
+
+test_local_model_respects_the_budget
+  [ผ่าน] ตั้งเพดานติดจริงก่อนเรียกโมเดลในเครื่อง
+  [ผ่าน] หมดเวลาแล้วโมเดลในเครื่องต้องไม่ถูกเรียก
+  [ผ่าน] ยังมีเวลา -> โมเดลในเครื่องทำงานปกติ
+
+test_retry_plus_cooldown_cannot_exceed_the_budget
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash-lite
+พักโมเดล gemini-3.5-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.1-flash-lite
+พักโมเดล gemini-3.1-flash-lite ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.5-flash
+พักโมเดล gemini-3.5-flash ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+gemini HTTP 503 ที่โมเดล gemini-3.6-flash
+พักโมเดล gemini-3.6-flash ไว้ 60 วินาที จะไปใช้ตัวถัดไปก่อน
+  [ผ่าน] retry + cooldown รวมกันไม่เกินเพดาน (เผื่อ 1 วินาที)
+
+test_slow_trickling_stream_is_cut_by_the_budget
+  [ผ่าน] สตรีมที่ยืดเวลาต้องถูกตัดเมื่อเกินเพดาน
+  [ผ่าน] ได้ข้อความบางส่วนก่อนถูกตัด (พิสูจน์ว่าสตรีมเดินจริง)
+  [ผ่าน] ไม่ได้อ่านครบทั้ง 200 ชิ้น
+
+test_timing_log_never_masks_the_real_error
+  [ผ่าน] บรรทัดเวลาที่ล้มเองต้องไม่โยนออกมา
+  [ผ่าน] รับ p=None ได้
+
+ชุดทดสอบ 13 ชุด · จุดตรวจ 41 จุด
+ผ่านทั้งหมด

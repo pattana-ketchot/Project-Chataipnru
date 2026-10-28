@@ -5,6 +5,7 @@
     GET/POST/PUT/DELETE  /site-admin/news[/{id}]
     GET/POST/PUT/DELETE  /site-admin/knowledge[/{id}]
     GET/PUT              /site-admin/ai-settings
+    POST                 /site-admin/ai-settings/check
     GET                  /site-admin/users
     PUT                  /site-admin/users/{id}/role|status
 
@@ -22,6 +23,7 @@
 การแยกไฟล์ทำให้ไม่มีทางเผลอเปิดร่างให้คนทั่วไปด้วยการแก้ query ผิดที่
 """
 import logging
+import os
 import uuid
 from typing import Any
 
@@ -31,8 +33,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin_role, require_staff
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.user import User
+from app.services import ai_settings, llm_client
 
 router = APIRouter(prefix="/site-admin", tags=["site-admin"])
 logger = logging.getLogger("course_advisor")
@@ -277,31 +281,123 @@ def delete_knowledge(item_id: str, _a: User = Depends(require_admin_role),
 # ── ตั้งค่า AI ───────────────────────────────────────────────────────
 
 class AiSettingsIn(BaseModel):
-    model: str = Field(min_length=1, max_length=255)
+    """
+    ค่าที่หน้าผู้ดูแลส่งมาได้ — มีแค่ "เลือกเจ้าไหน" กับ "รุ่นชื่ออะไร"
+
+    ไม่มีช่องสำหรับ API key หรือ base URL โดยเจตนา สองอย่างนั้นอยู่ที่ environment
+    ของเซิร์ฟเวอร์เท่านั้น ถ้าเก็บลงตารางนี้ คีย์จะไหลออกทาง GET ของเส้นทางนี้
+    ไปอยู่ในเบราว์เซอร์ของทุกคนที่เป็น staff และอยู่ใน log ของ proxy ทุกชั้นที่ผ่าน
+    """
+
+    # None = ล้างค่าที่เลือกไว้ กลับไปใช้ค่าจาก environment
+    provider: str | None = Field(default=None, pattern="^(gemini|ollama)$")
+    # None หรือค่าว่าง = ใช้รุ่นตั้งต้นของผู้ให้บริการนั้นจาก environment
+    model: str | None = Field(default=None, max_length=255)
+
+
+def _ai_settings_view(db: Session) -> dict:
+    """
+    สภาพปัจจุบันของสวิตช์ — แยก "ที่บันทึกไว้" ออกจาก "ที่ใช้จริง" ให้เห็นทั้งคู่
+
+    ต้องแยก เพราะสองค่านี้ต่างกันได้จริง เช่นเลือก Gemini ไว้แต่เซิร์ฟเวอร์ไม่มีคีย์
+    หน้าเว็บที่แสดงแต่ค่าที่บันทึกจะบอกว่าใช้ Gemini ทั้งที่คำตอบทุกข้อมาจากโมเดล
+    ในเครื่อง — ซึ่งเป็นอาการเดียวกับที่ทำให้สวิตช์นี้ดูเหมือนทำงานมาตลอด
+
+    ตั้งใจไม่คืนค่าคีย์ คืนแค่ว่ามีคีย์อยู่หรือไม่
+    """
+    choice = ai_settings.resolve(db)
+    row = db.execute(
+        text("select updated_at from web.ai_settings where id = 1")
+    ).mappings().first()
+    env = ai_settings.env_default()
+    return {
+        "saved": {
+            "provider": choice.saved_provider,
+            "model": choice.saved_model,
+            "updated_at": (dict(row).get("updated_at") if row else None),
+        },
+        "effective": {
+            "provider": choice.provider,
+            "model": choice.model,
+            "source": choice.source,
+            "honoured": choice.honoured,
+            "note": choice.note,
+        },
+        "defaults": {
+            "provider": env.provider,
+            "model": env.model,
+            "gemini_model": ai_settings.default_model_of("gemini"),
+            "ollama_model": ai_settings.default_model_of("ollama"),
+            "has_gemini_key": ai_settings.has_gemini_key(),
+        },
+        # สวิตช์นี้ไม่แตะฝั่ง embedding — แสดงไว้ให้เห็นว่าเวกเตอร์ไม่ถูกสร้างใหม่
+        "embedding": {"model": get_settings().embed_model, "changeable": False},
+        "providers": list(ai_settings.PROVIDERS),
+    }
 
 
 @router.get("/ai-settings")
 def get_ai_settings(_s: User = Depends(require_staff), db: Session = Depends(get_db)) -> dict:
-    row = db.execute(
-        text("select id, model, updated_at from web.ai_settings where id = 1")
-    ).mappings().first()
-    return dict(row) if row else {"id": 1, "model": None, "updated_at": None}
+    return _ai_settings_view(db)
 
 
 @router.put("/ai-settings")
 def update_ai_settings(payload: AiSettingsIn, staff: User = Depends(require_staff),
                        db: Session = Depends(get_db)) -> dict:
-    """ตารางนี้มีแถวเดียวโดยบังคับด้วย CHECK (id = 1) จึงเขียนแบบ upsert"""
-    row = db.execute(
-        text("""insert into web.ai_settings (id, model, updated_by)
-                values (1, :model, :who)
+    """
+    บันทึกตัวเลือก แล้วทิ้งแคชให้คำขอถัดไปเห็นค่าใหม่ทันทีโดยไม่ต้อง restart
+
+    ตารางนี้มีแถวเดียวโดยบังคับด้วย CHECK (id = 1) จึงเขียนแบบ upsert
+
+    คืนสภาพที่ใช้จริงกลับไปด้วย ไม่ใช่คืนแค่ค่าที่เพิ่งเขียน เพราะ "เขียนสำเร็จ"
+    ไม่ได้แปลว่าค่านั้นถูกนำไปใช้ — หน้าเว็บต้องมีข้อมูลพอจะบอกผู้ใช้ตามจริง
+    """
+    model = (payload.model or "").strip() or None
+    db.execute(
+        text("""insert into web.ai_settings (id, provider, model, updated_by)
+                values (1, :provider, :model, :who)
                 on conflict (id) do update set
-                  model = excluded.model, updated_by = excluded.updated_by, updated_at = now()
-                returning id, model, updated_at"""),
-        {"model": payload.model, "who": str(staff.id)},
-    ).mappings().first()
+                  provider = excluded.provider, model = excluded.model,
+                  updated_by = excluded.updated_by, updated_at = now()"""),
+        {"provider": payload.provider, "model": model, "who": str(staff.id)},
+    )
     db.commit()
-    return dict(row)
+    ai_settings.invalidate()
+    view = _ai_settings_view(db)
+    logger.info("ผู้ดูแล %s ตั้งโมเดลคำตอบเป็น %s/%s — ที่ใช้จริง %s/%s",
+                staff.id, payload.provider, model,
+                view["effective"]["provider"], view["effective"]["model"])
+    return view
+
+
+# จำนวนชิ้นเนื้อหาที่คำถามจริงหนึ่งข้อส่งเข้าโมเดล — ต้องเท่ากับที่ขั้นตอบใช้
+# ไม่งั้นการตรวจจะวัดงานที่เบากว่าของจริง แล้วรายงานว่าไหวทั้งที่ไม่ไหว
+_PROBE_CHUNKS = int(os.getenv("CHAT_TOP_K", "8"))
+
+
+@router.post("/ai-settings/check")
+def check_ai_settings(_s: User = Depends(require_staff), db: Session = Depends(get_db)) -> dict:
+    """
+    ยิงคำขอจริงไปที่ผู้ให้บริการที่ใช้อยู่ แล้วบอกผลตามที่เกิดขึ้น
+
+    แยกออกจาก GET เพราะการตรวจมีค่าใช้จ่าย (กินโควตาของผู้ให้บริการ และใช้เวลา
+    ได้หลายสิบวินาที) การเปิดหน้าเว็บเฉย ๆ ไม่ควรจุดชนวนมันทุกครั้ง
+
+    ส่งเนื้อหาจริงจากคลังเอกสารเข้าไปเท่าจำนวนชิ้นที่คำถามหนึ่งข้อใช้ เพื่อให้ขั้น
+    "ตอบทันเพดานเวลาไหม" วัดงานขนาดเท่าของจริง ไม่ใช่พรอมต์สั้นที่ใครก็ผ่าน
+
+    ผลจากที่นี่คือสิ่งเดียวที่ยืนยันว่าใช้งานได้ การบันทึกสำเร็จไม่ยืนยันอะไรเลย
+    """
+    sample = [r["content"] for r in db.execute(
+        text("select content from public.course_chunks "
+             "where content is not null and length(content) > 200 "
+             "order by id limit :n"),
+        {"n": _PROBE_CHUNKS},
+    ).mappings()]
+    view = _ai_settings_view(db)
+    view["check"] = llm_client.probe(ai_settings.resolve(db), sample)
+    view["check"]["sample_chars"] = sum(len(c) for c in sample)
+    return view
 
 
 # ── ผู้ใช้และสิทธิ์ ───────────────────────────────────────────────────
