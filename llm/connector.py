@@ -71,6 +71,16 @@ class LLMBudgetExceeded(LLMConnectionError):
 # แต่ผู้ใช้รอเกือบเจ็ดนาที
 _DEFAULT_BUDGET_S = float(os.getenv("RAG_TIME_BUDGET_S", "30"))
 
+# เวลาที่กันไว้ให้โมเดลสำรองในเครื่องตอนเจ้าหลักล้ม
+#
+# ต้องกันไว้ เพราะเจ้าหลักใช้เวลาจนหมดเพดานได้เอง (ไล่โมเดลสำรองและรอให้พ้นช่วงพัก
+# ใน GeminiConnector._models_to_try) แล้วค่อยล้ม ตัวสำรองที่รับช่วงต่อจึงเหลือเวลา
+# ศูนย์วินาทีและถูก check_budget ปฏิเสธก่อนยิงคำขอแรกเสียด้วยซ้ำ
+#
+# วัดจากตัวนับของ production เมื่อ 28 ต.ค. 2569: fallback_local_attempt = 10 และ
+# fallback_local_failed = 10 — ตกมาที่ตัวสำรองสิบครั้ง ล้มทั้งสิบครั้ง
+_FALLBACK_RESERVE_S = float(os.getenv("RAG_FALLBACK_RESERVE_S", "10"))
+
 # เวลาที่คำขอปัจจุบันต้องจบ (เวลาแบบ monotonic) · None = ไม่จำกัด
 _deadline: contextvars.ContextVar[float | None] = contextvars.ContextVar(
     "llm_request_deadline", default=None
@@ -107,6 +117,30 @@ def apply_budget(deadline: float | None) -> None:
     เห็นเพดานเดียวกัน · เรียกซ้ำได้ ไม่ขยับเวลาสิ้นสุด เพราะรับค่าสัมบูรณ์เข้ามา
     """
     _deadline.set(deadline)
+
+
+def reserve_budget(seconds: float | None = None) -> float | None:
+    """
+    กันเวลาช่วงท้ายของคำขอไว้ให้ขั้นถัดไป คืน "เวลาสิ้นสุดเดิม" ไว้ให้ผู้เรียกคืนค่าทีหลัง
+
+    ใช้ก่อนปล่อยเจ้าหลักออกวิ่ง เพื่อให้ตัวสำรองในเครื่องยังมีเวลาเหลือใช้จริงเมื่อ
+    เจ้าหลักล้ม — ไม่ใช่ได้เพดานที่หมดแล้วมารับช่วงต่อ (ดู _FALLBACK_RESERVE_S)
+
+    **แบ่งจากเพดานเดิม ไม่ใช่ต่อเวลาใหม่ทับ** เพดานรวมมีไว้กันคำขอที่ผู้ใช้รอเจ็ดนาที
+    (13 ต.ค. 2569) ถ้ากันเวลาด้วยการขยายเพดาน ปัญหานั้นจะกลับมาทันที
+
+    กันได้มากสุดครึ่งหนึ่งของเวลาที่เหลือ เพราะเจ้าหลักเร็วกว่าตัวสำรองหลายสิบเท่าและ
+    เป็นตัวที่ควรได้ตอบ ถ้ากันมากกว่านี้ คำขอที่เจ้าหลักตอบได้สบายๆ จะถูกบีบจนล้มเอง
+    """
+    end = _deadline.get()
+    if end is None:
+        return None
+    left = end - time.monotonic()
+    if left <= 0:
+        return end
+    hold = min(_FALLBACK_RESERVE_S if seconds is None else seconds, left / 2)
+    _deadline.set(end - hold)
+    return end
 
 
 def reset_budget(_deadline_value=None) -> None:
