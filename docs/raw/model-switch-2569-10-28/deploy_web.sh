@@ -60,37 +60,44 @@ done < "$OUT/before-bundles.txt"
 # ── 3. วาง assets ใหม่ (ยังไม่แตะ index.html) ───────────────────────────
 echo
 echo "[3/6] วางไฟล์ assets ใหม่"
-for f in "$SRC/assets"/*; do
-  name="$(basename "$f")"
+# เดินด้วย find ไม่ใช่ glob ชั้นเดียว เพราะชุด assets มีโฟลเดอร์ย่อย (assets/courses/*.png
+# เพิ่มเข้ามาตั้งแต่ release 27 ต.ค.) ของเดิมใช้ "$SRC/assets"/* แล้ว sha256sum เจอโฟลเดอร์
+# ก็ตายกลางทางด้วย "Is a directory" โดยยังไม่ได้วางไฟล์ bundle ใหม่เลย
+# ตรวจ hash ราย "ไฟล์" ทุกไฟล์เหมือนเดิม ไม่ใช่ตรวจเฉพาะชั้นบนสุด
+find "$SRC/assets" -type f | sed "s|^$SRC/assets/||" | sort | while IFS= read -r rel; do
+  f="$SRC/assets/$rel"
   want=$(sha256sum "$f" | cut -d' ' -f1)
-  if [ -e "$WEB/assets/$name" ]; then
-    have=$(sha256sum "$WEB/assets/$name" | cut -d' ' -f1)
+  if [ -e "$WEB/assets/$rel" ]; then
+    have=$(sha256sum "$WEB/assets/$rel" | cut -d' ' -f1)
     if [ "$have" = "$want" ]; then
-      echo "  ข้าม $name (มีอยู่แล้วและ hash ตรง)"
+      echo "  ข้าม $rel (มีอยู่แล้วและ hash ตรง)"
       continue
     fi
     # ชื่อเดียวกันแต่เนื้อต่าง = ของเดิมเพี้ยนหรือเป็นคนละ build ต้องหยุดให้คนดู
-    die "$name มีอยู่แล้วแต่เนื้อไฟล์ไม่ตรง (บนเครื่อง $have / ชุดนี้ $want)"
+    die "$rel มีอยู่แล้วแต่เนื้อไฟล์ไม่ตรง (บนเครื่อง $have / ชุดนี้ $want)"
   fi
-  cp "$f" "$WEB/assets/.$name.tmp"
-  mv "$WEB/assets/.$name.tmp" "$WEB/assets/$name"
-  got=$(sha256sum "$WEB/assets/$name" | cut -d' ' -f1)
-  [ "$got" = "$want" ] || die "คัดลอก $name แล้ว hash ไม่ตรง ($got)"
-  echo "  วาง $name  $got"
-done
+  mkdir -p "$(dirname "$WEB/assets/$rel")"
+  cp "$f" "$WEB/assets/$rel.tmp"
+  mv "$WEB/assets/$rel.tmp" "$WEB/assets/$rel"
+  got=$(sha256sum "$WEB/assets/$rel" | cut -d' ' -f1)
+  [ "$got" = "$want" ] || die "คัดลอก $rel แล้ว hash ไม่ตรง ($got)"
+  echo "  วาง $rel  $got"
+done || exit 1
 
 # ── 4. ไฟล์ที่เว็บเสิร์ฟจริง ต้อง hash ตรงกับที่เพิ่งวาง ─────────────────
 echo
 echo "[4/6] ดึงไฟล์ผ่านเว็บจริงมาตรวจ hash"
-for f in "$SRC/assets"/*; do
-  name="$(basename "$f")"
+# เดินด้วย find เหมือนขั้นที่ 3 · ชื่อไฟล์ที่เก็บผลแทน / ด้วย __ เพื่อไม่ให้ต้องสร้างโฟลเดอร์ซ้อน
+find "$SRC/assets" -type f | sed "s|^$SRC/assets/||" | sort | while IFS= read -r rel; do
+  f="$SRC/assets/$rel"
+  flat=$(echo "$rel" | tr '/' '_')
   want=$(sha256sum "$f" | cut -d' ' -f1)
-  code=$(curl -s -o "$OUT/served-$name" -w '%{http_code}' "$SITE/assets/$name")
-  [ "$code" = "200" ] || die "โหลด $name ไม่ได้ (HTTP $code) ยังไม่สลับ index.html"
-  got=$(sha256sum "$OUT/served-$name" | cut -d' ' -f1)
-  echo "  $name  HTTP $code  $got"
-  [ "$got" = "$want" ] || die "เว็บเสิร์ฟ $name ด้วยเนื้อไฟล์คนละตัว ($got) ยังไม่สลับ index.html"
-done
+  code=$(curl -s -o "$OUT/served-$flat" -w '%{http_code}' "$SITE/assets/$rel")
+  [ "$code" = "200" ] || die "โหลด $rel ไม่ได้ (HTTP $code) ยังไม่สลับ index.html"
+  got=$(sha256sum "$OUT/served-$flat" | cut -d' ' -f1)
+  echo "  $rel  HTTP $code  $got"
+  [ "$got" = "$want" ] || die "เว็บเสิร์ฟ $rel ด้วยเนื้อไฟล์คนละตัว ($got) ยังไม่สลับ index.html"
+done || exit 1
 
 # ── 5. สลับ index.html เป็นขั้นสุดท้าย ─────────────────────────────────
 echo
