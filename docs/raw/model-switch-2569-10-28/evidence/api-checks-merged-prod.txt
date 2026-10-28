@@ -1,0 +1,36 @@
+ฐาน course_advisor_test · http://127.0.0.1:8095 · โหมด prod
+
+=== 1. ยังไม่เลือก — ใช้ค่าจาก environment ===
+  [ผ่าน] ไม่มีค่าที่บันทึก — {'provider': None, 'model': None, 'updated_at': None}
+  [ผ่าน] ที่ใช้จริงมาจาก env — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'env', 'honoured': False, 'note': ''}
+  [ผ่าน] ไม่ถือว่าทำตามค่าที่บันทึก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'env', 'honoured': False, 'note': ''}
+  [ผ่าน] ไม่มีคีย์ปนออกมาในคำตอบ
+  [ผ่าน] บอกแค่ว่ามีคีย์หรือไม่ — has_gemini_key=False
+  [ผ่าน] embedding ยังเป็น bge-m3 และเปลี่ยนไม่ได้ — {'model': 'bge-m3', 'changeable': False}
+  [ผ่าน] ผู้ให้บริการที่รองรับมีสองเจ้าเท่าเดิม — ['gemini', 'ollama']
+
+=== 2. เลือก Gemini บนเครื่องที่ไม่มีคีย์ — ต้องไม่ยอมใช้ และบอกเหตุผล ===
+  [ผ่าน] บันทึกตัวเลือกได้ — HTTP 200 {"saved":{"provider":"gemini","model":null,"updated_at":"2026-10-28T09:09:35.500025Z"},"effective":{"provider":"ollama",
+  [ผ่าน] ค่าที่บันทึกคือ gemini — {'provider': 'gemini', 'model': None, 'updated_at': '2026-10-28T09:09:35.500025Z'}
+  [ผ่าน] ที่ใช้จริงไม่ใช่ gemini — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'env', 'honoured': False, 'note': 'เลือก Gemini ไว้ แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY จึงยังใช้โมเดลในเครื่องตอบ ต้องตั้งคีย์ที่ environment ก่อน'}
+  [ผ่าน] ไม่ถือว่าทำตามค่าที่บันทึก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'env', 'honoured': False, 'note': 'เลือก Gemini ไว้ แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY จึงยังใช้โมเดลในเครื่องตอบ ต้องตั้งคีย์ที่ environment ก่อน'}
+  [ผ่าน] มีคำอธิบายว่าทำไมยังไม่มีผล — เลือก Gemini ไว้ แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY จึงยังใช้โมเดลในเครื่องตอบ ต้องตั้งคีย์ที่ environment ก่อน
+  [ผ่าน] ไม่มีการเรียก Gemini เกิดขึ้นเลย — ก่อน={'local_primary_attempt': 34, 'local_primary_ok': 20, 'local_primary_failed': 14, 'stream_failed_midway': 3} หลัง={'local_primary_attempt': 34, 'local_primary_ok': 20, 'local_primary_failed': 14, 'stream_failed_midway': 3}
+
+=== 3. เลือก Ollama (qwen2.5:3b) — ค่าที่ใช้จริงเปลี่ยนทันทีโดยไม่ restart ===
+  [ผ่าน] บันทึกตัวเลือกได้ — HTTP 200 {"saved":{"provider":"ollama","model":"qwen2.5:3b","updated_at":"2026-10-28T09:09:35.926800Z"},"effective":{"provider":"
+  [ผ่าน] ที่ใช้จริงเป็น ollama ทันที — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] รุ่นที่ใช้จริงคือรุ่นที่เลือก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] ที่มาคือค่าที่บันทึก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] ทำตามค่าที่บันทึก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] embedding ไม่เปลี่ยนตามสวิตช์ — {'model': 'bge-m3', 'changeable': False}
+
+=== 4. โหมด prod — ถามคำถามที่ต้องอ้างอิงเอกสารด้วยโมเดลในเครื่อง ===
+    · หลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไร  HTTP 200 ·   6.3s · status=not_found · answer_model=None
+    · หลักสูตรวิทยาการคอมพิวเตอร์มีวิชาอะไรบ้าง      HTTP 200 ·   5.8s · status=not_found · answer_model=None
+    · สาขาสาธารณสุขศาสตร์มีวิชาบังคับอะไรบ้าง        HTTP 200 ·   0.9s · status=answered · answer_model=None
+  [ผ่าน] โมเดลในเครื่องถูกเรียกจริง — ก่อน=34 หลัง=35
+  [ผ่าน] ไม่มีคำตอบใดมาจาก Gemini — gemini_ok ก่อน=0 หลัง=0
+    สรุป: โมเดลในเครื่องเขียนคำตอบจบ 0 จาก 3 คำถาม
+
+ตรวจ 21 ข้อ · ตก 0 ข้อ

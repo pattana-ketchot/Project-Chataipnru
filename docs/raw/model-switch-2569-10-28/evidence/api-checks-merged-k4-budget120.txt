@@ -1,0 +1,51 @@
+ฐาน course_advisor_test · http://127.0.0.1:8097 · โหมด slow
+
+=== 1. ยังไม่เลือก — ใช้ค่าจาก environment ===
+  [ผ่าน] ไม่มีค่าที่บันทึก — {'provider': None, 'model': None, 'updated_at': None}
+  [ผ่าน] ที่ใช้จริงมาจาก env — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'env', 'honoured': False, 'note': ''}
+  [ผ่าน] ไม่ถือว่าทำตามค่าที่บันทึก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'env', 'honoured': False, 'note': ''}
+  [ผ่าน] ไม่มีคีย์ปนออกมาในคำตอบ
+  [ผ่าน] บอกแค่ว่ามีคีย์หรือไม่ — has_gemini_key=False
+  [ผ่าน] embedding ยังเป็น bge-m3 และเปลี่ยนไม่ได้ — {'model': 'bge-m3', 'changeable': False}
+  [ผ่าน] ผู้ให้บริการที่รองรับมีสองเจ้าเท่าเดิม — ['gemini', 'ollama']
+
+=== 2. เลือก Gemini บนเครื่องที่ไม่มีคีย์ — ต้องไม่ยอมใช้ และบอกเหตุผล ===
+  [ผ่าน] บันทึกตัวเลือกได้ — HTTP 200 {"saved":{"provider":"gemini","model":null,"updated_at":"2026-10-28T08:47:38.121982Z"},"effective":{"provider":"ollama",
+  [ผ่าน] ค่าที่บันทึกคือ gemini — {'provider': 'gemini', 'model': None, 'updated_at': '2026-10-28T08:47:38.121982Z'}
+  [ผ่าน] ที่ใช้จริงไม่ใช่ gemini — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'env', 'honoured': False, 'note': 'เลือก Gemini ไว้ แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY จึงยังใช้โมเดลในเครื่องตอบ ต้องตั้งคีย์ที่ environment ก่อน'}
+  [ผ่าน] ไม่ถือว่าทำตามค่าที่บันทึก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'env', 'honoured': False, 'note': 'เลือก Gemini ไว้ แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY จึงยังใช้โมเดลในเครื่องตอบ ต้องตั้งคีย์ที่ environment ก่อน'}
+  [ผ่าน] มีคำอธิบายว่าทำไมยังไม่มีผล — เลือก Gemini ไว้ แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY จึงยังใช้โมเดลในเครื่องตอบ ต้องตั้งคีย์ที่ environment ก่อน
+  [ผ่าน] ไม่มีการเรียก Gemini เกิดขึ้นเลย — ก่อน={'local_primary_attempt': 9, 'local_primary_ok': 5, 'local_primary_failed': 4} หลัง={'local_primary_attempt': 9, 'local_primary_ok': 5, 'local_primary_failed': 4}
+
+=== 3. เลือก Ollama (qwen2.5:3b) — ค่าที่ใช้จริงเปลี่ยนทันทีโดยไม่ restart ===
+  [ผ่าน] บันทึกตัวเลือกได้ — HTTP 200 {"saved":{"provider":"ollama","model":"qwen2.5:3b","updated_at":"2026-10-28T08:47:38.650492Z"},"effective":{"provider":"
+  [ผ่าน] ที่ใช้จริงเป็น ollama ทันที — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] รุ่นที่ใช้จริงคือรุ่นที่เลือก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] ที่มาคือค่าที่บันทึก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] ทำตามค่าที่บันทึก — {'provider': 'ollama', 'model': 'qwen2.5:3b', 'source': 'db', 'honoured': True, 'note': ''}
+  [ผ่าน] embedding ไม่เปลี่ยนตามสวิตช์ — {'model': 'bge-m3', 'changeable': False}
+
+=== 4. โหมด slow — เพดานกว้างพอให้โมเดลในเครื่องเขียนจบ ===
+    · HTTP 200 · 3.6s · status=not_found · answer_model=None
+  [ตก]  ได้คำตอบจากโมเดลในเครื่องจริง — answer_model=None status=not_found
+  [ตก]  นับว่าโมเดลในเครื่องตอบสำเร็จ — ก่อน=5 หลัง=5
+  [ผ่าน] ไม่มีการเรียก Gemini เลย
+
+=== 5. สลับรุ่นระหว่างที่คำขอกำลังทำงาน (qwen2.5:3b -> qwen2.5:0.5b) ===
+  [ผ่าน] สลับรุ่นได้ระหว่างคำขอกำลังทำงาน — HTTP 200
+  [ผ่าน] ค่าที่ใช้จริงเปลี่ยนทันที — {'provider': 'ollama', 'model': 'qwen2.5:0.5b', 'source': 'db', 'honoured': True, 'note': ''}
+    · คำขอที่ค้างอยู่: HTTP 200 · 2.5s · answer_model=None
+  [ตก]  คำขอที่กำลังทำงานไม่ถูกสลับกลางทาง — answer_model=None (ต้องเป็น ollama:qwen2.5:3b)
+  [ตก]  คำขอถัดไปได้รุ่นใหม่โดยไม่ restart — answer_model=None (ต้องเป็น ollama:qwen2.5:0.5b)
+
+=== 6. เส้นทางสตรีมที่หน้าเว็บใช้ (/chat-web) ===
+    · 1.0s · เหตุการณ์: ['meta', 'token', 'done']…['done'] · done={"event": "done", "answer_model": null}
+  [ผ่าน] ได้เหตุการณ์ meta ก่อนเสมอ — ['meta', 'token', 'done']
+  [ผ่าน] มีเหตุการณ์ done ปิดท้าย — ['meta', 'token', 'done']
+  [ผ่าน] done รายงานรุ่นที่เขียนจริง — answer_model=None
+
+ตรวจ 29 ข้อ · ตก 4 ข้อ
+  - ได้คำตอบจากโมเดลในเครื่องจริง — answer_model=None status=not_found
+  - นับว่าโมเดลในเครื่องตอบสำเร็จ — ก่อน=5 หลัง=5
+  - คำขอที่กำลังทำงานไม่ถูกสลับกลางทาง — answer_model=None (ต้องเป็น ollama:qwen2.5:3b)
+  - คำขอถัดไปได้รุ่นใหม่โดยไม่ restart — answer_model=None (ต้องเป็น ollama:qwen2.5:0.5b)

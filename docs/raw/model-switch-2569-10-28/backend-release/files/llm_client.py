@@ -32,7 +32,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from llm.connector import (_DEFAULT_BUDGET_S, ChatMessage,  # noqa: E402
                            LLMConnectionError, OllamaConnector,
-                           reset_budget, start_budget)
+                           apply_budget, reserve_budget, reset_budget, start_budget)
 from llm.gemini import GeminiConnector  # noqa: E402
 from llm.prompts import (GROUNDING_CHECK_SYSTEM_PROMPT,  # noqa: E402
                          build_grounding_check_prompt)
@@ -105,14 +105,23 @@ class _SplitConnector:
         return out
 
     def chat(self, *args, allow_fallback: bool = True, **kwargs):
+        # กันเวลาไว้ให้ตัวสำรองก่อนปล่อยเจ้าหลักออกวิ่ง ไม่งั้นเจ้าหลักใช้เพดานเวลาหมด
+        # เองแล้วตัวสำรองถูกปฏิเสธก่อนยิงคำขอแรก (ดู connector.reserve_budget)
+        # ขั้นที่ห้ามใช้ตัวสำรองไม่ต้องกัน เพราะไม่มีใครมารับช่วงต่อ
+        full = reserve_budget() if allow_fallback else None
         try:
             return self._chatter.chat(*args, **kwargs)
         except LLMConnectionError as e:
             if not allow_fallback:
                 llm_usage.record("fallback_declined")
                 raise LLMConnectionError(FALLBACK_DECLINED) from e
+            apply_budget(full)
             logger.warning("เจ้าหลักตอบไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
             return self._call_fallback(*args, **self._fallback_kwargs(kwargs))
+        finally:
+            # คืนเวลาที่กันไว้ให้ขั้นถัดไปของคำขอเดียวกัน ทั้งตอนเจ้าหลักตอบได้และตอนล้ม
+            if allow_fallback:
+                apply_budget(full)
 
     def _call_fallback(self, *args, **kwargs):
         """
@@ -139,6 +148,8 @@ class _SplitConnector:
         ต่อกันจากคนละโมเดล ซึ่งอ่านไม่รู้เรื่องยิ่งกว่าเห็นข้อความผิดพลาด
         """
         started = False
+        # เหตุผลเดียวกับใน chat() — กันเวลาไว้ให้ตัวสำรองก่อน แล้วคืนให้ขั้นถัดไปเสมอ
+        full = reserve_budget() if allow_fallback else None
         try:
             for chunk in self._chatter.chat_stream(*args, **kwargs):
                 started = True
@@ -152,6 +163,9 @@ class _SplitConnector:
                 llm_usage.record("fallback_declined")
                 raise LLMConnectionError(FALLBACK_DECLINED) from e
             logger.warning("เจ้าหลักสตรีมไม่ได้ (%s) — ใช้โมเดลในเครื่องแทน", e)
+        finally:
+            if allow_fallback:
+                apply_budget(full)
 
         # สตรีม "สำเร็จ" คือเดินจนจบโดยไม่โยนข้อผิดพลาด ไม่ใช่แค่เริ่มส่งตัวอักษรแรกได้
         #

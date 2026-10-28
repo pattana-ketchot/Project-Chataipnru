@@ -1,0 +1,3 @@
+k=25 ไม่จำกัดผลลัพธ์: chars=24120 in=12425tok out=52tok อ่านพรอมต์=253.5s เขียน=22.4s รวม=286.8s done='stop' can_answer=False reason_len=74
+k=25 num_predict=160: chars=24119 in=12536tok out=52tok อ่านพรอมต์=252.9s เขียน=23.5s รวม=277.1s done='stop' can_answer=False reason_len=74
+k=6  num_predict=160: chars=6351 in=3258tok out=48tok อ่านพรอมต์=38.6s เขียน=12.3s รวม=51.4s done='stop' can_answer=False reason_len=64

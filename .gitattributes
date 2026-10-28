@@ -4,3 +4,11 @@
 # บรรทัด #!/usr/bin/env bash จะกลายเป็น "bash\r" แล้ว Linux จะขึ้นว่า
 # "bad interpreter: No such file or directory" ซึ่งอ่านแล้วไม่รู้เลยว่าสาเหตุคืออะไร
 *.sh text eol=lf
+
+# ชุดไฟล์สำหรับ deploy ต้องเป็น LF ทุกไฟล์ ไม่ใช่แค่สคริปต์เชลล์
+#
+# ชุดใน docs/raw/ มี SHA256SUMS ที่สคริปต์ deploy ใช้เป็นด่าน (sha256sum -c)
+# ค่า hash คิดจากเนื้อไฟล์แบบ LF ถ้า checkout บน Windows แปลงเป็น CRLF ด่านนั้นจะ
+# ล้มทุกไฟล์ และตัว SHA256SUMS เองก็เสียจนชื่อไฟล์มี \r ติดมาด้วย
+# วัดจริง 28 ต.ค. 2569: ล้มทั้ง 9 ไฟล์ด้วยข้อความ "No such file or directory"
+docs/raw/** text eol=lf

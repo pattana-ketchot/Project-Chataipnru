@@ -81,12 +81,14 @@ check_in_image() {  # check_in_image <ไฟล์ใน files/> <path เต็
 }
 check_in_image ai_settings.py       /app/backend/app/services/ai_settings.py
 check_in_image llm_client.py        /app/backend/app/services/llm_client.py
+check_in_image connector.py         /app/llm/connector.py
 check_in_image chat_service.py      /app/backend/app/services/chat.py
 check_in_image chat_schema.py       /app/backend/app/schemas/chat.py
 check_in_image answer_cache.py      /app/backend/app/services/answer_cache.py
 check_in_image site_admin.py        /app/backend/app/api/routes/site_admin.py
 check_in_image main.py              /app/backend/app/main.py
 check_in_image test_model_switch.py /app/backend/tests/test_model_switch.py
+check_in_image test_local_fallback_gets_time.py /app/backend/tests/test_local_fallback_gets_time.py
 check_in_image test_llm_usage_counter.py /app/backend/tests/test_llm_usage_counter.py
 
 # ── 5. รันชุดทดสอบในอิมเมจใหม่ บนฐานทดสอบ ก่อนสลับ production ──────────
@@ -152,11 +154,13 @@ check_in_container() {  # check_in_container <ไฟล์ใน files/> <path �
 }
 check_in_container ai_settings.py  /app/backend/app/services/ai_settings.py
 check_in_container llm_client.py   /app/backend/app/services/llm_client.py
+check_in_container connector.py    /app/llm/connector.py
 check_in_container chat_service.py /app/backend/app/services/chat.py
 check_in_container chat_schema.py  /app/backend/app/schemas/chat.py
 check_in_container answer_cache.py /app/backend/app/services/answer_cache.py
 check_in_container site_admin.py   /app/backend/app/api/routes/site_admin.py
 check_in_container main.py         /app/backend/app/main.py
+check_in_container test_local_fallback_gets_time.py /app/backend/tests/test_local_fallback_gets_time.py
 
 echo
 echo "  health ของ backend:"

@@ -16,7 +16,10 @@ FROM course-advisor-system-backend:followup-2569-10-28
 # ตัวตัดสินว่าคำขอใหม่จะใช้ผู้ให้บริการและรุ่นไหน (ไฟล์ใหม่)
 COPY --chown=appuser:appuser files/ai_settings.py  /app/backend/app/services/ai_settings.py
 # สร้าง connector ตามตัวเลือก + นับการใช้โมเดลในเครื่องเป็นตัวหลัก + การตรวจสองขั้น
+# **รวม patch กันเวลาไว้ให้ตัวสำรองในเครื่องแล้ว** (docs/LOCAL_FALLBACK_FIX_2569-10-28.md)
 COPY --chown=appuser:appuser files/llm_client.py   /app/backend/app/services/llm_client.py
+# ตัวช่วยกันเวลาของเพดานรวม (reserve_budget) — ของ patch ตัวสำรองในเครื่อง
+COPY --chown=appuser:appuser files/connector.py    /app/llm/connector.py
 # บอกชื่อโมเดลที่ถูกสั่งให้เขียนคำตอบ กลับไปในคำตอบและในเหตุการณ์ done
 COPY --chown=appuser:appuser files/chat_service.py /app/backend/app/services/chat.py
 COPY --chown=appuser:appuser files/chat_schema.py  /app/backend/app/schemas/chat.py
@@ -29,5 +32,7 @@ COPY --chown=appuser:appuser files/main.py         /app/backend/app/main.py
 
 # ชุดทดสอบของ release นี้
 COPY --chown=appuser:appuser files/test_model_switch.py /app/backend/tests/test_model_switch.py
+# ชุดของ patch ตัวสำรองในเครื่อง — ตัวสำรองต้องได้ยิงคำขอจริง ไม่ใช่ถูกเพดานปฏิเสธ
+COPY --chown=appuser:appuser files/test_local_fallback_gets_time.py /app/backend/tests/test_local_fallback_gets_time.py
 # ชุดเดิมของตัวนับ — อยู่ในที่ทำงานแต่ยังไม่เคยถูก deploy · ครอบส่วนที่รอบนี้แตะ
 COPY --chown=appuser:appuser files/test_llm_usage_counter.py /app/backend/tests/test_llm_usage_counter.py
