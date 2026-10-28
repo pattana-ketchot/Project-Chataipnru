@@ -75,7 +75,7 @@ def question_key(question: str) -> str | None:
 _LOGIC_VERSION = "34"
 
 
-def corpus_version(db: Session, top_k: int) -> str:
+def corpus_version(db: Session, top_k: int, answer_model: str = "") -> str:
     """
     ค่าที่เปลี่ยนเมื่อ "สิ่งที่กำหนดคำตอบ" เปลี่ยน ใช้ผูกคำตอบไว้กับเงื่อนไขที่ใช้ตอบ
 
@@ -93,7 +93,17 @@ def corpus_version(db: Session, top_k: int) -> str:
     row = db.execute(
         text("SELECT count(*), coalesce(max(created_at), 'epoch') FROM course_chunks")
     ).one()
-    return f"{row[0]}@{row[1].isoformat()}/k{top_k}/v{_LOGIC_VERSION}"
+    # รวมผู้ให้บริการและรุ่นที่เขียนคำตอบไว้ด้วย ด้วยเหตุผลเดียวกับ CHAT_TOP_K
+    #
+    # ผู้ดูแลเปลี่ยนโมเดลที่เขียนคำตอบได้จากหน้าหลังบ้านตั้งแต่ 28 ต.ค. 2569
+    # (ดู services/ai_settings.py) ถ้าไม่ผูกไว้ คนที่สลับไปโมเดลในเครื่องแล้วถาม
+    # คำถามที่เคยถาม จะได้คำตอบของ Gemini กลับมาจากแคช แล้วสรุปว่าสวิตช์ไม่ทำงาน
+    # ซึ่งเป็นอาการเดียวกับที่ทำให้ต้องมางานรอบนี้
+    #
+    # ผลข้างเคียงที่ยอมรับ: แคชถูกแบ่งตามโมเดล การสลับโมเดลครั้งแรกจึงยังไม่มีแคช
+    # ให้ใช้ และคำตอบเก่าของโมเดลเดิมยังอยู่ ใช้ได้ทันทีเมื่อสลับกลับ
+    model_part = f"/m{answer_model}" if answer_model else ""
+    return f"{row[0]}@{row[1].isoformat()}/k{top_k}/v{_LOGIC_VERSION}{model_part}"
 
 
 def lookup(db: Session, question: str, version: str) -> dict | None:

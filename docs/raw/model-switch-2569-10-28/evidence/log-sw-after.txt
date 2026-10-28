@@ -1,0 +1,110 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:course_advisor:embedding dim = 1024 ตรงกับ bge-m3
+INFO:course_advisor:เปิดตัวนับการใช้โมเดล เขียนทุก 30 วินาที
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     172.18.0.1:45782 - "GET /health HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น None/None — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:41964 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ใช้โมเดลเขียนคำตอบ: gemini / gemini-3.5-flash-lite (ที่มา: env)
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat total=3075ms prepare=1611ms write_answer=1449ms persist=15ms | corpus_version=43ms gates=9ms structured_miss=2ms retrieve1=215ms decide=1338ms | source=rag status=answered outcome=ok q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:41966 - "POST /chat HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/qwen2.5:3b — ที่ใช้จริง ollama/qwen2.5:3b
+INFO:     172.18.0.1:41976 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น gemini/gemini-3.5-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:41984 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat total=2857ms prepare=1471ms write_answer=1372ms persist=14ms | corpus_version=5ms gates=6ms structured_miss=2ms retrieve1=228ms decide=1228ms | source=rag status=answered outcome=ok q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:42000 - "POST /chat HTTP/1.1" 200 OK
+INFO:course_advisor:timing /chat total=13ms prepare=12ms persist=1ms | corpus_version=4ms structured_fast_early=8ms | source=structured status=answered outcome=ok q='หลักสูตรวิทยาการคอมพิวเตอร์ มีกี่หน่วยกิต'
+INFO:     172.18.0.1:42010 - "POST /chat HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat total=2658ms prepare=1637ms write_answer=1007ms persist=13ms | corpus_version=5ms gates=6ms structured_miss=2ms retrieve1=226ms decide=1397ms | source=rag status=answered outcome=ok q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:42022 - "POST /chat HTTP/1.1" 200 OK
+INFO:course_advisor:ใช้คำตอบจากแคช
+INFO:course_advisor:timing /chat total=16ms prepare=14ms persist=2ms | corpus_version=5ms cache_hit=6ms | source=rag status=answered outcome=ok q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:42032 - "POST /chat HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/qwen2.5:3b — ที่ใช้จริง ollama/qwen2.5:3b
+INFO:     172.18.0.1:42044 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ใช้โมเดลเขียนคำตอบ: ollama / qwen2.5:3b (ที่มา: db)
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 2/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 3/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+INFO:course_advisor:timing /chat total=30141ms prepare=29939ms | corpus_version=10ms gates=5ms structured_miss=2ms retrieve1=220ms decide=29698ms | source=rag status=answered outcome=ล้ม:LLMBudgetExceeded q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:42060 - "POST /chat HTTP/1.1" 503 Service Unavailable
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น gemini/gemini-3.5-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:56494 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ใช้คำตอบจากแคช
+INFO:course_advisor:timing /chat total=23ms prepare=21ms persist=2ms | corpus_version=8ms cache_hit=9ms | source=rag status=answered outcome=ok q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:56502 - "POST /chat HTTP/1.1" 200 OK
+INFO:     172.18.0.1:56516 - "PUT /site-admin/ai-settings HTTP/1.1" 422 Unprocessable Entity
+INFO:     172.18.0.1:56530 - "GET /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:     172.18.0.1:56542 - "PUT /site-admin/ai-settings HTTP/1.1" 422 Unprocessable Entity
+INFO:     172.18.0.1:56558 - "GET /site-admin/ai-settings HTTP/1.1" 401 Unauthorized
+INFO:     172.18.0.1:56570 - "PUT /site-admin/ai-settings HTTP/1.1" 401 Unauthorized
+INFO:     172.18.0.1:56586 - "GET /site-admin/ai-settings HTTP/1.1" 403 Forbidden
+INFO:     172.18.0.1:56588 - "PUT /site-admin/ai-settings HTTP/1.1" 403 Forbidden
+INFO:     172.18.0.1:56602 - "POST /site-admin/ai-settings/check HTTP/1.1" 403 Forbidden
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น gemini/gemini-3.5-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:56614 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:     172.18.0.1:56624 - "POST /site-admin/ai-settings/check HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/qwen2.5:3b — ที่ใช้จริง ollama/qwen2.5:3b
+INFO:     172.18.0.1:60046 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 2/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 3/3 failed: ReadTimeout
+INFO:course_advisor:ตรวจผู้ให้บริการ ollama/qwen2.5:3b ไม่ผ่าน: เรียกได้ แต่ด่านตรวจหลักฐานไม่ทันเพดาน 30 วินาที (LLMConnectionError: could not reach local LLM at http://ollama:11434/api/chat) — เลือกไว้ได้ แต่ผู้ใช้จะได้ข้อความว่าระบบใช้เวลานานเกินไป
+INFO:     172.18.0.1:60062 - "POST /site-admin/ai-settings/check HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/ไม่มีรุ่นนี้ในเครื่อง:0b — ที่ใช้จริง ollama/ไม่มีรุ่นนี้ในเครื่อง:0b
+INFO:     172.18.0.1:40142 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 400 Bad Request"
+INFO:course_advisor:ตรวจผู้ให้บริการ ollama/ไม่มีรุ่นนี้ในเครื่อง:0b ไม่ผ่าน: LLMConnectionError: ollama returned 400: {"error":"invalid model name"}
+INFO:     172.18.0.1:40146 - "POST /site-admin/ai-settings/check HTTP/1.1" 200 OK
+INFO:course_advisor:ใช้โมเดลเขียนคำตอบ: ollama / ไม่มีรุ่นนี้ในเครื่อง:0b (ที่มา: db)
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 400 Bad Request"
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 400 Bad Request"
+INFO:course_advisor:timing /chat total=419ms prepare=415ms | corpus_version=18ms gates=8ms structured_miss=3ms retrieve1=377ms decide=6ms | source=rag status=answered outcome=ล้ม:LLMConnectionError q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:40150 - "POST /chat HTTP/1.1" 503 Service Unavailable
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/qwen2.5:3b — ที่ใช้จริง ollama/qwen2.5:3b
+INFO:     172.18.0.1:40158 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 2/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 3/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+INFO:course_advisor:timing /chat total=30142ms prepare=29939ms | corpus_version=10ms gates=10ms structured_miss=3ms retrieve1=377ms decide=29535ms | source=rag status=answered outcome=ล้ม:LLMBudgetExceeded q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:40174 - "POST /chat HTTP/1.1" 503 Service Unavailable
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 2/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 3/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+INFO:course_advisor:timing /chat total=30140ms prepare=29939ms | corpus_version=8ms gates=9ms structured_miss=3ms retrieve1=364ms decide=29551ms | source=rag status=answered outcome=ล้ม:LLMBudgetExceeded q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:46228 - "POST /chat HTTP/1.1" 503 Service Unavailable
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 2/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 3/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+INFO:course_advisor:timing /chat total=30121ms prepare=29919ms | corpus_version=11ms gates=8ms structured_miss=3ms retrieve1=354ms decide=29538ms | source=rag status=answered outcome=ล้ม:LLMBudgetExceeded q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:52262 - "POST /chat HTTP/1.1" 503 Service Unavailable
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น None/None — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:54460 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1]

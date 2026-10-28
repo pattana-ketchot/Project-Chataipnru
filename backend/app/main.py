@@ -13,7 +13,6 @@ from app.core.config import get_settings
 from app.db.session import engine
 from app.services import llm_usage
 
-from llm.connector import ChatMessage  # noqa: E402  (sys.path ตั้งโดย llm_client)
 
 settings = get_settings()
 
@@ -63,17 +62,20 @@ async def _keep_models_warm() -> None:
     from app.services.llm_client import get_llm_connector
 
     interval = settings.warmup_interval_minutes * 60
-    connector = get_llm_connector()
     while True:
         try:
+            # ขอ connector ใหม่ทุกรอบ เพราะผู้ดูแลเปลี่ยนโมเดลที่ใช้ตอบได้ระหว่างทาง
+            # (ดู services/ai_settings.py) ถ้าถือตัวเดิมไว้ตั้งแต่ตอนเปิดเซิร์ฟเวอร์
+            # งานนี้จะอุ่นโมเดลที่เลิกใช้แล้ว และกันตัวที่ถูกเลิกใช้ไม่ให้ถูกปิด
+            connector = get_llm_connector()
             # embed อย่างเดียวไม่พอ ต้องแตะโมเดลตอบคำถามด้วยเพราะนับเวลาแยกกัน
             await asyncio.to_thread(connector.embed, "warmup")
             # อุ่นโมเดลเขียนคำตอบเฉพาะตอนที่รันในเครื่อง — ถ้าใช้ Gemini การยิงคำขอ
             # ทุก 20 นาทีมีแต่กินโควตาเปล่าๆ เพราะฝั่งนั้นไม่มีโมเดลให้ค้างในหน่วยความจำ
-            if settings.llm_provider != "gemini":
-                await asyncio.to_thread(
-                    connector.chat, [ChatMessage(role="user", content="hi")], 0.0, False
-                )
+            # มีเฉพาะเส้นทางที่ใช้โมเดลในเครื่องเป็นตัวหลักที่มี warm_chat ให้เรียก
+            warm = getattr(connector, "warm_chat", None)
+            if warm is not None:
+                await asyncio.to_thread(warm)
             logger.debug("warmup ping สำเร็จ")
         except Exception as e:  # noqa: BLE001 — งานเบื้องหลัง ห้ามทำให้เซิร์ฟเวอร์ล้ม
             logger.warning("warmup ping ไม่สำเร็จ: %s", type(e).__name__)

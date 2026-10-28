@@ -1,0 +1,10 @@
+         event         | n  
+-----------------------+----
+ fallback_declined     |  2
+ gemini_ok             | 83
+ local_primary_attempt | 86
+ local_primary_failed  | 64
+ local_primary_ok      | 18
+ stream_failed_midway  |  2
+(6 rows)
+

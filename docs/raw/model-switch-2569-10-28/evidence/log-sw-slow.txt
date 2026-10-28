@@ -1,0 +1,74 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:course_advisor:embedding dim = 1024 ตรงกับ bge-m3
+INFO:course_advisor:เปิดตัวนับการใช้โมเดล เขียนทุก 30 วินาที
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     172.18.0.1:54484 - "GET /health HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/qwen2.5:3b — ที่ใช้จริง ollama/qwen2.5:3b
+INFO:     172.18.0.1:54500 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ใช้โมเดลเขียนคำตอบ: ollama / qwen2.5:3b (ที่มา: db)
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 2/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 3/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 1/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 2/3 failed: ReadTimeout
+WARNING:llm.connector:ollama /api/chat attempt 3/3 failed: ReadTimeout
+INFO:course_advisor:timing /chat total=300174ms prepare=299567ms | corpus_version=58ms gates=14ms structured_miss=3ms retrieve1=342ms decide=299144ms | source=rag status=answered outcome=ล้ม:LLMConnectionError q='หลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไร (รหัสอ้างอิง 7'
+INFO:     172.18.0.1:54506 - "POST /chat HTTP/1.1" 503 Service Unavailable
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat total=76147ms prepare=76142ms persist=4ms | corpus_version=10ms gates=12ms structured_miss=3ms retrieve1=329ms decide=75786ms | source=rag status=not_found outcome=ok q='หลักสูตรวิทยาการคอมพิวเตอร์มีวิชาอะไรบ้าง (รหัสอ้างอิง 5cda3'
+INFO:     172.18.0.1:38498 - "POST /chat HTTP/1.1" 200 OK
+INFO:course_advisor:timing /chat total=30ms prepare=28ms persist=2ms | corpus_version=9ms admission_gap=15ms | source=rag status=answered outcome=ok q='คุณสมบัติผู้สมัครของหลักสูตรวิทยาการคอมพิวเตอร์คืออะไร (รหัส'
+INFO:     172.18.0.1:55258 - "POST /chat HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น gemini/gemini-3.5-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:55262 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:     172.18.0.1:55264 - "GET /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/qwen2.5:3b — ที่ใช้จริง ollama/qwen2.5:3b
+INFO:     172.18.0.1:55268 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:     172.18.0.1:55278 - "GET /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น gemini/gemini-3.5-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:55280 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:     172.18.0.1:55288 - "GET /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น gemini/gemini-3.5-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:55300 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ใช้โมเดลเขียนคำตอบ: gemini / gemini-3.5-flash-lite (ที่มา: db)
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat total=6319ms prepare=2887ms write_answer=3420ms persist=12ms | corpus_version=19ms gates=5ms structured_miss=2ms retrieve1=207ms decide=2651ms | source=rag status=answered outcome=ok q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:55308 - "POST /chat HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/qwen2.5:3b — ที่ใช้จริง ollama/qwen2.5:3b
+INFO:     172.18.0.1:34436 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น gemini/gemini-3.5-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:34458 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat total=142111ms prepare=62147ms write_answer=79953ms persist=11ms | corpus_version=5ms gates=6ms structured_miss=2ms retrieve1=202ms decide=61930ms | source=rag status=answered outcome=ok q='หลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไร (รหัสอ้างอิง b'
+INFO:     172.18.0.1:34452 - "POST /chat HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat total=2740ms prepare=1340ms write_answer=1389ms persist=11ms | corpus_version=5ms gates=6ms structured_miss=2ms retrieve1=241ms decide=1084ms | source=rag status=answered outcome=ok q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:48850 - "POST /chat HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น ollama/qwen2.5:3b — ที่ใช้จริง ollama/qwen2.5:3b
+INFO:     172.18.0.1:48856 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     172.18.0.1:48862 - "POST /site-admin/ai-settings/check HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น gemini/gemini-3.5-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:49636 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:     172.18.0.1:49652 - "POST /site-admin/ai-settings/check HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น None/None — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:49662 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:course_advisor:ผู้ดูแล 4ad26503-1822-48ce-a39d-25895d00cfd4 ตั้งโมเดลคำตอบเป็น None/gemini-3.1-flash-lite — ที่ใช้จริง gemini/gemini-3.5-flash-lite
+INFO:     172.18.0.1:49672 - "PUT /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1]

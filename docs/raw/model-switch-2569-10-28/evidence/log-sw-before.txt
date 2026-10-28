@@ -1,0 +1,17 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:course_advisor:embedding dim = 1024 ตรงกับ bge-m3
+INFO:course_advisor:เปิดตัวนับการใช้โมเดล เขียนทุก 30 วินาที
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     172.18.0.1:53936 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:53952 - "GET /site-admin/ai-settings HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat total=2636ms prepare=1543ms write_answer=1078ms persist=16ms | corpus_version=37ms gates=15ms structured_miss=2ms retrieve1=218ms decide=1269ms | source=rag status=answered outcome=ok q='อธิบายสั้น ๆ ว่าหลักสูตรวิทยาการคอมพิวเตอร์เรียนเกี่ยวกับอะไ'
+INFO:     172.18.0.1:53958 - "POST /chat HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1]

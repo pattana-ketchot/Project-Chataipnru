@@ -1,0 +1,975 @@
+--- ไฟล์ใหม่: /app/backend/app/services/ai_settings.py (ไม่มีในอิมเมจ production) ---
+--- a/app/backend/app/services/ai_settings.py
++++ b/app/backend/app/services/ai_settings.py
+@@ -0,0 +1,201 @@
++"""
++ตัดสินว่าคำขอใหม่จะใช้ผู้ให้บริการและรุ่นไหนเขียนคำตอบ
++
++ทำไมต้องมีไฟล์นี้
++-----------------
++หน้าผู้ดูแลมีช่องตั้งค่าโมเดลและบันทึกลง `web.ai_settings` ได้ตั้งแต่ Phase 4
++แต่ไม่มีโค้ดส่วนใดอ่านค่านั้นเลย — `get_llm_connector()` สร้าง connector ครั้งเดียว
++จาก env แล้วเก็บเป็น singleton ผลคือหน้าเว็บขึ้นว่าบันทึกสำเร็จ ขณะที่โมเดลที่ตอบจริง
++ไม่เปลี่ยน และเปลี่ยนไม่ได้จนกว่าจะ restart ทั้งคอนเทนเนอร์
++
++ไฟล์นี้เป็นจุดเดียวที่ตอบคำถามว่า "ตอนนี้ใช้อะไร" โดยรวมสามแหล่งเข้าด้วยกัน:
++
++    ค่าที่ผู้ดูแลบันทึก (ฐานข้อมูล)  ->  ตรวจความถูกต้อง  ->  ค่าตั้งต้นจาก env
++
++กฎที่ตั้งใจให้ "deploy แล้วพฤติกรรมไม่เปลี่ยน"
++---------------------------------------------
++ค่าที่บันทึกจะถูกใช้ก็เมื่อ `provider` ถูกระบุไว้เท่านั้น แถวเดิมในฐาน production
++มีแต่ `model` (ค่าที่ไม่มีใครอ่านมาตลอด และชี้ไปรุ่นที่ env ไม่ได้ใช้) ถ้าถือว่า
++คอลัมน์นั้นมีความหมายทันทีที่โค้ดนี้ขึ้น ระบบจะเริ่มส่งชื่อรุ่นที่ไม่เคยถูกตรวจ
++ไปให้ผู้ให้บริการจริงตั้งแต่วินาทีแรกของการ deploy ซึ่งเป็นการเปลี่ยนพฤติกรรม
++โดยที่ไม่มีใครสั่ง จึงกำหนดว่า model ที่ไม่มี provider กำกับ = ยังไม่ได้เลือก
++
++embedding เปลี่ยนไม่ได้
++----------------------
++สวิตช์นี้แตะ "โมเดลที่เขียนคำตอบ" เท่านั้น ฝั่ง embedding ยังอ่านจาก env
++(`EMBED_MODEL` = bge-m3 ขนาด 1024 มิติ) เสมอ เพราะเวกเตอร์ของเอกสารทั้งคลัง
++และขนาดคอลัมน์ในฐานข้อมูลผูกกับโมเดลตัวนั้น การเปลี่ยนแปลว่าต้องสร้างเวกเตอร์ใหม่
++ทั้งคลัง ดู services/llm_client.py
++"""
++from __future__ import annotations
++
++import logging
++import threading
++import time
++from dataclasses import dataclass, replace
++
++from sqlalchemy import text
++
++from app.core.config import get_settings
++
++logger = logging.getLogger("course_advisor")
++settings = get_settings()
++
++# ผู้ให้บริการที่โค้ดนี้สร้าง connector ให้ได้จริง — ต้องตรงกับ CHECK ของ
++# db/migrations/010_ai_settings_provider.sql และกับ _build() ใน llm_client.py
++PROVIDERS = ("gemini", "ollama")
++
++# ค่าที่บันทึกมีผลกับคำขอใหม่ภายในเวลานี้โดยไม่ต้อง restart
++#
++# ตั้งไว้สั้นเพราะต้นทุนคือการอ่านหนึ่งแถวจากตารางที่มีแถวเดียว แต่ไม่ตั้งเป็นศูนย์
++# เพราะ get_llm_connector() ถูกเรียกหลายครั้งต่อหนึ่งคำขอ (ขั้นเขียนคำถามใหม่
++# ด่านตรวจเอกสาร ขั้นเขียนคำตอบ) การอ่านฐานทุกครั้งคือการต่อคิว connection
++# เพิ่มในเส้นทางที่ผู้ใช้รออยู่ โดยไม่ได้ความถูกต้องเพิ่มขึ้นเลย
++#
++# เส้นทางบันทึกจาก /site-admin/ai-settings เรียก invalidate() ให้อยู่แล้ว
++# ค่าใหม่จึงมีผลทันทีในกระบวนการที่รับคำขอบันทึก TTL นี้เป็นเพียงตัวกันพลาด
++# สำหรับการแก้ค่าในฐานโดยตรงหรือกรณีมีหลายกระบวนการ
++CACHE_TTL_S = 10.0
++
++_SELECT = text("select provider, model, updated_at from web.ai_settings where id = 1")
++
++
++@dataclass(frozen=True)
++class Choice:
++    """ผลการตัดสิน — แยก “ที่ผู้ดูแลสั่ง” ออกจาก “ที่ใช้จริง” ให้เห็นทั้งสองค่า"""
++
++    provider: str          # ที่ใช้จริงกับคำขอใหม่
++    model: str             # ที่ใช้จริงกับคำขอใหม่
++    source: str            # db = มาจากค่าที่บันทึก · env = มาจาก environment
++    saved_provider: str | None = None   # ที่บันทึกไว้ (None = ยังไม่เลือก)
++    saved_model: str | None = None
++    # เหตุผลเมื่อค่าที่ใช้จริงไม่ตรงกับที่บันทึก — ว่างเมื่อใช้ได้ตามที่สั่ง
++    # หน้าผู้ดูแลต้องแสดงข้อความนี้ ไม่ใช่แสดงแค่ว่าบันทึกสำเร็จ
++    note: str = ""
++
++    @property
++    def key(self) -> tuple[str, str]:
++        return (self.provider, self.model)
++
++    @property
++    def honoured(self) -> bool:
++        """ค่าที่บันทึกถูกใช้ตามนั้นหรือไม่"""
++        return self.saved_provider is not None and not self.note
++
++
++def default_model_of(provider: str) -> str:
++    return settings.gemini_model if provider == "gemini" else settings.llm_model
++
++
++def has_gemini_key() -> bool:
++    """มีคีย์ในเซิร์ฟเวอร์หรือไม่ — คืนเฉพาะจริง/เท็จ ตัวคีย์ไม่ออกจากหลังบ้าน"""
++    return bool((settings.gemini_api_key or "").strip())
++
++
++def env_default() -> Choice:
++    """ค่าตั้งต้นจาก environment — ใช้เมื่อยังไม่เลือก หรือเมื่อค่าที่เลือกใช้ไม่ได้"""
++    provider = (settings.llm_provider or "").strip().lower()
++    if provider not in PROVIDERS:
++        # env เองก็ตั้งผิดได้ ถ้าปล่อยผ่านจะไปล้มตอนสร้าง connector ซึ่งไกลจากต้นเหตุ
++        logger.warning(
++            "LLM_PROVIDER=%r ไม่ใช่ค่าที่รองรับ (%s) — ใช้ ollama",
++            settings.llm_provider, ", ".join(PROVIDERS),
++        )
++        provider = "ollama"
++    return Choice(provider=provider, model=default_model_of(provider), source="env")
++
++
++def resolve(db) -> Choice:
++    """
++    อ่านค่าที่บันทึกแล้วตัดสินว่าจะใช้อะไร — ไม่โยนข้อผิดพลาดออกมาเลย
++
++    ฐานข้อมูลล่มต้องไม่ทำให้ตอบคำถามไม่ได้ เพราะค่าตั้งต้นจาก env ใช้งานได้อยู่แล้ว
++    """
++    try:
++        row = db.execute(_SELECT).mappings().first()
++    except Exception:  # noqa: BLE001 — การอ่านค่าตั้งค่าห้ามทำให้คำตอบพัง
++        logger.warning("อ่าน web.ai_settings ไม่ได้ — ใช้ค่าจาก env", exc_info=True)
++        return replace(env_default(), note="อ่านค่าที่บันทึกไม่ได้ จึงใช้ค่าจาก environment")
++
++    data = dict(row) if row else {}
++    saved_provider = str(data.get("provider") or "").strip().lower() or None
++    saved_model = str(data.get("model") or "").strip() or None
++    env = env_default()
++
++    if saved_provider is None:
++        # ยังไม่เลือก — รวมถึงแถวเดิมที่มีแต่ model ซึ่งไม่รู้ว่าหมายถึงเจ้าไหน
++        note = ""
++        if saved_model:
++            note = ("ค่า {0} ที่บันทึกไว้ยังไม่ถูกใช้ เพราะไม่ได้ระบุผู้ให้บริการกำกับ "
++                    "เลือกผู้ให้บริการแล้วกดบันทึกอีกครั้งเพื่อให้มีผล").format(saved_model)
++        return replace(env, saved_model=saved_model, note=note)
++
++    if saved_provider not in PROVIDERS:
++        logger.warning("provider ที่บันทึกไว้ (%r) ไม่รองรับ — ใช้ค่าจาก env", saved_provider)
++        return replace(
++            env, saved_provider=saved_provider, saved_model=saved_model,
++            note="ผู้ให้บริการ {0} ที่บันทึกไว้ไม่รองรับ จึงใช้ค่าจาก environment".format(saved_provider),
++        )
++
++    if saved_provider == "gemini" and not has_gemini_key():
++        # บันทึกสำเร็จไม่เท่ากับใช้งานได้ ต้องบอกให้ชัดว่าของจริงคือเจ้าไหน
++        logger.warning("เลือก gemini ไว้แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY — ใช้ ollama")
++        local = Choice(provider="ollama", model=default_model_of("ollama"), source="env")
++        return replace(
++            local, saved_provider=saved_provider, saved_model=saved_model,
++            note="เลือก Gemini ไว้ แต่เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY "
++                 "จึงยังใช้โมเดลในเครื่องตอบ ต้องตั้งคีย์ที่ environment ก่อน",
++        )
++
++    model = saved_model or default_model_of(saved_provider)
++    return Choice(
++        provider=saved_provider, model=model, source="db",
++        saved_provider=saved_provider, saved_model=saved_model,
++        note="" if saved_model else "ไม่ได้ระบุรุ่น จึงใช้รุ่นตั้งต้นของผู้ให้บริการจาก environment",
++    )
++
++
++# ---------------------------------------------------------------------
++# แคชอายุสั้น — ให้ค่าใหม่มีผลโดยไม่ต้อง restart แต่ไม่อ่านฐานทุกครั้งที่ถาม
++# ---------------------------------------------------------------------
++_lock = threading.Lock()
++_cached: tuple[float, Choice] | None = None
++
++
++def current() -> Choice:
++    """
++    ตัวเลือกที่ใช้กับคำขอใหม่ — เปิดคอนเนกชันของตัวเองเพราะผู้เรียกบางรายไม่มี session
++
++    get_llm_connector() ถูกเรียกจาก rag.py / search.py / match.py ซึ่งไม่ได้รับ
++    Session มาด้วย การบังคับให้ส่ง db เข้ามาแปลว่าต้องแก้ทุกจุดที่เรียก และยังทำให้
++    ขั้นที่ไม่เกี่ยวกับฐานข้อมูลต้องรู้จักฐานข้อมูล จึงเลือกอ่านเองที่นี่แล้วแคชไว้
++    """
++    global _cached
++    now = time.monotonic()
++    with _lock:
++        if _cached is not None and now - _cached[0] < CACHE_TTL_S:
++            return _cached[1]
++
++    # อ่านนอก lock เพื่อไม่ให้คำขออื่นค้างรอการอ่านฐาน · อ่านซ้อนกันได้ ผลเหมือนกัน
++    from app.db.session import SessionLocal  # ภายในฟังก์ชัน เลี่ยง import วน
++
++    db = SessionLocal()
++    try:
++        choice = resolve(db)
++    finally:
++        db.close()
++
++    with _lock:
++        _cached = (time.monotonic(), choice)
++    return choice
++
++
++def invalidate() -> None:
++    """ทิ้งแคชทันที — เรียกหลังผู้ดูแลบันทึกค่าใหม่ ให้คำขอถัดไปเห็นค่าใหม่เลย"""
++    global _cached
++    with _lock:
++        _cached = None
++
++
++def reset_for_test() -> None:
++    invalidate()
+--- a/app/backend/app/services/llm_client.py
++++ b/app/backend/app/services/llm_client.py
+@@ -6,6 +6,10 @@
+     embedding (แปลงข้อความเป็นเวกเตอร์)   ใช้ bge-m3 ในเครื่องเสมอ
+     การเขียนคำตอบ                        เลือกได้ระหว่างโมเดลในเครื่องกับ Gemini
+ 
++ตัวเลือกของฝั่งเขียนคำตอบมาจากค่าที่ผู้ดูแลบันทึกไว้ในหน้าหลังบ้าน โดยถอยไปใช้ค่า
++จาก env เมื่อยังไม่ได้เลือกหรือค่าที่เลือกใช้ไม่ได้ — การตัดสินทั้งหมดอยู่ที่
++services/ai_settings.py ไฟล์นี้รับหน้าที่แค่ "สร้างของตามตัวเลือกที่ได้มา"
++
+ ทำไม embedding ถึงเปลี่ยนไม่ได้: เวกเตอร์ของเอกสารทั้ง 7,301 ชิ้นในฐานข้อมูลถูกสร้าง
+ ด้วย bge-m3 ขนาด 1024 มิติ และคอลัมน์ในฐานข้อมูลก็ประกาศขนาดนี้ไว้ตายตัว การเปลี่ยน
+ โมเดล embedding แปลว่าต้องคำนวณใหม่ทั้งคลังและแก้โครงสร้างตาราง ซึ่งไม่เกี่ยวกับ
+@@ -17,6 +21,8 @@
+ """
+ import logging
+ import sys
++import threading
++import time
+ from pathlib import Path
+ 
+ # monorepo: <root>/backend/app/services/llm_client.py -> <root>/llm
+@@ -24,16 +30,18 @@
+ if str(_REPO_ROOT) not in sys.path:
+     sys.path.insert(0, str(_REPO_ROOT))
+ 
+-from llm.connector import LLMConnectionError, OllamaConnector  # noqa: E402
++from llm.connector import (_DEFAULT_BUDGET_S, ChatMessage,  # noqa: E402
++                           LLMConnectionError, OllamaConnector,
++                           reset_budget, start_budget)
+ from llm.gemini import GeminiConnector  # noqa: E402
++from llm.prompts import (GROUNDING_CHECK_SYSTEM_PROMPT,  # noqa: E402
++                         build_grounding_check_prompt)
+ from app.core.config import get_settings  # noqa: E402
+-from app.services import llm_usage  # noqa: E402
++from app.services import ai_settings, llm_usage  # noqa: E402
+ 
+ settings = get_settings()
+ logger = logging.getLogger("course_advisor")
+ 
+-_connector = None
+-
+ # ข้อความเมื่อไม่ยอมใช้ตัวสำรอง — ผู้ใช้ต้องเข้าใจว่าให้รอแล้วถามใหม่ ไม่ใช่ระบบพัง
+ FALLBACK_DECLINED = (
+     "ตอนนี้ระบบหลักตอบไม่ได้ชั่วคราว คำถามนี้ต้องตอบโดยอ้างอิงเอกสารหลักสูตร "
+@@ -159,6 +167,10 @@
+         llm_usage.record("fallback_local_ok")
+ 
+     @property
++    def provider_name(self) -> str:
++        return "gemini"
++
++    @property
+     def chat_model(self) -> str:
+         return self._chatter.chat_model
+ 
+@@ -167,31 +179,338 @@
+         return self._chatter.answer_token_cap
+ 
+ 
+-def _build_ollama() -> OllamaConnector:
++class _LocalPrimary:
++    """
++    โมเดลในเครื่องเป็นตัวหลัก — ห่อไว้เพื่อนับว่า "เรียกจริง" และ "ได้คำตอบจริง"
++
++    ทำไมต้องห่อ: ตัวนับเดิมรู้จักแต่เหตุการณ์ของ Gemini (`gemini_ok`) และของโมเดล
++    ในเครื่องในฐานะ "ตัวสำรอง" (`fallback_local_*`) ไม่มีเหตุการณ์ใดบอกว่าโมเดล
++    ในเครื่องถูกเลือกเป็นตัวหลัก เมื่อเปิดสวิตช์ให้ผู้ดูแลเลือกได้ การพิสูจน์ว่า
++    "เลือก Ollama แล้วเรียก Ollama จริง" จึงไม่มีหลักฐานจากบัญชีของระบบเอง
++
++    ตัวสำรองของเส้นทางนี้: ไม่มี — ดูเหตุผลที่ _build()
++
++    **ตัวเลขนี้นับ "การเรียกโมเดล" ไม่ใช่ "คำตอบที่ผู้ใช้ได้"** หนึ่งคำขอเรียกโมเดล
++    ได้หลายครั้ง (เขียนคำถามใหม่ ด่านตรวจขอบเขต ด่านตรวจหลักฐาน แล้วจึงเขียนคำตอบ)
++    จะดูว่าคำตอบหนึ่งข้อมาจากโมเดลตัวไหน ให้ดูช่อง answer_model ของคำตอบนั้น
++    """
++
++    def __init__(self, local: OllamaConnector) -> None:
++        self._local = local
++
++    def embed(self, text):
++        return self._local.embed(text)
++
++    def embed_batch(self, texts):
++        return self._local.embed_batch(texts)
++
++    def chat(self, *args, **kwargs):
++        llm_usage.record("local_primary_attempt")
++        try:
++            out = self._local.chat(*args, **kwargs)
++        except Exception:
++            llm_usage.record("local_primary_failed")
++            raise
++        llm_usage.record("local_primary_ok")
++        return out
++
++    def chat_stream(self, *args, **kwargs):
++        # นับ "สำเร็จ" เมื่อเดินจนจบเท่านั้น เหมือนเส้นทางตัวสำรองของ _SplitConnector
++        # ผู้ใช้ปิดหน้าเว็บกลางคันเกิด GeneratorExit ซึ่งสืบทอดจาก BaseException
++        # จึงไม่ถูกนับเป็นความล้มเหลวของโมเดล
++        llm_usage.record("local_primary_attempt")
++        try:
++            yield from self._local.chat_stream(*args, **kwargs)
++        except Exception:
++            llm_usage.record("local_primary_failed")
++            raise
++        llm_usage.record("local_primary_ok")
++
++    def warm_chat(self) -> None:
++        """
++        อุ่นโมเดลให้ค้างใน VRAM — ตั้งใจไม่นับในตัวนับการใช้งาน
++
++        งานเบื้องหลังยิงคำขอนี้ทุก 20 นาทีไม่ว่าจะมีผู้ใช้หรือไม่ ถ้านับรวมด้วย
++        ตัวเลข local_primary_* จะบวกวันละ 72 ครั้งจากคำขอที่ไม่มีใครถาม แล้ว
++        สถิติจะตอบคำถาม "ผู้ใช้ได้คำตอบจากโมเดลไหน" ผิดไปทั้งหมด
++
++        มีเฉพาะบนเส้นทางนี้โดยเจตนา — ฝั่ง Gemini ไม่มีโมเดลค้างในหน่วยความจำ
++        ให้อุ่น การยิงคำขอเปล่าไปที่นั้นมีแต่กินโควตา (ดู main.py: _keep_models_warm)
++        """
++        self._local.chat([ChatMessage(role="user", content="hi")], 0.0, False)
++
++    @property
++    def provider_name(self) -> str:
++        return "ollama"
++
++    @property
++    def chat_model(self) -> str:
++        return self._local.chat_model
++
++    @property
++    def answer_token_cap(self) -> int:
++        return self._local.answer_token_cap
++
++    def close(self) -> None:
++        self._local.close()
++
++
++def _build_ollama(chat_model: str | None = None) -> OllamaConnector:
++    """
++    โมเดลในเครื่อง — `embed_model` มาจาก env เสมอ ไม่เคยมาจากค่าที่ผู้ดูแลตั้ง
++
++    สวิตช์ของผู้ดูแลเปลี่ยนได้แค่โมเดลที่เขียนคำตอบ (`chat_model`) เพราะเวกเตอร์
++    ของเอกสารทั้งคลังถูกสร้างด้วย bge-m3 ขนาด 1024 มิติ และคอลัมน์ในฐานข้อมูล
++    ประกาศขนาดนั้นไว้ตายตัว การเปลี่ยน embed_model จึงไม่ใช่การตั้งค่า แต่คือ
++    การสร้างเวกเตอร์ใหม่ทั้งคลังพร้อมแก้โครงสร้างตาราง
++    """
+     return OllamaConnector(
+         base_url=settings.ollama_base_url,
+-        chat_model=settings.llm_model,
++        chat_model=chat_model or settings.llm_model,
+         embed_model=settings.embed_model,
+         timeout_s=settings.llm_request_timeout_s,
+     )
+ 
+ 
++def _build(choice: ai_settings.Choice):
++    """
++    สร้าง connector ตามตัวเลือกหนึ่งชุด — ตัวสำรองของแต่ละเส้นทางต่างกันโดยเจตนา
++
++    เลือก Gemini แล้วล้ม  ->  ตกมาที่โมเดลในเครื่อง (พฤติกรรมเดิม ไม่เปลี่ยน)
++                              เฉพาะเมื่อยังไม่ได้ส่งตัวอักษรแรกออกไป และเฉพาะคำถาม
++                              ที่ยอมให้ตอบด้วยตัวสำรองได้ (ดู no_fallback_kwargs)
++
++    เลือก Ollama แล้วล้ม  ->  แจ้งข้อผิดพลาด ไม่ไปเรียก Gemini แทน
++                              เพราะการเลือกโมเดลในเครื่องคือการเลือกไม่ส่งคำถามของ
++                              ผู้ใช้ออกนอกเครื่อง ถ้าแอบตกไปหาเจ้าบนคลาวด์ตอนมีปัญหา
++                              ระบบจะละเมิดเงื่อนไขนั้นเงียบ ๆ ในจังหวะที่ไม่มีใครดู
++    """
++    if choice.provider == "gemini":
++        return _SplitConnector(
++            # ฝั่ง embedding และตัวสำรองยังเป็นค่าจาก env เหมือนเดิมทุกตัว
++            embedder=_build_ollama(),
++            chatter=GeminiConnector(
++                api_key=settings.gemini_api_key,
++                chat_model=choice.model,
++                timeout_s=settings.llm_request_timeout_s,
++                # แพ็กเกจ llm/ ไม่รู้จักฐานข้อมูลของเรา จึงส่งตัวนับเข้าไปจากที่นี่
++                on_event=llm_usage.record,
++            ),
++        )
++    return _LocalPrimary(_build_ollama(choice.model))
++
++
++# connector หนึ่งตัวต่อหนึ่งตัวเลือก เพื่อให้ httpx client และคิวคอนเนกชันถูกใช้ซ้ำ
++# ไม่ใช่สร้างใหม่ทุกคำขอ · จำกัดจำนวนไว้เพราะแต่ละตัวถือ httpx client ของตัวเอง
++# และผู้ดูแลเปลี่ยนชื่อรุ่นได้ไม่จำกัดครั้ง
++_connectors: dict[tuple[str, str], object] = {}
++_connectors_lock = threading.Lock()
++MAX_CACHED_CONNECTORS = 4
++
++# ช่องให้ชุดทดสอบใส่ connector ปลอมแทนของจริง — production ปล่อยเป็น None เสมอ
++#
++# ชุดทดสอบเดิมหลายไฟล์ตั้งค่านี้ตรง ๆ (`llm_client._connector = DEAD`) เพื่อจำลอง
++# โมเดลล่มหรือเพื่อยืนยันว่าเส้นทางหนึ่งไม่เรียกโมเดลเลย ก่อนรอบนี้ชื่อนี้คือ
++# singleton ตัวจริงของระบบ จึงใช้แทนกันได้พอดี
++#
++# **ห้ามตัดทิ้ง** ถ้าตัด การตั้งค่าในชุดทดสอบจะไม่มีผลโดยไม่มี error ให้เห็น
++# แล้วชุดทดสอบจะไปเรียกโมเดลจริง — เจอจริงตอนรันชุดเดิมในคอนเทนเนอร์เมื่อ
++# 28 ต.ค. 2569: test_model_outage_n1 ตก 6 จุดเพราะได้คำตอบจริงมาแทนข้อความ
++# บริการขัดข้องที่มันตรวจอยู่
++_connector = None
++
++
+ def get_llm_connector():
+-    """Singleton connector — reuse the underlying httpx client/connection pool."""
+-    global _connector
+-    if _connector is None:
+-        ollama = _build_ollama()
+-        if settings.llm_provider == "gemini":
+-            _connector = _SplitConnector(
+-                embedder=ollama,
+-                chatter=GeminiConnector(
+-                    api_key=settings.gemini_api_key,
+-                    chat_model=settings.gemini_model,
+-                    timeout_s=settings.llm_request_timeout_s,
+-                    # แพ็กเกจ llm/ ไม่รู้จักฐานข้อมูลของเรา จึงส่งตัวนับเข้าไปจากที่นี่
+-                    on_event=llm_usage.record,
+-                ),
+-            )
+-        else:
+-            _connector = ollama
+-    return _connector
++    """
++    connector สำหรับตัวเลือกที่ใช้อยู่ "ตอนที่เรียก" — คืนวัตถุเดิมเมื่อตัวเลือกไม่เปลี่ยน
++
++    ไม่เคยแก้ไขวัตถุที่แจกไปแล้ว การเปลี่ยนค่าจึงสร้าง connector ตัวใหม่ให้ผู้เรียก
++    รายถัดไปเท่านั้น · ภายในหนึ่ง chat() หรือ chat_stream() ที่กำลังทำงานอยู่
++    จึงไม่มีทางสลับโมเดลกลางทาง
++
++    **แต่ฟังก์ชันนี้ไม่รับประกันว่าหนึ่งคำขอจะใช้เจ้าเดียว** หนึ่งคำขอเรียกโมเดล
++    หลายขั้น ถ้าแต่ละขั้นมาขอ connector เองก็ได้คนละตัวเมื่อค่าเปลี่ยนระหว่างนั้น
++    การตรึงให้เป็นเจ้าเดียวต่อคำขอเป็นหน้าที่ของผู้เรียก — services/chat.py พา
++    connector ที่ขั้นแรกได้ไปกับ Prepared.connector แล้วขั้นเขียนคำตอบใช้ตัวนั้น
++    (เจอจริงตอนทดสอบ 28 ต.ค. 2569 ว่าถ้าไม่ตรึง คำขอเดียวใช้ ollama ตรวจหลักฐาน
++    แล้วใช้ gemini เขียนคำตอบ)
++    """
++    if _connector is not None:
++        return _connector          # ชุดทดสอบใส่ของปลอมไว้ (ดูหมายเหตุที่ _connector)
++    choice = ai_settings.current()
++    key = choice.key
++    with _connectors_lock:
++        found = _connectors.get(key)
++    if found is not None:
++        return found
++
++    built = _build(choice)
++    evicted = None
++    with _connectors_lock:
++        # มีคำขออื่นสร้างตัวเดียวกันพร้อมกันได้ ใช้ตัวที่เข้าก่อนเพื่อไม่ให้มีสองตัว
++        if key in _connectors:
++            built_dup, built = built, _connectors[key]
++            _close_quietly(built_dup)
++            return built
++        if len(_connectors) >= MAX_CACHED_CONNECTORS:
++            evicted = _connectors.pop(next(iter(_connectors)))
++        _connectors[key] = built
++    if evicted is not None:
++        _close_quietly(evicted)
++    logger.info("ใช้โมเดลเขียนคำตอบ: %s / %s (ที่มา: %s)",
++                choice.provider, choice.model, choice.source)
++    return built
++
++
++def answer_model_label(connector) -> str:
++    """
++    ชื่อผู้ให้บริการและรุ่นที่ถูก "สั่งให้เขียน" คำตอบของคำขอนี้
++
++    ย้ำว่าเป็นตัวที่ถูกสั่ง ไม่ใช่ตัวที่เขียนสำเร็จ — เส้นทาง Gemini มีตัวสำรองเป็น
++    โมเดลในเครื่องที่รับช่วงต่อได้เมื่อเจ้าหลักล้มก่อนตัวอักษรแรก กรณีนั้นค่านี้ยัง
++    เป็น gemini อยู่ และการรับช่วงถูกบันทึกไว้ที่ตัวนับ (`fallback_local_ok`)
++    การยืนยันว่า "เจ้าที่เลือกเขียนเองจริง" จึงต้องดูสองอย่างประกอบกัน
++    """
++    provider = getattr(connector, "provider_name", "") or "unknown"
++    return "{0}:{1}".format(provider, getattr(connector, "chat_model", "") or "?")
++
++
++def _close_quietly(connector) -> None:
++    try:
++        close = getattr(connector, "close", None)
++        if callable(close):
++            close()
++    except Exception:  # noqa: BLE001 — ปิดคอนเนกชันไม่สำเร็จห้ามทำให้คำขอพัง
++        logger.debug("ปิด connector เดิมไม่สำเร็จ", exc_info=True)
++
++
++# เพดานเวลาของขั้น "เรียกได้ไหม" — สั้นได้เพราะพรอมต์สั้น
++PROBE_HELLO_BUDGET_S = 25.0
++PROBE_HELLO_PROMPT = "ตอบกลับสั้น ๆ ว่า พร้อม"
++# คำถามที่ใช้วัดขั้น work — เป็นคำถามที่ต้องอ่านเอกสารจริง ไม่ใช่คำทักทาย
++PROBE_WORK_QUESTION = "หลักสูตรนี้เรียนเกี่ยวกับอะไร และมีกี่หน่วยกิต"
++
++
++def _probe_chatter(choice: ai_settings.Choice):
++    """ตัวที่จะถูกเรียกจริงตามตัวเลือก — ไม่ผ่านตัวสำรอง และไม่ส่ง on_event"""
++    if choice.provider == "gemini":
++        return GeminiConnector(
++            api_key=settings.gemini_api_key,
++            chat_model=choice.model,
++            timeout_s=settings.llm_request_timeout_s,
++            on_event=None,
++        )
++    return _build_ollama(choice.model)
++
++
++def _probe_once(connector, messages, budget_s, *, json_mode=False, cap_tokens=True) -> dict:
++    """
++    เรียกหนึ่งครั้งแล้ววัดเวลา — พารามิเตอร์ต้องตรงกับขั้นที่กำลังเลียนแบบ
++
++    cap_tokens=False สำหรับขั้นที่เลียนด่านตรวจหลักฐาน เพราะด่านจริงไม่ส่ง
++    num_predict เลย (ดู services/chat.py::_grounding_verdict) การใส่เพดานให้
++    ตอนตรวจจะทำให้ตรวจผ่านทั้งที่ของจริงล้ม
++    """
++    budget = start_budget(budget_s)
++    started = time.monotonic()
++    try:
++        reply = connector.chat(
++            messages, 0.0, json_mode,
++            connector.answer_token_cap if cap_tokens else None,
++        ).strip()
++        ok, error = bool(reply), "" if reply else "ผู้ให้บริการตอบกลับแต่ไม่มีเนื้อหา"
++    except Exception as e:  # noqa: BLE001 — หน้าผู้ดูแลต้องได้เห็นเหตุผลจริง
++        ok, error, reply = False, "{0}: {1}".format(type(e).__name__, e)[:300], ""
++    finally:
++        reset_budget(budget)
++    return {"ok": ok, "ms": int((time.monotonic() - started) * 1000),
++            "reply": reply[:160], "error": error}
++
++
++def probe(choice: ai_settings.Choice, sample_chunks: list[str] | None = None) -> dict:
++    """
++    เรียกผู้ให้บริการที่เลือกไว้จริง เพื่อแยก "บันทึกแล้ว" ออกจาก "ใช้งานได้"
++
++    ตรวจสองขั้น เพราะสองคำถามนี้ไม่เท่ากัน และเคยตอบสวนทางกันจริง:
++
++        hello  เรียกได้ไหม (พรอมต์สั้น เพดานเวลาของตัวเอง)
++        work   ผ่าน "ด่านตรวจหลักฐาน" ได้ทันเพดานเวลาไหม — เรียกแบบเดียวกับ
++               _grounding_verdict(): พรอมต์ชุดเดียวกัน json_mode=True ไม่จำกัด
++               ความยาวผลลัพธ์ และ RAG_TIME_BUDGET_S ชุดเดียวกับคำขอของผู้ใช้
++
++               เลือกขั้นนี้เพราะวัดแล้วพบว่าเวลาที่หายไปทั้งหมดอยู่ที่นี่ ไม่ใช่ขั้นเขียนคำตอบ
++               (timing: decide=179,488ms จากเพดาน 180,000ms ส่วน write_answer ไม่ได้เริ่มเลย)
++
++    **ผลของขั้น work เป็นสัญญาณ ไม่ใช่การรับประกัน** เนื้อหาที่ส่งเข้าไปวัดหยิบจากคลัง
++    ตามลำดับ id ไม่ใช่ชิ้นที่การค้นเลือกให้คำถามจริง และด่านนี้ไม่จำกัดความยาวผลลัพธ์
++    ความยาวที่โมเดลเขียนจึงแปรตามเนื้อหาที่ได้รับ · วัดเทียบกันที่ CHAT_TOP_K=12:
++
++        ขั้น work ของการตรวจ (8,588 ตัวอักษร)        6,823 ms
++        ด่านตรวจหลักฐานของคำขอจริง (12 ชิ้นที่ค้นมา)  100,815 ms
++
++    ต่างกันราว 15 เท่า · การตรวจที่ไม่ผ่านจึงเชื่อถือได้ว่าใช้งานไม่ได้จริง
++    แต่การตรวจที่ผ่าน **ไม่ได้ยืนยันว่าคำถามจริงทุกข้อจะทันเพดาน**
++
++    วัดเมื่อ 28 ต.ค. 2569 บนฐานทดสอบ: qwen2.5:3b ผ่านขั้น hello ทุกครั้งในเวลาไม่ถึง
++    หนึ่งวินาที แต่ด่านตรวจหลักฐานที่ CHAT_TOP_K=25 ใช้เวลาเกินเพดานทุกครั้ง คำขอจึงตาย
++    ก่อนถึงขั้นเขียนคำตอบ ถ้ารายงานแค่ขั้น hello หน้าผู้ดูแลจะขึ้นเขียวให้ผู้ให้บริการที่
++    ตอบคำถามจริงไม่ได้ ซึ่งเป็นการโกหกชนิดเดียวกับการขึ้นว่า "พร้อม" เพราะบันทึกสำเร็จ
++    ตัวเลขที่วัดได้ทั้งหมดอยู่ที่ docs/MODEL_SWITCH_2569-10-28.md
++
++    ตั้งใจไม่ส่ง on_event — การตรวจของผู้ดูแลไม่ใช่การใช้งานของผู้ใช้ ถ้านับรวม
++    ตัวเลขสถิติจะเพิ่มขึ้นทุกครั้งที่มีคนกดปุ่มตรวจ · แต่ยังกินโควตาของผู้ให้บริการจริง
++    """
++    if choice.provider == "gemini" and not ai_settings.has_gemini_key():
++        no_key = "เซิร์ฟเวอร์ไม่มี GEMINI_API_KEY"
++        return {"ok": False, "provider": choice.provider, "model": choice.model,
++                "hello": {"ok": False, "ms": 0, "reply": "", "error": no_key},
++                "work": None, "budget_s": _DEFAULT_BUDGET_S,
++                "ms": 0, "reply": "", "error": no_key}
++
++    connector = _probe_chatter(choice)
++    try:
++        hello = _probe_once(
++            connector, [ChatMessage(role="user", content=PROBE_HELLO_PROMPT)],
++            PROBE_HELLO_BUDGET_S)
++        work = None
++        if hello["ok"] and sample_chunks:
++            # เลียนด่านตรวจหลักฐานของคำขอจริงทุกอย่าง: พรอมต์ชุดเดียวกัน json_mode=True
++            # ไม่จำกัดความยาวผลลัพธ์ และเพดานเวลา None = RAG_TIME_BUDGET_S ของผู้ใช้
++            block = "\n\n".join(
++                "[{0}] {1}".format(i + 1, c) for i, c in enumerate(sample_chunks))
++            work = _probe_once(
++                connector,
++                [ChatMessage(role="system", content=GROUNDING_CHECK_SYSTEM_PROMPT),
++                 ChatMessage(role="user", content=build_grounding_check_prompt(
++                     block, PROBE_WORK_QUESTION))],
++                None, json_mode=True, cap_tokens=False)
++    finally:
++        _close_quietly(connector)
++
++    ok = hello["ok"] and (work is not None and work["ok"])
++    if not hello["ok"]:
++        error = hello["error"]
++    elif work is None:
++        error = "ไม่มีเนื้อหาในคลังเอกสารให้วัดขั้นตอบงานจริง จึงตรวจได้แค่ว่าเรียกได้"
++    elif not work["ok"]:
++        error = ("เรียกได้ แต่ด่านตรวจหลักฐานไม่ทันเพดาน {0:.0f} วินาที ({1}) — "
++                 "เลือกไว้ได้ แต่ผู้ใช้จะได้ข้อความว่าระบบใช้เวลานานเกินไป"
++                 ).format(_DEFAULT_BUDGET_S, work["error"] or "ไม่ทราบสาเหตุ")
++    else:
++        error = ""
++    if not ok:
++        logger.info("ตรวจผู้ให้บริการ %s/%s ไม่ผ่าน: %s", choice.provider, choice.model, error)
++    return {"ok": ok, "provider": choice.provider, "model": choice.model,
++            "hello": hello, "work": work, "budget_s": _DEFAULT_BUDGET_S,
++            "error": error, "ms": hello["ms"] + (work["ms"] if work else 0),
++            "reply": (work or hello)["reply"]}
++
++
++def reset_connectors_for_test() -> None:
++    global _connectors, _connector
++    _connector = None
++    with _connectors_lock:
++        old, _connectors = _connectors, {}
++    for c in old.values():
++        _close_quietly(c)
++    ai_settings.invalidate()
+--- a/app/backend/app/services/chat.py
++++ b/app/backend/app/services/chat.py
+@@ -52,7 +52,8 @@
+     without_programme_names,
+ )
+ from app.services.answer_cache import corpus_version, lookup as cache_lookup, store as cache_store
+-from app.services.llm_client import get_llm_connector, no_fallback_kwargs
++from app.services.llm_client import (answer_model_label, get_llm_connector,
++                                     no_fallback_kwargs)
+ from app.services.program_list import asks_for_program_list, program_list_answer
+ from app.services.program_names import english_name
+ from app.services.query_expansion import expand_query, thai_only_query
+@@ -483,6 +484,16 @@
+     # คำตอบสำเร็จรูปที่คืนก่อนถึงขั้นตีความจะเป็นค่าว่าง แล้วโหมด shadow ใช้ข้อความของผู้ใช้แทน
+     interpreted: str = ""
+     has_history: bool = False
++    # connector ที่ขั้นก่อนหน้าใช้ — ขั้นเขียนคำตอบต้องใช้ตัวเดียวกัน
++    #
++    # ผู้ดูแลเปลี่ยนผู้ให้บริการได้ระหว่างที่คำขอยังทำงาน (ดู services/ai_settings.py)
++    # ถ้าขั้นเขียนคำตอบไปขอ connector ใหม่เอง คำขอเดียวจะใช้เจ้าหนึ่งตรวจหลักฐาน
++    # แล้วใช้อีกเจ้าเขียนคำตอบ — คำตอบถูกเขียนบนคำตัดสินของโมเดลอื่น
++    # เจอจริงตอนทดสอบ 28 ต.ค. 2569: เริ่มด้วย ollama สลับเป็น gemini กลางคำขอ
++    # แล้วคำตอบรายงานว่ามาจาก gemini
++    #
++    # None สำหรับเส้นทางที่ตอบด้วยข้อความสำเร็จรูป ซึ่งไม่มีขั้นเขียนคำตอบ
++    connector: object | None = None
+     # คำตอบนี้มาจากไหน: SERVED_RAG (ระบบเดิม) หรือ SERVED_STRUCTURED (ฐานข้อมูลหลักสูตร ในโหมด STRUCTURED_ANSWERS=on)
+     served_source: str = SERVED_RAG
+     # เอกสารต้นฉบับของคำตอบ {"document_id": ..., "page_start": ...} มีเฉพาะคำตอบจากฐานข้อมูล
+@@ -1351,7 +1362,8 @@
+     # ให้อ่านจากฐานข้อมูลตามเดิม
+     history = list(prior[-HISTORY_LIMIT:]) if prior else _load_history(db, session.id)
+ 
+-    version = corpus_version(db, TOP_K_CHUNKS)
++    # ผูกแคชไว้กับโมเดลที่จะเขียนคำตอบ ไม่งั้นสลับโมเดลแล้วคำถามเดิมได้คำตอบเดิม
++    version = corpus_version(db, TOP_K_CHUNKS, answer_model_label(connector))
+     stages.mark("corpus_version")
+ 
+     # --- 0. คำทักทาย/ขอบคุณ/ถามตัวตน -> ตอบทันทีโดยไม่ค้นเอกสารและไม่เรียก LLM ---
+@@ -1823,6 +1835,7 @@
+         stages=stages,
+         interpreted=interpreted,
+         has_history=bool(history),
++        connector=connector,
+     )
+ 
+ 
+@@ -2069,6 +2082,8 @@
+     p: Prepared | None = None
+     outcome = "ok"
+     rag_sources: list[dict] = []
++    # โมเดลที่ถูกสั่งให้เขียนคำตอบนี้ — None เมื่อคำตอบนี้ไม่ได้เรียกโมเดลเลย
++    answer_model: str | None = None
+     try:
+         p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
+         outer.mark("prepare")
+@@ -2077,7 +2092,9 @@
+         else:
+             # temperature ต่ำเพื่อลดการแต่งเติม — งานนี้ต้องการความตรงกับเอกสาร
+             # มากกว่าความหลากหลายของสำนวน
+-            connector = get_llm_connector()
++            # ตัวเดียวกับที่ขั้นก่อนหน้าใช้ ไม่ขอใหม่ (ดู Prepared.connector)
++            connector = p.connector or get_llm_connector()
++            answer_model = answer_model_label(connector)
+             reply_text = connector.chat(
+                 p.messages,
+                 temperature=0.1,
+@@ -2121,6 +2138,7 @@
+         source=p.source,
+         # คำตอบจากฐานหลักสูตรใช้ p.sources เดิม · คำตอบจากการค้นเอกสารใช้ชิ้นที่รองรับคำตอบจริง
+         sources=rag_sources,
++        answer_model=answer_model,
+     )
+ 
+ 
+@@ -2219,13 +2237,17 @@
+ 
+     # เหตุผลเดียวกับใน answer_question — ขั้นเขียนคำตอบล้มได้ ต้องบันทึกเวลาเสมอ
+     outcome = "ok"
++    # โมเดลที่ถูกสั่งให้เขียน — ออกไปกับเหตุการณ์ done เพราะ meta ส่งก่อนจะรู้ว่าใช้อะไร
++    answer_model: str | None = None
+     try:
+         if p.canned is not None:
+             yield _sse("token", {"t": p.canned})
+             reply_text = p.canned
+         else:
+             parts: list[str] = []
+-            connector = get_llm_connector()
++            # ตัวเดียวกับที่ขั้นก่อนหน้าใช้ ไม่ขอใหม่ (ดู Prepared.connector)
++            connector = p.connector or get_llm_connector()
++            answer_model = answer_model_label(connector)
+             for chunk in connector.chat_stream(
+                 p.messages,
+                 temperature=0.1,
+@@ -2262,7 +2284,7 @@
+     # ดูหมายเหตุเดียวกันใน answer_question — ส่งหลังตัวอักษรสุดท้ายถึงผู้ใช้แล้ว ไม่หน่วงหรือเปลี่ยนคำตอบ
+     shadow_submit(question=message, interpreted=p.interpreted, has_history=p.has_history,
+                   served_status=p.status, served_reply=reply_text, served_source=p.served_source)
+-    yield _sse("done", {})
++    yield _sse("done", {"answer_model": answer_model})
+ 
+ 
+ def _sse(event: str, data: dict) -> str:
+--- a/app/backend/app/services/answer_cache.py
++++ b/app/backend/app/services/answer_cache.py
+@@ -75,7 +75,7 @@
+ _LOGIC_VERSION = "34"
+ 
+ 
+-def corpus_version(db: Session, top_k: int) -> str:
++def corpus_version(db: Session, top_k: int, answer_model: str = "") -> str:
+     """
+     ค่าที่เปลี่ยนเมื่อ "สิ่งที่กำหนดคำตอบ" เปลี่ยน ใช้ผูกคำตอบไว้กับเงื่อนไขที่ใช้ตอบ
+ 
+@@ -93,7 +93,17 @@
+     row = db.execute(
+         text("SELECT count(*), coalesce(max(created_at), 'epoch') FROM course_chunks")
+     ).one()
+-    return f"{row[0]}@{row[1].isoformat()}/k{top_k}/v{_LOGIC_VERSION}"
++    # รวมผู้ให้บริการและรุ่นที่เขียนคำตอบไว้ด้วย ด้วยเหตุผลเดียวกับ CHAT_TOP_K
++    #
++    # ผู้ดูแลเปลี่ยนโมเดลที่เขียนคำตอบได้จากหน้าหลังบ้านตั้งแต่ 28 ต.ค. 2569
++    # (ดู services/ai_settings.py) ถ้าไม่ผูกไว้ คนที่สลับไปโมเดลในเครื่องแล้วถาม
++    # คำถามที่เคยถาม จะได้คำตอบของ Gemini กลับมาจากแคช แล้วสรุปว่าสวิตช์ไม่ทำงาน
++    # ซึ่งเป็นอาการเดียวกับที่ทำให้ต้องมางานรอบนี้
++    #
++    # ผลข้างเคียงที่ยอมรับ: แคชถูกแบ่งตามโมเดล การสลับโมเดลครั้งแรกจึงยังไม่มีแคช
++    # ให้ใช้ และคำตอบเก่าของโมเดลเดิมยังอยู่ ใช้ได้ทันทีเมื่อสลับกลับ
++    model_part = f"/m{answer_model}" if answer_model else ""
++    return f"{row[0]}@{row[1].isoformat()}/k{top_k}/v{_LOGIC_VERSION}{model_part}"
+ 
+ 
+ def lookup(db: Session, question: str, version: str) -> dict | None:
+--- a/app/backend/app/api/routes/site_admin.py
++++ b/app/backend/app/api/routes/site_admin.py
+@@ -5,6 +5,7 @@
+     GET/POST/PUT/DELETE  /site-admin/news[/{id}]
+     GET/POST/PUT/DELETE  /site-admin/knowledge[/{id}]
+     GET/PUT              /site-admin/ai-settings
++    POST                 /site-admin/ai-settings/check
+     GET                  /site-admin/users
+     PUT                  /site-admin/users/{id}/role|status
+ 
+@@ -22,6 +23,7 @@
+ การแยกไฟล์ทำให้ไม่มีทางเผลอเปิดร่างให้คนทั่วไปด้วยการแก้ query ผิดที่
+ """
+ import logging
++import os
+ import uuid
+ from typing import Any
+ 
+@@ -31,8 +33,10 @@
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import require_admin_role, require_staff
++from app.core.config import get_settings
+ from app.db.session import get_db
+ from app.models.user import User
++from app.services import ai_settings, llm_client
+ 
+ router = APIRouter(prefix="/site-admin", tags=["site-admin"])
+ logger = logging.getLogger("course_advisor")
+@@ -277,31 +281,123 @@
+ # ── ตั้งค่า AI ───────────────────────────────────────────────────────
+ 
+ class AiSettingsIn(BaseModel):
+-    model: str = Field(min_length=1, max_length=255)
++    """
++    ค่าที่หน้าผู้ดูแลส่งมาได้ — มีแค่ "เลือกเจ้าไหน" กับ "รุ่นชื่ออะไร"
++
++    ไม่มีช่องสำหรับ API key หรือ base URL โดยเจตนา สองอย่างนั้นอยู่ที่ environment
++    ของเซิร์ฟเวอร์เท่านั้น ถ้าเก็บลงตารางนี้ คีย์จะไหลออกทาง GET ของเส้นทางนี้
++    ไปอยู่ในเบราว์เซอร์ของทุกคนที่เป็น staff และอยู่ใน log ของ proxy ทุกชั้นที่ผ่าน
++    """
++
++    # None = ล้างค่าที่เลือกไว้ กลับไปใช้ค่าจาก environment
++    provider: str | None = Field(default=None, pattern="^(gemini|ollama)$")
++    # None หรือค่าว่าง = ใช้รุ่นตั้งต้นของผู้ให้บริการนั้นจาก environment
++    model: str | None = Field(default=None, max_length=255)
++
++
++def _ai_settings_view(db: Session) -> dict:
++    """
++    สภาพปัจจุบันของสวิตช์ — แยก "ที่บันทึกไว้" ออกจาก "ที่ใช้จริง" ให้เห็นทั้งคู่
++
++    ต้องแยก เพราะสองค่านี้ต่างกันได้จริง เช่นเลือก Gemini ไว้แต่เซิร์ฟเวอร์ไม่มีคีย์
++    หน้าเว็บที่แสดงแต่ค่าที่บันทึกจะบอกว่าใช้ Gemini ทั้งที่คำตอบทุกข้อมาจากโมเดล
++    ในเครื่อง — ซึ่งเป็นอาการเดียวกับที่ทำให้สวิตช์นี้ดูเหมือนทำงานมาตลอด
++
++    ตั้งใจไม่คืนค่าคีย์ คืนแค่ว่ามีคีย์อยู่หรือไม่
++    """
++    choice = ai_settings.resolve(db)
++    row = db.execute(
++        text("select updated_at from web.ai_settings where id = 1")
++    ).mappings().first()
++    env = ai_settings.env_default()
++    return {
++        "saved": {
++            "provider": choice.saved_provider,
++            "model": choice.saved_model,
++            "updated_at": (dict(row).get("updated_at") if row else None),
++        },
++        "effective": {
++            "provider": choice.provider,
++            "model": choice.model,
++            "source": choice.source,
++            "honoured": choice.honoured,
++            "note": choice.note,
++        },
++        "defaults": {
++            "provider": env.provider,
++            "model": env.model,
++            "gemini_model": ai_settings.default_model_of("gemini"),
++            "ollama_model": ai_settings.default_model_of("ollama"),
++            "has_gemini_key": ai_settings.has_gemini_key(),
++        },
++        # สวิตช์นี้ไม่แตะฝั่ง embedding — แสดงไว้ให้เห็นว่าเวกเตอร์ไม่ถูกสร้างใหม่
++        "embedding": {"model": get_settings().embed_model, "changeable": False},
++        "providers": list(ai_settings.PROVIDERS),
++    }
+ 
+ 
+ @router.get("/ai-settings")
+ def get_ai_settings(_s: User = Depends(require_staff), db: Session = Depends(get_db)) -> dict:
+-    row = db.execute(
+-        text("select id, model, updated_at from web.ai_settings where id = 1")
+-    ).mappings().first()
+-    return dict(row) if row else {"id": 1, "model": None, "updated_at": None}
++    return _ai_settings_view(db)
+ 
+ 
+ @router.put("/ai-settings")
+ def update_ai_settings(payload: AiSettingsIn, staff: User = Depends(require_staff),
+                        db: Session = Depends(get_db)) -> dict:
+-    """ตารางนี้มีแถวเดียวโดยบังคับด้วย CHECK (id = 1) จึงเขียนแบบ upsert"""
+-    row = db.execute(
+-        text("""insert into web.ai_settings (id, model, updated_by)
+-                values (1, :model, :who)
++    """
++    บันทึกตัวเลือก แล้วทิ้งแคชให้คำขอถัดไปเห็นค่าใหม่ทันทีโดยไม่ต้อง restart
++
++    ตารางนี้มีแถวเดียวโดยบังคับด้วย CHECK (id = 1) จึงเขียนแบบ upsert
++
++    คืนสภาพที่ใช้จริงกลับไปด้วย ไม่ใช่คืนแค่ค่าที่เพิ่งเขียน เพราะ "เขียนสำเร็จ"
++    ไม่ได้แปลว่าค่านั้นถูกนำไปใช้ — หน้าเว็บต้องมีข้อมูลพอจะบอกผู้ใช้ตามจริง
++    """
++    model = (payload.model or "").strip() or None
++    db.execute(
++        text("""insert into web.ai_settings (id, provider, model, updated_by)
++                values (1, :provider, :model, :who)
+                 on conflict (id) do update set
+-                  model = excluded.model, updated_by = excluded.updated_by, updated_at = now()
+-                returning id, model, updated_at"""),
+-        {"model": payload.model, "who": str(staff.id)},
+-    ).mappings().first()
++                  provider = excluded.provider, model = excluded.model,
++                  updated_by = excluded.updated_by, updated_at = now()"""),
++        {"provider": payload.provider, "model": model, "who": str(staff.id)},
++    )
+     db.commit()
+-    return dict(row)
++    ai_settings.invalidate()
++    view = _ai_settings_view(db)
++    logger.info("ผู้ดูแล %s ตั้งโมเดลคำตอบเป็น %s/%s — ที่ใช้จริง %s/%s",
++                staff.id, payload.provider, model,
++                view["effective"]["provider"], view["effective"]["model"])
++    return view
++
++
++# จำนวนชิ้นเนื้อหาที่คำถามจริงหนึ่งข้อส่งเข้าโมเดล — ต้องเท่ากับที่ขั้นตอบใช้
++# ไม่งั้นการตรวจจะวัดงานที่เบากว่าของจริง แล้วรายงานว่าไหวทั้งที่ไม่ไหว
++_PROBE_CHUNKS = int(os.getenv("CHAT_TOP_K", "8"))
++
++
++@router.post("/ai-settings/check")
++def check_ai_settings(_s: User = Depends(require_staff), db: Session = Depends(get_db)) -> dict:
++    """
++    ยิงคำขอจริงไปที่ผู้ให้บริการที่ใช้อยู่ แล้วบอกผลตามที่เกิดขึ้น
++
++    แยกออกจาก GET เพราะการตรวจมีค่าใช้จ่าย (กินโควตาของผู้ให้บริการ และใช้เวลา
++    ได้หลายสิบวินาที) การเปิดหน้าเว็บเฉย ๆ ไม่ควรจุดชนวนมันทุกครั้ง
++
++    ส่งเนื้อหาจริงจากคลังเอกสารเข้าไปเท่าจำนวนชิ้นที่คำถามหนึ่งข้อใช้ เพื่อให้ขั้น
++    "ตอบทันเพดานเวลาไหม" วัดงานขนาดเท่าของจริง ไม่ใช่พรอมต์สั้นที่ใครก็ผ่าน
++
++    ผลจากที่นี่คือสิ่งเดียวที่ยืนยันว่าใช้งานได้ การบันทึกสำเร็จไม่ยืนยันอะไรเลย
++    """
++    sample = [r["content"] for r in db.execute(
++        text("select content from public.course_chunks "
++             "where content is not null and length(content) > 200 "
++             "order by id limit :n"),
++        {"n": _PROBE_CHUNKS},
++    ).mappings()]
++    view = _ai_settings_view(db)
++    view["check"] = llm_client.probe(ai_settings.resolve(db), sample)
++    view["check"]["sample_chars"] = sum(len(c) for c in sample)
++    return view
+ 
+ 
+ # ── ผู้ใช้และสิทธิ์ ───────────────────────────────────────────────────
+--- a/app/backend/app/schemas/chat.py
++++ b/app/backend/app/schemas/chat.py
+@@ -48,6 +48,16 @@
+     # ข้อความคำตอบจริง ซึ่งเป็นชุดย่อยของ citations · สองช่องมีพร้อมกันได้สำหรับคำตอบสายนี้
+     source: dict | None = None
+     sources: list[dict] = Field(default_factory=list)
++    # ผู้ให้บริการและรุ่นที่ถูกสั่งให้เขียนคำตอบนี้ เช่น "gemini:gemini-3.5-flash-lite"
++    #
++    # **None เมื่อคำตอบนี้ไม่ได้เรียกโมเดลเลย** — คำตอบจากฐานข้อมูลหลักสูตร คำตอบ
++    # ที่หยิบจากแคช ด่านถามย้อนกลับ และการปฏิเสธ ทั้งหมดไม่ได้เรียกโมเดล
++    # ค่านี้จึงเป็นช่องเดียวที่แยก "โมเดลตัวไหนตอบ" ออกจาก "ไม่ได้ใช้โมเดลตอบ" ได้
++    # ซึ่งจำเป็นตอนตรวจสวิตช์เลือกโมเดล เพราะคำถามที่ตอบจากแคชจะดูเหมือนผ่าน
++    # ทุกการตั้งค่าโดยไม่เคยแตะผู้ให้บริการเลย
++    #
++    # ไม่ใช่ตัวที่เขียนสำเร็จ — ดู services/llm_client.py::answer_model_label
++    answer_model: str | None = None
+ 
+ 
+ # --- ประวัติการสนทนา (แถบข้างในหน้าแชท) ---
+--- a/app/backend/app/main.py
++++ b/app/backend/app/main.py
+@@ -13,7 +13,6 @@
+ from app.db.session import engine
+ from app.services import llm_usage
+ 
+-from llm.connector import ChatMessage  # noqa: E402  (sys.path ตั้งโดย llm_client)
+ 
+ settings = get_settings()
+ 
+@@ -63,17 +62,20 @@
+     from app.services.llm_client import get_llm_connector
+ 
+     interval = settings.warmup_interval_minutes * 60
+-    connector = get_llm_connector()
+     while True:
+         try:
++            # ขอ connector ใหม่ทุกรอบ เพราะผู้ดูแลเปลี่ยนโมเดลที่ใช้ตอบได้ระหว่างทาง
++            # (ดู services/ai_settings.py) ถ้าถือตัวเดิมไว้ตั้งแต่ตอนเปิดเซิร์ฟเวอร์
++            # งานนี้จะอุ่นโมเดลที่เลิกใช้แล้ว และกันตัวที่ถูกเลิกใช้ไม่ให้ถูกปิด
++            connector = get_llm_connector()
+             # embed อย่างเดียวไม่พอ ต้องแตะโมเดลตอบคำถามด้วยเพราะนับเวลาแยกกัน
+             await asyncio.to_thread(connector.embed, "warmup")
+             # อุ่นโมเดลเขียนคำตอบเฉพาะตอนที่รันในเครื่อง — ถ้าใช้ Gemini การยิงคำขอ
+             # ทุก 20 นาทีมีแต่กินโควตาเปล่าๆ เพราะฝั่งนั้นไม่มีโมเดลให้ค้างในหน่วยความจำ
+-            if settings.llm_provider != "gemini":
+-                await asyncio.to_thread(
+-                    connector.chat, [ChatMessage(role="user", content="hi")], 0.0, False
+-                )
++            # มีเฉพาะเส้นทางที่ใช้โมเดลในเครื่องเป็นตัวหลักที่มี warm_chat ให้เรียก
++            warm = getattr(connector, "warm_chat", None)
++            if warm is not None:
++                await asyncio.to_thread(warm)
+             logger.debug("warmup ping สำเร็จ")
+         except Exception as e:  # noqa: BLE001 — งานเบื้องหลัง ห้ามทำให้เซิร์ฟเวอร์ล้ม
+             logger.warning("warmup ping ไม่สำเร็จ: %s", type(e).__name__)

@@ -1,0 +1,2 @@
+ก่อน: fallback_declined=2 gemini_ok=73 local_primary_attempt=71 local_primary_failed=52 local_primary_ok=15 stream_failed_midway=2 
+หลัง: fallback_declined=2 gemini_ok=83 local_primary_attempt=86 local_primary_failed=64 local_primary_ok=18 stream_failed_midway=2 
