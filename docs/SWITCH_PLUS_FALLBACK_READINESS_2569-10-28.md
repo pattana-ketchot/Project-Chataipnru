@@ -17,7 +17,7 @@ Ollama ยังไม่พร้อมรับคำถามที่ต้�
 | งาน | เดิมอยู่ที่ | สภาพ |
 |---|---|---|
 | สวิตช์เลือกโมเดล | worktree `D:/workspace/course-advisor-system-mko2` (branch `mko-phase2`) | **ยังไม่ commit** — 6 ไฟล์แก้ + 4 path ใหม่ |
-| ตัวสำรองในเครื่องมีเวลาใช้จริง | branch `claude/keen-haslett-a77a4b` commit `4cdff4c` | commit แล้ว ฐานเป็น `b78b3f8` |
+| ตัวสำรองในเครื่องมีเวลาใช้จริง | branch งานของรอบนี้ commit `605eb20` | commit แล้ว ฐานเป็น `b78b3f8` |
 
 `b78b3f8` เป็นบรรพบุรุษของ `mko-phase2` (`4d7a5a5`) จึง fast-forward ฐานของ patch ขึ้นมาที่
 `4d7a5a5` ก่อน แล้ว **รวมด้วย merge ไม่ใช่คัดทับ** เพราะทั้งสองงานแก้
@@ -25,9 +25,9 @@ Ollama ยังไม่พร้อมรับคำถามที่ต้�
 
 ```
 4d7a5a5  (= mko-phase2 = production)
- ├── 4cdff4c  fix: ตัวสำรองในเครื่องต้องมีเวลาใช้จริง        (ของรอบก่อน)
- ├── 49734bf  feat: สวิตช์เลือกโมเดล (ยกจาก worktree mko2 ตามสภาพ ไม่แก้เนื้อหา)
- └── 42b3912  merge: รวมสองงาน   ← ชุดที่ขออนุมัติ
+ ├── 605eb20  fix: ตัวสำรองในเครื่องต้องมีเวลาใช้จริง        (ของรอบก่อน)
+ ├── 8c76861  feat: สวิตช์เลือกโมเดล (ยกจาก worktree mko2 ตามสภาพ ไม่แก้เนื้อหา)
+ └── bbc45eb  merge: รวมสองงาน   ← ชุดที่ขออนุมัติ
 ```
 
 ชนกันจุดเดียวคือบล็อก `from llm.connector import ...` แก้โดยรวมรายการ import ของทั้งสองฝั่ง
@@ -234,8 +234,8 @@ backend ของ production ไม่ได้จำกัด cpu/memory ไว
 
 | ของที่ส่งไปตรวจ | ที่มา | ด่านตรวจ |
 |---|---|---|
-| ชุดซ้อนอิมเมจ 11 ไฟล์ | **release `7392006`** (ไม่เปลี่ยนเลยใน `a97e191` และ commit ถัดมา — `git diff 7392006..HEAD -- docs/raw/` ว่าง) | `sha256sum -c SHA256SUMS` **ผ่าน 11/11 บนเซิร์ฟเวอร์** · เทียบ hash ของไฟล์ในอิมเมจที่ build แล้วอีกชั้น **ตรงทั้ง 11 ไฟล์** |
-| สคริปต์ตรวจ `eval/model_switch_api_check.py` | **commit `e27bc2c`** (รุ่นหลังสุด — แก้การรอรอบเขียนตัวนับและคำถามของโหมด outage ระหว่างรันจริง) | `sha256 = 5f3ba3fd782aa8b409e8605ab2bdfb5998a8fd2664089e624f92671842d47f2a` ตรงกันทั้งบนเครื่องพัฒนาและในคอนเทนเนอร์ |
+| ชุดซ้อนอิมเมจ 11 ไฟล์ | **release `213d65e`** (ไม่เปลี่ยนเลยใน `92b7346` และ commit ถัดมา — `git diff 213d65e..HEAD -- docs/raw/` ว่าง) | `sha256sum -c SHA256SUMS` **ผ่าน 11/11 บนเซิร์ฟเวอร์** · เทียบ hash ของไฟล์ในอิมเมจที่ build แล้วอีกชั้น **ตรงทั้ง 11 ไฟล์** |
+| สคริปต์ตรวจ `eval/model_switch_api_check.py` | **รุ่นหลังสุดของ branch นี้** (แก้การรอรอบเขียนตัวนับและคำถามของโหมด outage ระหว่างรันจริง) — ยืนยันตัวไฟล์ด้วย sha256 ข้างขวา ไม่ใช่ด้วยเลข commit | `sha256 = 5f3ba3fd782aa8b409e8605ab2bdfb5998a8fd2664089e624f92671842d47f2a` ตรงกันทั้งบนเครื่องพัฒนาและในคอนเทนเนอร์ |
 
 อิมเมจที่ build ใช้ **tag ของตัวเอง** `switch-check-2569-10-28` ไม่ใช่ tag ของ release
 และลบทิ้งหลังตรวจเสร็จ · **production ไม่ถูกแตะ**: backend ยังเป็น
@@ -305,7 +305,7 @@ backend ของ production ไม่ได้จำกัด cpu/memory ไว
 
 ### ขั้นตอนที่ใช้ (รันซ้ำได้)
 
-ชุดที่ใช้คือ release `7392006` + สคริปต์ตรวจจาก `e27bc2c` · `eval/model_switch_api_check.py`
+ชุดที่ใช้คือ release `213d65e` + สคริปต์ตรวจรุ่นหลังสุดของ branch นี้ · `eval/model_switch_api_check.py`
 มีด่านกันไว้สองชั้น: ปฏิเสธถ้าชื่อฐาน (หรือชื่อฐานใน `SWITCH_CHECK_DSN`) ไม่ลงท้าย `_test`
 และปฏิเสธถ้า `--api` ไม่ใช่ localhost
 
@@ -315,14 +315,14 @@ backend ของ production ไม่ได้จำกัด cpu/memory ไว
 
 ```bash
 # 1) บนเครื่องพัฒนา — ทำชุดจาก commit โดยไม่ให้ CRLF ติดไป (ดูกับดักในหัวข้อ 6)
-# e27bc2c มีชุด release 7392006 อยู่ครบโดยไม่เปลี่ยนแม้ไบต์เดียว (ตรวจด้วย SHA256SUMS)
+# branch นี้มีชุด release 213d65e อยู่ครบโดยไม่เปลี่ยนแม้ไบต์เดียว (ตรวจด้วย SHA256SUMS)
 # และมีสคริปต์ตรวจรุ่นหลังสุด จึงส่งไฟล์เดียว
-git -c core.autocrlf=false archive --format=tar.gz -o /tmp/switch-e27bc2c.tar.gz e27bc2c
-scp -i <ไฟล์กุญแจ> /tmp/switch-e27bc2c.tar.gz ubuntu@<IP>:~/
+git -c core.autocrlf=false archive --format=tar.gz -o /tmp/switch.tar.gz <branch ของงานนี้>
+scp -i <ไฟล์กุญแจ> /tmp/switch.tar.gz ubuntu@<IP>:~/
 
 # 2) บนเซิร์ฟเวอร์ — แตกชุดและตรวจด่าน hash ก่อน build
-mkdir -p ~/switch-e27bc2c && tar xzf ~/switch-e27bc2c.tar.gz -C ~/switch-e27bc2c
-cd ~/switch-e27bc2c/docs/raw/model-switch-2569-10-28/backend-release
+mkdir -p ~/switch && tar xzf ~/switch.tar.gz -C ~/switch
+cd ~/switch/docs/raw/model-switch-2569-10-28/backend-release
 sha256sum -c SHA256SUMS                       # ต้องผ่านครบ 11 ไฟล์
 
 # 3) build อิมเมจ "สำหรับตรวจ" ด้วย tag ของตัวเอง ไม่ใช่ tag ของ release
@@ -341,7 +341,7 @@ docker run -d --name switch-check --network course-advisor-system_default \
   course-advisor-system-backend:switch-check-2569-10-28
 
 # 6) ข้อที่ 7 — สวิตช์ Gemini จริง
-docker cp ~/switch-e27bc2c/eval/model_switch_api_check.py switch-check:/app/eval_check.py
+docker cp ~/switch/eval/model_switch_api_check.py switch-check:/app/eval_check.py
 docker exec -w /app -e PYTHONPATH=/app/backend \
   -e SWITCH_CHECK_DSN='postgresql://postgres:<รหัส>@postgres:5432/course_advisor_test' \
   switch-check python eval_check.py --api http://127.0.0.1:8000 --mode gemini
@@ -356,7 +356,7 @@ docker run -d --name switch-check-outage --network course-advisor-system_default
   -e CHAT_TOP_K=25 \
   --cpus <เท่า production> --memory <เท่า production> \
   course-advisor-system-backend:switch-check-2569-10-28
-docker cp ~/switch-e27bc2c/eval/model_switch_api_check.py switch-check-outage:/app/eval_check.py
+docker cp ~/switch/eval/model_switch_api_check.py switch-check-outage:/app/eval_check.py
 docker exec -w /app -e PYTHONPATH=/app/backend \
   -e SWITCH_CHECK_DSN='postgresql://postgres:<รหัส>@postgres:5432/course_advisor_test' \
   switch-check-outage python eval_check.py --api http://127.0.0.1:8000 --mode outage
