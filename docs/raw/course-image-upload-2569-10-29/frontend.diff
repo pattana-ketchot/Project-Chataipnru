@@ -1,0 +1,163 @@
+diff --git a/src/pages/Admin/CourseForm.jsx b/src/pages/Admin/CourseForm.jsx
+index 208cec6..11ac59d 100644
+--- a/src/pages/Admin/CourseForm.jsx
++++ b/src/pages/Admin/CourseForm.jsx
+@@ -4,8 +4,8 @@ import { apiJson } from '../../lib/apiAuth'
+ import { useAdminAuth } from '../../hooks/useAdminAuth'
+ import AdminLayout from '../../components/admin/AdminLayout'
+ import { useToast } from '../../components/admin/Toast'
+-import { uploadFacultyPhoto, uploadCourseDocument, removeCourseFile, formatFileSize } from '../../lib/courseStorage'
+-import { ArrowLeft, AlertCircle, Plus, Trash2, Upload, Loader2, FileText, User, Users, Info, FileEdit } from 'lucide-react'
++import { uploadFacultyPhoto, uploadCourseLogo, uploadCourseDocument, removeCourseFile, formatFileSize } from '../../lib/courseStorage'
++import { ArrowLeft, AlertCircle, Plus, Trash2, Upload, Loader2, FileText, User, Users, Info, FileEdit, Image as ImageIcon } from 'lucide-react'
+ 
+ const FORM_TABS = [
+   { id: 'basic', label: 'ข้อมูลหลักสูตร', icon: FileEdit },
+@@ -16,6 +16,13 @@ const FORM_TABS = [
+ // ตัวแบ่งบรรทัดของช่องที่กรอกเป็นรายการ — ประกาศไว้ที่เดียวเพื่อไม่ให้เขียนผิดคนละแบบ
+ const LINE_BREAK = String.fromCharCode(10)
+ 
++// รูปประจำสาขา — ชนิดและขนาดที่รับ
++//
++// ด่านจริงอยู่ที่หลังบ้าน (ตรวจลายเซ็นไบต์แรกของไฟล์ ไม่ใช่นามสกุล และมีเพดานของหมวดนี้
++// เป็น 5 MB) ด่านตรงนี้มีไว้บอกผู้ใช้ทันทีโดยไม่ต้องรออัปโหลดเสร็จก่อนถึงจะรู้ว่าไม่ผ่าน
++const LOGO_MIME = { 'image/jpeg': 'JPG', 'image/png': 'PNG', 'image/webp': 'WebP' }
++const LOGO_MAX_BYTES = 5 * 1024 * 1024
++
+ const LEVEL_OPTIONS = ['ปริญญาตรี', 'ปริญญาโท', 'ปริญญาเอก', 'ประกาศนียบัตรบัณฑิต', 'อนุปริญญา']
+ const DURATION_OPTIONS = ['2 ปี', '3 ปี', '4 ปี', '4.5 ปี', '5 ปี', '6 ปี']
+ 
+@@ -91,6 +98,10 @@ const CourseFormContent = ({ user }) => {
+   const [saving, setSaving] = useState(false)
+   const [error, setError] = useState('')
+   const [activeTab, setActiveTab] = useState('basic')
++  // สถานะของการอัปโหลดรูปประจำสาขา — แยกจาก error ของทั้งฟอร์ม เพราะต้องขึ้นตรงช่องนั้น
++  const [logoUploading, setLogoUploading] = useState(false)
++  const [logoError, setLogoError] = useState('')
++  const [logoBroken, setLogoBroken] = useState(false)
+ 
+   useEffect(() => {
+     if (!isEdit) return
+@@ -159,6 +170,43 @@ const CourseFormContent = ({ user }) => {
+     }))
+   }
+ 
++  // รูปประจำสาขา: อัปโหลดแล้วเติม URL ลงช่องเดิม
++  //
++  // **ยังไม่เปลี่ยนรูปของหลักสูตรจนกว่าจะกดบันทึกสำเร็จ** — ที่นี่แก้แต่ค่าในฟอร์ม
++  // ไฟล์ที่อัปโหลดถูกตั้งชื่อจาก hash ของเนื้อไฟล์ จึงไม่ทับของเดิมและไม่ชนกันเอง
++  // ถ้าเลือกรูปแล้วเปลี่ยนใจ เลือกใหม่หรือแก้ URL เองได้ก่อนบันทึก
++  const handleLogoFileChange = async (file, input) => {
++    // ล้างค่าของ input ทันที เพื่อให้เลือก "ไฟล์เดิม" ซ้ำแล้วยัง onChange อีกครั้ง
++    if (input) input.value = ''
++    if (!file) return
++    setLogoError('')
++    if (!LOGO_MIME[file.type]) {
++      setLogoError(`รับเฉพาะไฟล์ ${Object.values(LOGO_MIME).join(', ')} — ` +
++        `ไฟล์ที่เลือกเป็น ${file.type || 'ชนิดที่อ่านไม่ออก'}`)
++      return
++    }
++    if (file.size > LOGO_MAX_BYTES) {
++      setLogoError(`ไฟล์ขนาด ${formatFileSize(file.size)} ใหญ่เกินเพดาน 5 MB — ย่อรูปก่อนแล้วลองใหม่`)
++      return
++    }
++    setLogoUploading(true)
++    try {
++      const uploaded = await uploadCourseLogo(file)
++      setForm((prev) => ({ ...prev, logo: uploaded.url }))
++      setLogoBroken(false)
++    } catch (err) {
++      setLogoError('อัปโหลดรูปไม่สำเร็จ: ' + err.message)
++    } finally {
++      setLogoUploading(false)
++    }
++  }
++
++  const handleLogoUrlChange = (e) => {
++    setLogoError('')
++    setLogoBroken(false)
++    handleChange(e)
++  }
++
+   const handleFacultyPhotoChange = async (index, file) => {
+     if (!file) return
+     const prevPath = form.faculty[index]?.image_path
+@@ -384,14 +432,70 @@ const CourseFormContent = ({ user }) => {
+         </div>
+ 
+         <div>
+-          <label className="block text-sm font-medium text-gray-700 mb-1.5">URL โลโก้/รูปภาพ</label>
+-          <input
+-            name="logo"
+-            value={form.logo}
+-            onChange={handleChange}
+-            placeholder="/assets/courses/example.png"
+-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
+-          />
++          <label className="block text-sm font-medium text-gray-700 mb-1.5">รูปประจำสาขา</label>
++          <div className="flex items-start gap-3">
++            {/* ตัวอย่างรูป — โหลดจาก URL จริงที่จะถูกบันทึก ถ้าโหลดไม่ขึ้นแปลว่าหน้าเว็บ
++                ก็จะแสดงไม่ขึ้นเหมือนกัน จึงบอกผู้ใช้ตรงนี้เลย ไม่ปล่อยให้ไปเจอทีหลัง */}
++            <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
++              {logoUploading ? (
++                <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
++              ) : form.logo && !logoBroken ? (
++                <img
++                  src={form.logo}
++                  alt="ตัวอย่างรูปประจำสาขา"
++                  className="h-full w-full object-cover"
++                  onError={() => setLogoBroken(true)}
++                  onLoad={() => setLogoBroken(false)}
++                />
++              ) : (
++                <ImageIcon className="w-7 h-7 text-gray-300" />
++              )}
++            </div>
++
++            <div className="flex-1 space-y-2">
++              <div className="flex flex-wrap items-center gap-2">
++                <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-xs font-medium transition-colors ${
++                  logoUploading ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-50 cursor-pointer'
++                }`}>
++                  <Upload className="w-3.5 h-3.5" />
++                  {logoUploading ? 'กำลังอัปโหลด…' : form.logo ? 'เปลี่ยนรูป' : 'เลือกรูปจากคอมพิวเตอร์'}
++                  <input
++                    type="file"
++                    accept="image/jpeg,image/png,image/webp"
++                    className="hidden"
++                    disabled={logoUploading}
++                    onChange={(e) => handleLogoFileChange(e.target.files?.[0], e.target)}
++                  />
++                </label>
++                <span className="text-xs text-gray-400">JPG, PNG หรือ WebP ไม่เกิน 5 MB</span>
++              </div>
++
++              {/* ยังวาง URL เองได้เหมือนเดิม — รูปที่โฮสต์ไว้ที่อื่นหรือไฟล์ใน /assets ยังใช้ได้ */}
++              <input
++                name="logo"
++                value={form.logo}
++                onChange={handleLogoUrlChange}
++                placeholder="หรือวาง URL เอง เช่น /assets/courses/example.png"
++                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pnru"
++              />
++
++              {logoError ? (
++                <p className="flex items-start gap-1.5 text-xs text-red-600">
++                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
++                  {logoError}
++                </p>
++              ) : form.logo && logoBroken ? (
++                <p className="flex items-start gap-1.5 text-xs text-amber-600">
++                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
++                  เปิดรูปจาก URL นี้ไม่ได้ — ตรวจ URL อีกครั้ง หรือกดเลือกรูปจากคอมพิวเตอร์
++                </p>
++              ) : (
++                <p className="text-xs text-gray-400">
++                  รูปบนหน้าเว็บจะเปลี่ยนเมื่อกดบันทึกสำเร็จเท่านั้น · รูปเดิมไม่ถูกลบหรือเขียนทับ
++                </p>
++              )}
++            </div>
++          </div>
+         </div>
+ 
+         <div>
