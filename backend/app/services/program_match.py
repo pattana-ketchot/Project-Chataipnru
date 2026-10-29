@@ -58,7 +58,7 @@ import json
 import logging
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -130,6 +130,14 @@ class ProgramMatch:
     match_percent: int    # ค่าเดียวกันที่แปลงเป็นเปอร์เซ็นต์เพื่อแสดงผล
     rationale: str
     evidence_chunk_ids: list[uuid.UUID]
+    # ที่มาของคะแนนใบนี้ — ค่าที่ "คำนวณจริง" ทั้งหมด ไม่มีตัวเลขใดที่โมเดลเป็นคนให้
+    #
+    # เปิดออกมาเพื่อให้หน้าเว็บอธิบายได้ว่าเปอร์เซ็นต์มาจากไหน · ไม่มีการคำนวณใหม่
+    # ไม่มีการเรียกโมเดลเพิ่ม และสูตรกับอันดับไม่เปลี่ยนแม้แต่ค่าเดียว
+    breakdown: dict = field(default_factory=dict)
+    # หน้าเอกสารที่ถูกใช้เป็นหลักฐานของ **หลักสูตรใบนี้เท่านั้น**
+    # ชิ้นหลักฐานถูกแบ่งตาม course_id มาตั้งแต่ชั้น SQL จึงข้ามสาขาหรือข้ามฉบับไม่ได้
+    evidence: list[dict] = field(default_factory=list)
 
 
 def build_profile_text(answers: dict) -> str:
@@ -242,7 +250,8 @@ def score_all_programs(db: Session, profile_embedding: list[float]) -> list[dict
             SELECT r.course_id,
                    c.title,
                    avg(r.sim) AS score,
-                   array_agg(r.chunk_id ORDER BY r.sim DESC) AS chunk_ids
+                   array_agg(r.chunk_id ORDER BY r.sim DESC) AS chunk_ids,
+                   array_agg(r.sim ORDER BY r.sim DESC) AS sims
             FROM ranked r
             JOIN courses c ON c.id = r.course_id
             WHERE r.rn <= :k
@@ -252,7 +261,8 @@ def score_all_programs(db: Session, profile_embedding: list[float]) -> list[dict
         {"q": str(profile_embedding), "k": CHUNKS_PER_COURSE},
     ).all()
     return [
-        {"course_id": r.course_id, "title": r.title, "score": float(r.score), "chunk_ids": list(r.chunk_ids)}
+        {"course_id": r.course_id, "title": r.title, "score": float(r.score),
+         "chunk_ids": list(r.chunk_ids), "sims": [float(x) for x in r.sims]}
         for r in rows
     ]
 
@@ -481,9 +491,10 @@ def match_programs(
     # ตอบว่าสนใจสิ่งแวดล้อมควรถูกจับคู่กับหลักสูตรที่ชื่อมีคำว่าสิ่งแวดล้อมตั้งแต่ต้น
     titles = _title_vectors(db, connector)
     for s in scored:
-        s["score"] = (1 - _TITLE_WEIGHT) * s["score"] + _TITLE_WEIGHT * _cosine(
-            profile_vec, titles[s["course_id"]]
-        )
+        # เก็บสององค์ประกอบไว้เพื่ออธิบายที่มาของคะแนน — การผสมยังเป็นสูตรเดิมบรรทัดเดิม
+        s["content_similarity"] = s["score"]
+        s["title_similarity"] = _cosine(profile_vec, titles[s["course_id"]])
+        s["score"] = (1 - _TITLE_WEIGHT) * s["score"] + _TITLE_WEIGHT * s["title_similarity"]
     scored.sort(key=lambda s: s["score"], reverse=True)
 
     # ตัดหลักสูตรที่คณะไม่ได้เปิดรับสมัครแล้วออกก่อนจัดอันดับให้ผู้ใช้เห็น
@@ -518,6 +529,10 @@ def match_programs(
     ]
     rationales = _generate_rationales(connector, profile_text, evidence)
 
+    # ชื่อไฟล์กับเลขหน้าของชิ้นที่ใช้เป็นหลักฐาน — ถามครั้งเดียวสำหรับทุกใบ
+    # ไม่ใช่ใบละครั้ง และไม่เรียกโมเดลเพิ่มแม้แต่ครั้งเดียว
+    sources = _evidence_sources(db, [i for s in scored for i in s["chunk_ids"][:CHUNKS_PER_COURSE]])
+
     return [
         ProgramMatch(
             course_id=s["course_id"],
@@ -526,9 +541,63 @@ def match_programs(
             match_percent=_to_percent(s["score"]),
             rationale=_rationale_for(rationales, s["title"]),
             evidence_chunk_ids=s["chunk_ids"][:CHUNKS_PER_COURSE],
+            breakdown=_breakdown_of(s),
+            evidence=_evidence_of(s, sources),
         )
         for s in scored
     ]
+
+
+def _breakdown_of(s: dict) -> dict:
+    """
+    ที่มาของคะแนนใบหนึ่ง — ทุกค่าเป็นค่าที่คำนวณไปแล้ว ไม่ได้คำนวณใหม่ตรงนี้
+
+    ค่าที่ส่งออกพอให้คำนวณย้อนกลับได้เอง:
+        blended = (1 - title_weight) * content + title_weight * title
+        percent = clamp((blended - floor) / (ceiling - floor) * 100)
+    """
+    return {
+        "content_similarity": round(s["content_similarity"], 4),
+        "title_similarity": round(s["title_similarity"], 4),
+        "title_weight": _TITLE_WEIGHT,
+        "blended_score": round(s["score"], 4),
+        "percent": _to_percent(s["score"]),
+        "percent_floor": _PCT_FLOOR,
+        "percent_ceiling": _PCT_CEILING,
+        "chunks_used": len(s["chunk_ids"][:CHUNKS_PER_COURSE]),
+    }
+
+
+def _evidence_sources(db: Session, chunk_ids: list) -> dict:
+    """(ชื่อไฟล์, เลขหน้า) ของชิ้นหลักฐาน — คีย์เป็น chunk_id เป็นสตริง"""
+    if not chunk_ids:
+        return {}
+    rows = db.execute(
+        text("""
+            SELECT ch.id AS chunk_id, ch.page_number, d.original_filename AS file
+              FROM course_chunks ch
+              LEFT JOIN course_documents d ON d.id = ch.document_id
+             WHERE ch.id = ANY(:ids)
+        """),
+        {"ids": [str(i) for i in chunk_ids]},
+    ).mappings().all()
+    return {str(r["chunk_id"]): {"file": r["file"], "page": r["page_number"]} for r in rows}
+
+
+def _evidence_of(s: dict, sources: dict) -> list[dict]:
+    """
+    หน้าเอกสารที่ใช้เป็นหลักฐานของใบนี้ พร้อมความคล้ายรายชิ้นที่วัดได้จริง
+
+    ชิ้นทั้งหมดมาจาก chunk_ids ของหลักสูตรใบนี้ ซึ่งถูกแบ่งตาม course_id ตั้งแต่ใน SQL
+    จึงเป็นเอกสารของสาขานี้และฉบับนี้เสมอ ข้ามสาขาหรือข้ามฉบับไม่ได้เชิงโครงสร้าง
+    """
+    out: list[dict] = []
+    for chunk_id, sim in zip(s["chunk_ids"][:CHUNKS_PER_COURSE], s.get("sims", [])):
+        source = sources.get(str(chunk_id))
+        if not source or not source.get("file"):
+            continue
+        out.append({"file": source["file"], "page": source["page"], "similarity": round(sim, 4)})
+    return out
 
 
 def _verified_rationales(raw: dict, evidence: list[dict]) -> dict[str, str]:

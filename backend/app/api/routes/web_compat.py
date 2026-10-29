@@ -33,10 +33,12 @@ from app.api.deps import web_rate_limiter
 from app.db.session import get_db
 from app.services.chat import PriorTurn, stream_answer
 from app.services import ai_settings
-from app.services.llm_client import chat_model_used, connector_for, reset_chat_model
+from app.services.llm_client import (chat_model_used, connector_for, embed_model_used,
+                                     reset_chat_model)
 from app.services.curriculum_facts import LIST_FIELDS
 from app.services.program_compare import compare_programs
-from app.services.program_match import build_profile_text, confidence_of, match_programs
+from app.services.program_match import (CHUNKS_PER_COURSE, build_match_query, build_profile_text,
+                                        confidence_of, match_programs)
 from app.services.program_names import program_about, program_facts
 from app.services.course_scope import degree_level_of, degree_of_title
 from app.services.web_compat import canonical_labels, label_of, match_by_title, normalise_title, shared_user
@@ -505,8 +507,42 @@ def _user_message(exc: Exception) -> str:
     return (getattr(exc, "user_text", None) or "").strip() or BUSY
 
 
-def _engine(explained: bool, scoring: str | None = None) -> dict:
-    return {"explanation": chat_model_used() if explained else None, "scoring": scoring}
+def _engine(explained: bool, scoring: str | None = None, embedded: bool = False) -> dict:
+    return {
+        "explanation": chat_model_used() if explained else None,
+        "scoring": scoring,
+        # รุ่นที่เทียบความคล้ายให้ผลชุดนี้จริง — ส่งเฉพาะผลที่คะแนนมาจากเวกเตอร์
+        # ผลที่ไม่ได้ใช้เวกเตอร์ต้องไม่ได้ป้ายนี้ติดไป
+        "embedding": embed_model_used() if embedded else None,
+    }
+
+
+# ช่องคำตอบที่ "เข้าเวกเตอร์" จริง เทียบกับช่องที่ใช้เฉพาะตอนให้โมเดลเขียนคำอธิบาย
+#
+# แยกไว้ที่นี่เพราะหลังบ้านเป็นฝ่ายรู้ความจริงข้อนี้ (ดู program_match.build_match_query)
+# หน้าเว็บเดาเองไม่ได้ และถ้าวันหนึ่งสูตรเปลี่ยนช่อง ที่นี่ต้องเปลี่ยนตามในที่เดียว
+_SCORED_FIELDS = (
+    ("favorite_subjects", "วิชาที่ชอบ"),
+    ("interests", "ความสนใจ"),
+    ("aptitudes", "ความถนัด"),
+    ("career_goal", "เป้าหมายอาชีพ"),
+)
+_UNSCORED_FIELDS = (
+    ("study_track", "สายการเรียน"),
+    ("work_environment", "สภาพแวดล้อมการทำงาน"),
+)
+
+
+def _answer_rows(answers: dict, fields: tuple) -> list[dict]:
+    """คำตอบที่ผู้ใช้กรอกไว้จริงในช่องชุดหนึ่ง — ช่องที่ว่างไม่ต้องส่งไปให้หน้าเว็บ"""
+    rows = []
+    for key, label in fields:
+        value = answers.get(key)
+        values = [value] if isinstance(value, str) else list(value or [])
+        values = [v for v in values if v]
+        if values:
+            rows.append({"field": key, "label": label, "values": values})
+    return rows
 
 
 def _rank_key(title: str) -> tuple[str, str | None]:
@@ -668,6 +704,16 @@ def _recommend_major(payload: WebRecommendRequest, db: Session) -> dict:
             "courseId": web_id,
             "matchScore": m.match_percent,
             "reason": reason,
+            # ที่มาของคะแนนใบนี้ — ค่าที่ระบบคำนวณจริงล้วน ๆ ไม่มีตัวเลขใดมาจากโมเดล
+            # และหน้าเว็บคำนวณย้อนกลับเองได้จากค่าชุดนี้
+            "why": {
+                **m.breakdown,
+                "evidence": m.evidence,
+                # เหตุผลใบนี้เป็นข้อความที่โมเดลเขียนจริงไหม — ใช้ตัดสินว่าจะติดป้าย
+                # ชื่อรุ่นให้ใบนี้ได้หรือไม่ ไม่ใช่เดาจากว่ามีข้อความอยู่หรือเปล่า
+                "reason_from_model": reason not in (NO_REASON, NO_EVIDENCE_REASON),
+                "no_evidence": reason == NO_EVIDENCE_REASON,
+            },
         }
 
     low = confidence_of(matches) == "low"
@@ -691,5 +737,15 @@ def _recommend_major(payload: WebRecommendRequest, db: Session) -> dict:
         "profileText": build_profile_text(answers),
         # คะแนนไม่ได้มาจากโมเดลที่เขียนคำอธิบาย — มาจากความใกล้เคียงของเวกเตอร์กับ
         # เกณฑ์ของระบบ (ตัดหลักสูตรที่ปิดรับ ยุบฉบับซ้ำ ถ่วงน้ำหนักชื่อหลักสูตร)
-        "engine": _engine(explained, scoring=SCORING_EMBEDDING_RULES),
+        "engine": _engine(explained, scoring=SCORING_EMBEDDING_RULES, embedded=True),
+        # ที่มาของคะแนนที่เป็นของ "ทุกใบร่วมกัน" — ส่วนที่เป็นของแต่ละใบอยู่ใน card["why"]
+        #
+        # ผู้ใช้เทียบย้อนกลับได้ว่าคำตอบข้อไหนเข้าไปอยู่ในเวกเตอร์ และข้อไหนไม่ได้เข้า
+        # ไม่มีการคำนวณใหม่ตรงนี้ ทุกค่ามาจากขั้นจัดอันดับที่เพิ่งรันไป
+        "scoringDetail": {
+            "queryText": build_match_query(answers),
+            "answersUsed": _answer_rows(answers, _SCORED_FIELDS),
+            "answersNotScored": _answer_rows(answers, _UNSCORED_FIELDS),
+            "chunksPerCourse": CHUNKS_PER_COURSE,
+        },
     }

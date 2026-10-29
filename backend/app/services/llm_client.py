@@ -87,10 +87,18 @@ class _SplitConnector:
 
     # --- ฝั่ง embedding: โมเดลในเครื่อง ---
     def embed(self, text):
-        return self._embedder.embed(text)
+        out = self._embedder.embed(text)
+        self._note_embedder()
+        return out
 
     def embed_batch(self, texts):
-        return self._embedder.embed_batch(texts)
+        out = self._embedder.embed_batch(texts)
+        self._note_embedder()
+        return out
+
+    def _note_embedder(self) -> None:
+        """บันทึกรุ่นที่แปลงเวกเตอร์ให้คำขอนี้ — เรียกหลังสำเร็จเท่านั้น"""
+        record_embed_model(EMBED_PROVIDER, self.embed_model)
 
     # --- ฝั่งเขียนคำตอบ: ใช้เจ้าหลักก่อน ล้มแล้วค่อยตกมาที่โมเดลในเครื่อง ---
     def _fallback_kwargs(self, kwargs: dict) -> dict:
@@ -199,6 +207,11 @@ class _SplitConnector:
         return self._chatter.chat_model
 
     @property
+    def embed_model(self) -> str:
+        """รุ่นที่แปลงข้อความเป็นเวกเตอร์จริง — คนละตัวกับรุ่นที่เขียนคำตอบเสมอ"""
+        return getattr(self._embedder, "embed_model", "")
+
+    @property
     def answer_token_cap(self) -> int:
         return self._chatter.answer_token_cap
 
@@ -223,10 +236,18 @@ class _LocalPrimary:
         self._local = local
 
     def embed(self, text):
-        return self._local.embed(text)
+        out = self._local.embed(text)
+        record_embed_model(EMBED_PROVIDER, self.embed_model)
+        return out
 
     def embed_batch(self, texts):
-        return self._local.embed_batch(texts)
+        out = self._local.embed_batch(texts)
+        record_embed_model(EMBED_PROVIDER, self.embed_model)
+        return out
+
+    @property
+    def embed_model(self) -> str:
+        return getattr(self._local, "embed_model", "")
 
     def chat(self, *args, **kwargs):
         llm_usage.record("local_primary_attempt")
@@ -417,14 +438,42 @@ def record_chat_model(provider: str, model: str) -> None:
 
 
 def reset_chat_model() -> None:
-    """ล้างค่าก่อนเริ่มงานของคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกรายงานว่าเป็นของคำขอนี้"""
+    """
+    ล้างค่าก่อนเริ่มงานของคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกรายงานว่าเป็นของคำขอนี้
+
+    ล้างรุ่นที่เทียบความคล้ายด้วย เพราะเป็นจุดเริ่มคำขอจุดเดียวกัน
+    """
     _chat_model_used.set(None)
+    _embed_model_used.set(None)
     reset_answered_model()
 
 
 def chat_model_used() -> dict | None:
     """{'provider', 'model'} ของการเขียนข้อความครั้งล่าสุดในคำขอนี้ · None = ไม่ได้เรียกโมเดล"""
     pair = _chat_model_used.get()
+    return None if pair is None else {"provider": pair[0], "model": pair[1]}
+
+
+# รุ่นที่ "แปลงคำตอบเป็นเวกเตอร์ให้คำขอนี้จริง" — บันทึกตอนเรียกสำเร็จเหมือนกัน
+#
+# คนละตัวกับรุ่นที่เขียนข้อความเสมอ และเป็นโมเดลในเครื่องโดยโครงสร้าง เพราะเวกเตอร์
+# ของเอกสารทั้งคลังถูกสร้างด้วยรุ่นนี้และคอลัมน์ pgvector ตรึงจำนวนมิติไว้ (ดู _build_ollama)
+#
+# ไม่ได้เทียบความคล้ายเลยในคำขอนี้ = None ซึ่งต้องไม่ถูกแปลงเป็นชื่อรุ่นค่าตั้งต้น
+EMBED_PROVIDER = "ollama"
+
+_embed_model_used: ContextVar[tuple[str, str] | None] = ContextVar(
+    "embed_model_used", default=None)
+
+
+def record_embed_model(provider: str, model: str) -> None:
+    """บันทึกว่ารุ่นไหนเพิ่งแปลงเวกเตอร์สำเร็จให้คำขอนี้ — เรียกหลังได้ผลลัพธ์เท่านั้น"""
+    _embed_model_used.set((provider or "unknown", model or "?"))
+
+
+def embed_model_used() -> dict | None:
+    """{'provider', 'model'} ของการเทียบความคล้ายในคำขอนี้ · None = ไม่ได้ใช้เวกเตอร์"""
+    pair = _embed_model_used.get()
     return None if pair is None else {"provider": pair[0], "model": pair[1]}
 
 

@@ -183,9 +183,16 @@ class ResultModelLabelTests(unittest.TestCase):
         self.assertEqual(engine["scoring"], "embedding_and_rules")
 
     def test_ไม่มีคีย์หรือข้อมูลการเชื่อมต่อหลุดไปกับผล(self):
+        """
+        เกณฑ์ข้อนี้ถูกแก้เมื่อ 29 ต.ค. 2569 — เพิ่ม "embedding" เข้าไปในชุดคีย์ที่ยอมรับ
+
+        ของใหม่คือป้ายชื่อรุ่นที่เทียบความคล้าย (ดู test_score_detail.py) ซึ่งเป็นชื่อรุ่น
+        เหมือนอีกสองช่อง ไม่ใช่คีย์หรือข้อมูลการเชื่อมต่อ · ข้อตรวจเดิมที่ว่า "ไม่มีช่อง
+        อื่นหลุดออกไป" ยังอยู่ครบ เพราะยังเทียบชุดคีย์แบบตรงตัวทั้งชั้นนอกและชั้นใน
+        """
         llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash")).chat([])
         engine = _engine(explained=True, scoring="embedding_and_rules")
-        self.assertEqual(set(engine), {"explanation", "scoring"})
+        self.assertEqual(set(engine), {"explanation", "scoring", "embedding"})
         self.assertEqual(set(engine["explanation"]), {"provider", "model"})
 
 
