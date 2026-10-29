@@ -117,6 +117,16 @@ def test_choice_resolution() -> None:
     check("fast ชี้ไปที่ gemini", fast is not None and fast[0].provider == "gemini")
     check("fast ใช้เพดานเวลาตั้งต้นของระบบ", fast is not None and fast[1] is None)
 
+    # วัดบนเซิร์ฟเวอร์เมื่อ 29 ต.ค. 2569: ด้วยเพดานตั้งต้น 30 วินาที ตัวเลือกนี้ตอบไม่ได้
+    # สองในสามครั้งเพราะชนเพดาน (30.1 / 30.1 / 15.8 วินาที) จึงต้องมีเพดานของตัวเอง
+    detailed = ai_settings.public_choice("detailed")
+    check("detailed ชี้ไปที่รุ่นใหญ่กว่าของ gemini",
+          detailed is not None and detailed[0].model == "gemini-3.5-flash", str(detailed))
+    check("detailed มีเพดานเวลาของตัวเองที่กว้างกว่าค่าตั้งต้น",
+          detailed is not None and (detailed[1] or 0) >= 60, f"budget={detailed and detailed[1]}")
+    check("เพดานของ detailed ยังต่ำกว่าเส้นที่หน้าเว็บถือว่าช้าเป็นหลักนาที (120)",
+          detailed is not None and (detailed[1] or 0) < 120, f"budget={detailed and detailed[1]}")
+
     for bad in ("", None, "ไม่มีตัวนี้", "gemini-3.6-flash", "../../etc/passwd"):
         check(f"ปฏิเสธ id ที่ไม่อยู่ในรายการ: {bad!r}", ai_settings.public_choice(bad) is None)
 

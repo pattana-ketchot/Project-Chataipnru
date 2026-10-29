@@ -18,7 +18,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.services.answer_evidence import answer_body, quote_is_supported, supporting
+from app.services.answer_evidence import answer_body, list_items, quote_is_supported, supporting
 
 
 @dataclass
@@ -88,6 +88,22 @@ class EvidenceTests(unittest.TestCase):
                          "ถ้อยคำที่ไม่อยู่ในเอกสารของสาขานั้นต้องไม่ผ่าน")
         self.assertFalse(quote_is_supported("สั้นไป", "ข้อความยาวที่มีคำว่าสั้นไปอยู่ด้วย"),
                          "ข้อความสั้นเกินไปไม่ถือเป็นหลักฐาน")
+
+    def test_รายการในวงเล็บต้องไม่ติดวงเล็บปิดมาด้วย(self):
+        """
+        วงเล็บที่เหลือค้างทำให้รายการชิ้นสุดท้ายหาไม่พบในเอกสาร
+
+        คำตอบจริงเขียนรายการย่อยไว้ในวงเล็บ ชิ้นสุดท้ายจึงได้ ")" ติดมา แล้วถูกรายงานว่า
+        "ยังยืนยันไม่ได้" ทั้งที่ it66.pdf หน้า 19 เขียนข้อความนั้นไว้ตรงตัว
+        (วัดจากคำตอบ detailed เมื่อ 29 ต.ค. 2569)
+        """
+        reply = ("หมวดวิชาเฉพาะ ไม่น้อยกว่า 94 หน่วยกิต (ประกอบด้วยกลุ่มวิชาแกน 15 หน่วยกิต, "
+                 "กลุ่มวิชาเฉพาะด้าน 57 หน่วยกิต และกลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือ"
+                 "สหกิจศึกษา ไม่น้อยกว่า 7 หน่วยกิต)")
+        items = list_items(reply)
+        self.assertTrue(items, "ควรอ่านรายการย่อยในวงเล็บออกมาได้")
+        self.assertNotIn(")", "".join(items), items)
+        self.assertIn("สหกิจศึกษา ไม่น้อยกว่า 7 หน่วยกิต", items, items)
 
 
 if __name__ == "__main__":
