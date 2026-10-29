@@ -1,0 +1,4 @@
+# ย้อน backend กลับอิมเมจก่อน release 29 ต.ค. 2569
+services:
+  backend:
+    image: course-advisor-system-backend:switch-2569-10-28

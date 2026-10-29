@@ -481,7 +481,11 @@ checkout หลักที่ `D:\workspace\LastProject` ไม่ถูกแ�
 
 ---
 
-## 12. แผน deploy / rollback (ยังไม่รัน รอการอนุมัติ)
+## 12. แผน deploy / rollback — **รันแล้ว 29 ต.ค. 2569**
+
+> ผลของการรันแผนนี้อยู่ที่ [PUBLIC_MODEL_CHOICE_DEPLOY_2569-10-29.md](PUBLIC_MODEL_CHOICE_DEPLOY_2569-10-29.md)
+> · merge `8891a12..4a69131` เข้า `origin/mko-phase2` · อิมเมจ `public-choice-2569-10-29`
+> · bundle `index-D4ccDHBY.js` · ตรวจรับผ่านครบ · ผลดิบใน `docs/raw/public-model-choice-2569-10-29/deploy-evidence.txt`
 
 ### 12.1 ค่าที่ต้องคงไว้
 
@@ -555,10 +559,13 @@ checkout หลักที่ `D:\workspace\LastProject` ไม่ถูกแ�
 * backend: commit `36c25b9` บน branch `feature/public-model-choice` · working tree สะอาด
 * หน้าเว็บ: commit `bf69f38` ใน `LastProject` · `AiSettings.jsx` ยังค้างและไม่ถูกแตะ ·
   ชุด build อยู่ที่ `D:\workspace\lastproject-rel-bf69f38\dist`
-* **ยังไม่ merge · ยังไม่ deploy · ไม่ได้เปลี่ยนค่าใดของ production**
+* **merge และ deploy แล้วเมื่อ 29 ต.ค. 2569** — ดู
+  [PUBLIC_MODEL_CHOICE_DEPLOY_2569-10-29.md](PUBLIC_MODEL_CHOICE_DEPLOY_2569-10-29.md)
+  · ไม่ได้เปลี่ยนค่าใดของ production นอกจาก tag ของอิมเมจและชุดหน้าเว็บ
 * Gemini ยังเป็นค่าหลัก · `PUBLIC_LOCAL_CHOICE` ปิด (ไม่ได้ตั้งค่าไว้บนเซิร์ฟเวอร์เลย)
-* ลบคอนเทนเนอร์ อิมเมจ และไฟล์ที่อัปโหลดสำหรับตรวจทิ้งหมดแล้ว · `backend-1` ยังเป็น
-  `switch-2569-10-28` · `StartedAt 2026-10-28T13:21:48Z` เท่าเดิม
+* ลบคอนเทนเนอร์ อิมเมจ และไฟล์ที่อัปโหลดสำหรับ**ตรวจ**ทิ้งหมดแล้ว · ตอนเขียนข้อนี้
+  `backend-1` ยังเป็น `switch-2569-10-28` · หลังจากนั้นจึง deploy ตามข้อ 12 (ปัจจุบันเป็น
+  `public-choice-2569-10-29`)
 * ยังไม่ได้เพิ่มตัวเลือกให้หน้า "ค้นหาสาขาที่เหมาะกับฉัน" และ "เปรียบเทียบสาขา"
 
 ### ข้อที่ยังไม่ปิด
