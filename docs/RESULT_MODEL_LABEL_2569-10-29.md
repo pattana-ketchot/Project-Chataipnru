@@ -5,9 +5,9 @@
 
 | | |
 |---|---|
-| backend | `course-advisor-system` · commit **`e0e0a2e`** |
+| backend | `course-advisor-system` · commit **`e0e0a2e`** + **`7c32fd4`** (รอบแก้จากการรีวิว ดูข้อ 7) |
 | หน้าเว็บ | `LastProject` · commit **`488a543`** |
-| ไฟล์ที่แตะ | `app/services/llm_client.py` · `app/api/routes/web_compat.py` · `tests/test_result_model_label.py` (ใหม่) · `src/components/EngineNote.jsx` (ใหม่) · `src/pages/FindMajorResult.jsx` · `src/pages/CompareResult.jsx` |
+| ไฟล์ที่แตะ | `llm/connector.py` · `llm/gemini.py` · `app/services/llm_client.py` · `app/api/routes/web_compat.py` · `tests/test_result_model_label.py` (ใหม่) · `src/components/EngineNote.jsx` (ใหม่) · `src/pages/FindMajorResult.jsx` · `src/pages/CompareResult.jsx` |
 | migration / ค่าตั้งค่าใหม่ | **ไม่มีทั้งคู่** |
 | งานค้าง `AiSettings.jsx` | ไม่ถูกแตะ (ยืนยันหลัง commit: ยังขึ้น ` M` และ commit มีแค่ 3 ไฟล์) |
 
@@ -579,3 +579,330 @@ POST /recommend-major   HTTP 200 · 8 วินาที
 * ถ้าวันหนึ่งเพิ่มแคชให้สองเส้นทางนี้ ต้องเก็บ `engine` ลงแคชด้วยและคืนค่าที่เก็บไว้
   ไม่ใช่ค่าปัจจุบัน (เขียนเหตุผลไว้ในข้อ 1 แล้ว)
 * ลบคอนเทนเนอร์ อิมเมจ และไฟล์ที่ใช้ตรวจบนเซิร์ฟเวอร์ทิ้งหมดแล้ว
+
+---
+
+## 7. รอบแก้จากการรีวิว: Gemini ตอบด้วยรุ่นสำรองของตัวเองได้
+
+**ข้อที่รีวิวจับได้ถูกต้อง** — ป้ายอ่านจาก `self._chatter.chat_model` ซึ่งเป็น**รุ่นที่ตั้งไว้**
+แต่ `GeminiConnector.chat()` วนลองตาม `_models_to_try()` และตอบด้วยรุ่นสำรองของตัวเองได้
+เมื่อรุ่นหลักชนเพดานต่อนาที (429 ของ Google เป็นแบบต่อโมเดล) หรือฝั่งผู้ให้บริการล่ม (5xx)
+
+```python
+# llm/gemini.py — ของเดิมที่มีอยู่แล้ว ไม่ได้แก้ในรอบนี้
+for model in self._models_to_try():          # [รุ่นหลัก, รุ่นสำรอง 1, รุ่นสำรอง 2, …]
+    text = self._chat_one_model(model, payload)
+    self._note("gemini_ok" if model == self.chat_model else f"gemini_backup:{model}")
+```
+
+คำขอที่ `gemini-3.6-flash` เขียนให้ จึงเคยถูกติดป้ายว่า `gemini-3.5-flash-lite`
+
+### สิ่งที่แก้ (commit `7c32fd4`)
+
+* **บันทึกในตัวเชื่อมต่อเอง ณ จุดที่คืนข้อความสำเร็จ** — `note_answered_model(model)`
+  ใน `GeminiConnector.chat()` และใน `OllamaConnector.chat()` · ผู้เรียกไม่ต้องเดาอีกต่อไป
+* **เก็บใน `ContextVar` ของ `llm/connector.py` ไม่ใช่แอตทริบิวต์ของตัวเชื่อมต่อ** ตามที่
+  รีวิวกำชับ — ตัวเชื่อมต่อถูกแคชไว้ใช้ร่วมกันทุกคำขอ (`_connectors` ใน `llm_client`)
+  การเขียนทับบนวัตถุเดียวกันจะทำให้คำขอที่ทำงานพร้อมกันอ่านค่าของกันและกัน
+* ชั้นบนอ่าน `answered_model()` ก่อน แล้วค่อยถอยไปใช้ค่าที่ตั้งไว้ถ้าไม่มี
+* `reset_chat_model()` ล้างทั้งสองค่าให้ในครั้งเดียว ผู้เรียกจึงไม่ลืมล้างอันใดอันหนึ่ง
+* **ไม่เปลี่ยนนโยบายเลือกโมเดล** — ไม่มีบรรทัดใดใน `_models_to_try()` หรือลำดับการลอง
+  ถูกแก้ · รอบนี้เพิ่มแต่การ "รายงานว่าตัวไหนตอบ"
+
+### เทสต์ที่เพิ่ม (รวมเป็น 12 ข้อ · ผ่าน 12/12)
+
+ใช้ `GeminiConnector` ตัวจริง แล้วแทนเฉพาะการยิง HTTP ด้วยของจำลอง ไม่ยิงโมเดลจริง
+
+| ข้อ | ยืนยันว่า |
+|---|---|
+| `รุ่นหลักของ_gemini_ชนโควตา_ต้องรายงานรุ่นสำรองที่ตอบจริง` | ลองตามลำดับ `[gemini-3.5-flash-lite, gemini-3.6-flash]` · ข้อความมาจากรุ่นสำรอง · ป้ายเป็น **`gemini-3.6-flash`** ไม่ใช่รุ่นที่ตั้งไว้ |
+| `ค่าของคำขอที่ใช้รุ่นสำรองไม่รั่วไปคำขออื่นที่ใช้ตัวเชื่อมต่อเดียวกัน` | ใช้ `_SplitConnector` **ตัวเดียวกัน** สองคำขอ · คำขอที่ไม่ได้เรียกโมเดลได้ `None` ไม่ใช่รุ่นของคำขอก่อนหน้า |
+
+### ชุดเดิมที่แตะเส้นทางเดียวกัน — ยังผ่าน
+
+เป็นชุดที่จำลองทั้งหมด ไม่ยิงโมเดลจริง และไม่ใช่ชุดใหญ่
+
+```
+test_gemini_overload_fallback   9 ชุด · 20 จุดตรวจ · ผ่านทั้งหมด
+test_local_fallback_gets_time   12 ข้อ · ตก 0
+test_request_budget             13 ชุด · 41 จุดตรวจ · ผ่านทั้งหมด
+```
+
+### diff ของรอบแก้
+
+```diff
+diff --git a/backend/app/services/llm_client.py b/backend/app/services/llm_client.py
+index 5098f54..6efbd36 100644
+--- a/backend/app/services/llm_client.py
++++ b/backend/app/services/llm_client.py
+@@ -33,7 +33,8 @@ if str(_REPO_ROOT) not in sys.path:
+ 
+ from llm.connector import (_DEFAULT_BUDGET_S, ChatMessage,  # noqa: E402
+                            LLMConnectionError, OllamaConnector,
+-                           apply_budget, reserve_budget, reset_budget, start_budget)
++                           answered_model, apply_budget, reserve_budget,
++                           reset_answered_model, reset_budget, start_budget)
+ from llm.gemini import GeminiConnector  # noqa: E402
+ from llm.prompts import (GROUNDING_CHECK_SYSTEM_PROMPT,  # noqa: E402
+                          build_grounding_check_prompt)
+@@ -112,7 +113,10 @@ class _SplitConnector:
+         full = reserve_budget() if allow_fallback else None
+         try:
+             out = self._chatter.chat(*args, **kwargs)
+-            record_chat_model(self.provider_name, self._chatter.chat_model)
++            # ตัวที่ตอบสำเร็จจริง ไม่ใช่ chat_model ที่ตั้งไว้ — Gemini วนลองรุ่นสำรองของ
++            # ตัวเองได้เมื่อรุ่นหลักชนโควตา (ดู gemini._models_to_try)
++            record_chat_model(self.provider_name,
++                              answered_model() or self._chatter.chat_model)
+             return out
+         except LLMConnectionError as e:
+             if not allow_fallback:
+@@ -142,7 +146,8 @@ class _SplitConnector:
+             raise
+         llm_usage.record("fallback_local_ok")
+         # ข้อความที่ผู้ใช้จะเห็นมาจากตัวสำรอง ไม่ใช่เจ้าหลักที่ถูกเลือกไว้
+-        record_chat_model("ollama", getattr(self._fallback, "chat_model", ""))
++        record_chat_model("ollama",
++                          answered_model() or getattr(self._fallback, "chat_model", ""))
+         return out
+ 
+     def chat_stream(self, *args, allow_fallback: bool = True, **kwargs):
+@@ -231,7 +236,8 @@ class _LocalPrimary:
+             llm_usage.record("local_primary_failed")
+             raise
+         llm_usage.record("local_primary_ok")
+-        record_chat_model("ollama", getattr(self._local, "chat_model", ""))
++        record_chat_model("ollama",
++                          answered_model() or getattr(self._local, "chat_model", ""))
+         return out
+ 
+     def chat_stream(self, *args, **kwargs):
+@@ -413,6 +419,7 @@ def record_chat_model(provider: str, model: str) -> None:
+ def reset_chat_model() -> None:
+     """ล้างค่าก่อนเริ่มงานของคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกรายงานว่าเป็นของคำขอนี้"""
+     _chat_model_used.set(None)
++    reset_answered_model()
+ 
+ 
+ def chat_model_used() -> dict | None:
+diff --git a/llm/connector.py b/llm/connector.py
+index 31fb47c..a8c19f4 100644
+--- a/llm/connector.py
++++ b/llm/connector.py
+@@ -160,6 +160,34 @@ def budget_left_s() -> float | None:
+     return None if end is None else end - time.monotonic()
+ 
+ 
++# รุ่นที่ "ตอบสำเร็จ" ให้คำขอนี้ — ตัวเชื่อมต่อบันทึกเอง ผู้เรียกจึงไม่ต้องเดา
++#
++# ที่นี่เป็นที่เดียวที่รู้ความจริง: GeminiConnector วนลองหลายรุ่นเมื่อรุ่นหลักชนโควตา
++# หรือฝั่งผู้ให้บริการล่ม (ดู _models_to_try) รุ่นที่ตอบสำเร็จจึงไม่ใช่ chat_model ที่ตั้งไว้เสมอ
++#
++# **ต้องเป็น ContextVar ไม่ใช่แอตทริบิวต์ของตัวเชื่อมต่อ** เพราะตัวเชื่อมต่อถูกแคชไว้ใช้ร่วมกัน
++# ทุกคำขอ การเขียนทับบนวัตถุเดียวกันจะทำให้คำขอที่ทำงานพร้อมกันอ่านค่าของกันและกัน
++_answered_model: contextvars.ContextVar[str | None] = contextvars.ContextVar(
++    "llm_answered_model", default=None
++)
++
++
++def note_answered_model(model: str) -> None:
++    """ตัวเชื่อมต่อเรียกเมื่อได้ข้อความกลับมาสำเร็จ — ห้ามเรียกตอนเริ่มลอง"""
++    if model:
++        _answered_model.set(model)
++
++
++def answered_model() -> str | None:
++    """รุ่นที่ตอบสำเร็จล่าสุดในคำขอนี้ · None = ยังไม่มีการตอบสำเร็จ"""
++    return _answered_model.get()
++
++
++def reset_answered_model() -> None:
++    """ล้างก่อนเริ่มคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกอ่านว่าเป็นของคำขอนี้"""
++    _answered_model.set(None)
++
++
+ def check_budget(doing: str) -> None:
+     """โยน LLMBudgetExceeded ถ้าหมดเวลาแล้ว · เรียกก่อนเริ่มงานที่กินเวลาทุกครั้ง"""
+     left = budget_left_s()
+@@ -330,6 +358,9 @@ class OllamaConnector:
+         content = message.get("content")
+         if content is None:
+             raise LLMConnectionError(f"chat response missing content: {data!r}"[:200])
++        # บันทึกไว้ด้วย ไม่ใช่เพราะที่นี่มีหลายรุ่นให้เลือก (มีรุ่นเดียว) แต่เพื่อให้ค่าที่
++        # ผู้เรียกอ่านเป็นของการตอบ "ครั้งล่าสุด" จริง ๆ เมื่อคำขอหนึ่งเรียกข้ามผู้ให้บริการ
++        note_answered_model(self.chat_model)
+         return content
+ 
+     def chat_stream(
+diff --git a/llm/gemini.py b/llm/gemini.py
+index 78b69ed..b4cb51f 100644
+--- a/llm/gemini.py
++++ b/llm/gemini.py
+@@ -43,7 +43,7 @@ import httpx
+ 
+ from llm.connector import (ChatMessage, LLMBudgetExceeded, LLMConnectionError,
+                            budget_left_s, check_budget, http_timeout,
+-                           post_json_bounded)
++                           note_answered_model, post_json_bounded)
+ 
+ logger = logging.getLogger("llm.gemini")
+ 
+@@ -365,6 +365,9 @@ class GeminiConnector:
+                 if model != self.chat_model:
+                     logger.info("ตอบด้วยโมเดลสำรอง %s", model)
+                 self._note("gemini_ok" if model == self.chat_model else f"gemini_backup:{model}")
++                # ตัวที่ตอบสำเร็จจริง ซึ่งไม่ใช่ chat_model ที่ตั้งไว้เสมอ — ผู้เรียกที่จะ
++                # บอกผู้ใช้ว่า "รุ่นไหนเขียนคำตอบนี้" ต้องใช้ค่านี้ ไม่ใช่ค่าที่ตั้งไว้
++                note_answered_model(model)
+                 return text
+             except _QuotaExhausted as e:
+                 self._note(f"gemini_{e.kind}:{model}")
+diff --git a/backend/tests/test_result_model_label.py b/backend/tests/test_result_model_label.py
+index 2cf75bf..4fa6311 100644
+--- a/backend/tests/test_result_model_label.py
++++ b/backend/tests/test_result_model_label.py
+@@ -31,7 +31,8 @@ os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.
+ os.environ.setdefault("JWT_SECRET", "ชุดทดสอบไม่ได้ออก token")
+ os.environ.setdefault("GEMINI_API_KEY", "คีย์ปลอมสำหรับชุดทดสอบ")
+ 
+-from llm.connector import LLMConnectionError  # noqa: E402
++from llm.connector import ChatMessage, LLMConnectionError  # noqa: E402
++from llm.gemini import GeminiConnector, _QuotaExhausted  # noqa: E402
+ 
+ from app.api.routes.web_compat import _engine  # noqa: E402
+ from app.services import llm_client  # noqa: E402
+@@ -103,6 +104,65 @@ class ResultModelLabelTests(unittest.TestCase):
+         # คำขอนี้ไม่ได้เรียกโมเดลเอง จึงต้องไม่เห็นของคำขอก่อนหน้า
+         self.assertIsNone(llm_client.chat_model_used())
+ 
++    # ---------------- Gemini วนลองรุ่นของตัวเอง ----------------
++
++    def _gemini_that_falls_back(self):
++        """
++        GeminiConnector จริง แต่แทนการยิง HTTP ด้วยของจำลอง
++
++        รุ่นหลักชนโควตา (429 ของ Google เป็นแบบต่อโมเดล) รุ่นสำรองตอบสำเร็จ
++        """
++        # คีย์ต้องเป็น ASCII เพราะมันถูกใส่ลงส่วนหัวของ HTTP ตอนสร้างตัวเชื่อมต่อ
++        conn = GeminiConnector(api_key="not-a-real-key", chat_model="gemini-3.5-flash-lite",
++                               fallback_models=("gemini-3.6-flash",))
++        tried: list[str] = []
++
++        def fake_call(model, _payload):
++            tried.append(model)
++            if model == conn.chat_model:
++                raise _QuotaExhausted(model, 1.0)
++            return "ข้อความจากรุ่นสำรอง " + model
++
++        conn._chat_one_model = fake_call
++        return conn, tried
++
++    def test_รุ่นหลักของ_gemini_ชนโควตา_ต้องรายงานรุ่นสำรองที่ตอบจริง(self):
++        """
++        ค่าที่ตั้งไว้คือ gemini-3.5-flash-lite แต่ตัวที่เขียนคำตอบคือ gemini-3.6-flash
++
++        ถ้ารายงานตามค่าที่ตั้งไว้ ผู้ใช้จะเห็นชื่อรุ่นที่ไม่ได้เขียนข้อความนั้นเลย
++        """
++        gemini, tried = self._gemini_that_falls_back()
++        split = llm_client._SplitConnector(_Fake("bge-m3"), gemini)
++        out = split.chat([ChatMessage(role="user", content="ทดสอบ")])
++
++        self.assertEqual(tried, ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
++        self.assertIn("gemini-3.6-flash", out)
++        self.assertEqual(llm_client.chat_model_used(),
++                         {"provider": "gemini", "model": "gemini-3.6-flash"})
++
++    def test_ค่าของคำขอที่ใช้รุ่นสำรองไม่รั่วไปคำขออื่นที่ใช้ตัวเชื่อมต่อเดียวกัน(self):
++        """
++        ตัวเชื่อมต่อถูกแคชไว้ใช้ร่วมทุกคำขอ — ถ้าเก็บรุ่นที่ตอบไว้บนวัตถุนั้น
++        คำขอที่ทำงานพร้อมกันจะอ่านค่าของกันและกัน
++        """
++        gemini, _ = self._gemini_that_falls_back()
++        split = llm_client._SplitConnector(_Fake("bge-m3"), gemini)
++
++        def request_with_backup():
++            llm_client.reset_chat_model()
++            split.chat([ChatMessage(role="user", content="คำขอที่ใช้รุ่นสำรอง")])
++            return llm_client.chat_model_used()
++
++        def request_without_model():
++            llm_client.reset_chat_model()
++            return llm_client.chat_model_used()
++
++        self.assertEqual(copy_context().run(request_with_backup)["model"], "gemini-3.6-flash")
++        # คำขอนี้ใช้ตัวเชื่อมต่อตัวเดียวกันแต่ไม่ได้เรียกโมเดล ต้องไม่เห็นรุ่นของคำขอก่อนหน้า
++        self.assertIsNone(copy_context().run(request_without_model))
++        self.assertIsNone(llm_client.chat_model_used())
++
+     # ---------------- รูปร่างที่ส่งให้หน้าเว็บ ----------------
+ 
+     def test_ส่งชื่อรุ่นที่ทำงานจริงไปกับผล(self):
+```
+
+---
+
+## 8. แผน deploy / rollback (ยังไม่รัน รอการอนุมัติ)
+
+**backend ก่อน หน้าเว็บทีหลัง** — หน้าเว็บใหม่ที่เจอ backend เก่าจะไม่เห็นช่อง `engine`
+แล้วไม่แสดงบรรทัดนั้นเลย (ไม่พัง แต่ฟีเจอร์หายเงียบ ๆ) ส่วน backend ใหม่ที่เจอหน้าเว็บเก่า
+ก็แค่ส่งช่องที่ไม่มีใครอ่าน
+
+### 8.1 ค่าที่ต้องคงไว้
+
+| | |
+|---|---|
+| การเลือกโมเดล / ลำดับรุ่นสำรองของ Gemini | **ไม่แตะ** — รอบนี้เพิ่มแต่การรายงาน |
+| `GEMINI_FALLBACK_MODELS` และ env อื่นของโมเดล | **ไม่แตะ ไม่ต้องเพิ่มค่าใหม่** |
+| `UPLOADS_DIR` · bind mount · ฐานข้อมูล | ไม่เกี่ยวกับรอบนี้ ไม่แตะ |
+| `src/pages/Admin/AiSettings.jsx` | งานค้างที่ยังไม่ commit — ต้องรอดทั้งก่อนและหลัง |
+
+### 8.2 backend
+
+1. merge `feature/public-model-choice` เข้า `mko-phase2` แบบ fast-forward
+2. สร้างอิมเมจซ้อนจากตัวที่รันอยู่ **ไม่ build จาก working tree ทั้งก้อน**
+   `FROM course-advisor-system-backend:image-upload-2569-10-29` ทับ 4 ไฟล์
+
+   | ไฟล์ในโปรเจกต์ | พาธในอิมเมจ |
+   |---|---|
+   | `llm/connector.py` | `/app/llm/connector.py` |
+   | `llm/gemini.py` | `/app/llm/gemini.py` |
+   | `backend/app/services/llm_client.py` | `/app/backend/app/services/llm_client.py` |
+   | `backend/app/api/routes/web_compat.py` | `/app/backend/app/api/routes/web_compat.py` |
+
+   พร้อมชุดทดสอบ `backend/tests/test_result_model_label.py` → `/app/backend/tests/`
+   · tag `model-label-2569-10-29`
+
+   > **สองไฟล์ใน `llm/` อยู่คนละพาธกับรอบก่อน ๆ** (`/app/llm/` ไม่ใช่ `/app/backend/app/`)
+   > — รอบ switch 28 ต.ค. เคยซ้อน `connector.py` ที่พาธนี้มาแล้ว ให้ยึดตามนั้น
+3. ตรวจ SHA256 ของทั้ง 5 ไฟล์ในอิมเมจให้ตรงกับ blob ของ commit ก่อนสลับ
+4. รันในอิมเมจใหม่ (ฐาน `course_advisor_test`) ต้องผ่าน
+   `python tests/test_result_model_label.py` (12 ข้อ · exit 0)
+   และชุดที่แตะเส้นทางเดียวกัน `test_gemini_overload_fallback` · `test_local_fallback_gets_time`
+5. dry-run ของ compose ต้องไม่แตะบริการอื่น แล้ว `up -d --no-build --no-deps backend`
+6. ตรวจรับหลังสลับ — `/api/health` = 200 · หน้าแชทยังตอบได้ตามปกติ · ยิง
+   `POST /api/recommend-major` และ `POST /api/compare-courses` หนึ่งครั้ง ต้องได้ช่อง
+   `engine` พร้อมชื่อรุ่นที่ไม่ว่าง
+
+### 8.3 หน้าเว็บ
+
+ชุดนี้ยังไม่ได้ build (หน้าเว็บของรอบนี้ยังไม่มีชุด release) — เมื่ออนุมัติแล้วทำตามนี้
+
+1. `git worktree add --detach D:/workspace/lastproject-rel-<sha> <sha>` แล้ว `npm run build`
+   **ห้าม build จาก checkout หลัก** เพราะมีงานค้าง `AiSettings.jsx` อยู่
+2. `sha256sum -c` ให้ผ่านครบ 19 ไฟล์ก่อนอัปโหลด
+3. `deploy_web.sh` — วาง assets ตรวจ hash ผ่านเว็บจริง **แล้วค่อยสลับ `index.html`**
+4. ตรวจรับ: เปิดหน้า "ค้นหาสาขาที่เหมาะกับฉัน" ให้ครบขั้นตอนจนเห็นผล ต้องมีบรรทัด
+   `คำอธิบายโดย …` และบรรทัดคะแนน · หน้า "เปรียบเทียบสาขา" กด "ให้ AI ช่วยวิเคราะห์"
+   ต้องมีบรรทัด `คำอธิบายโดย …` บรรทัดเดียว (หน้านี้ไม่มีคะแนน)
+
+### 8.4 rollback
+
+| ส่วน | วิธีย้อน |
+|---|---|
+| backend | สลับ tag กลับเป็น `image-upload-2569-10-29` แล้ว `up -d --no-build --no-deps backend` · ไม่มีอะไรต้องย้อนในฐานข้อมูล และไม่มีค่าตั้งค่าที่ต้องคืน |
+| หน้าเว็บ | `rollback_web.sh --run <โฟลเดอร์ web-run ของรอบนั้น>` — ย้อน `index.html` ให้ชี้ bundle เดิม |
+| ย้อนเฉพาะหน้าเว็บ | ได้ — บรรทัดที่เพิ่มหายไป ผลลัพธ์อื่นเหมือนเดิมทุกอย่าง |
+| ย้อนเฉพาะ backend | ได้ — หน้าเว็บไม่เห็นช่อง `engine` แล้วไม่แสดงบรรทัดนั้น (กรณีนี้ทดสอบแล้วในข้อ 5.3) |
+
+**ความเสี่ยงของรอบนี้ต่ำ**: ไม่มี migration ไม่มีค่าตั้งค่าใหม่ ไม่เปลี่ยนการเลือกโมเดล
+และทุกเส้นทางที่แตะมีชุดทดสอบที่จำลองการล้มของโมเดลกำกับอยู่
