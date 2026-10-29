@@ -33,7 +33,7 @@ from app.api.deps import web_rate_limiter
 from app.db.session import get_db
 from app.services.chat import PriorTurn, stream_answer
 from app.services import ai_settings
-from app.services.llm_client import connector_for
+from app.services.llm_client import chat_model_used, connector_for, reset_chat_model
 from app.services.curriculum_facts import LIST_FIELDS
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
@@ -474,6 +474,20 @@ def career_lists_web(db: Session = Depends(get_db)) -> dict:
     return {"programmes": programmes}
 
 
+# ที่มาของสิ่งที่ผู้ใช้เห็นในผลชุดหนึ่ง — ส่งเป็นโครงสร้าง ไม่ใช่ประโยคสำเร็จรูป
+#
+# หน้าเว็บเลือกถ้อยคำเอง แต่ **ชื่อรุ่นต้องมาจากที่นี่เท่านั้น** ห้ามหน้าเว็บเขียนทับไว้เอง
+# เพราะผู้ดูแลเปลี่ยนรุ่นได้ตลอด และเส้นทาง Gemini มีโมเดลในเครื่องรับช่วงต่อได้
+#
+# explanation เป็น None เมื่อ "ไม่ได้เรียกโมเดล" หรือ "เรียกแล้วแต่ข้อความของมันไม่ได้ถูกใช้"
+# หน้าเว็บจะได้ไม่ติดป้ายชื่อรุ่นให้ผลที่ไม่ได้มาจากโมเดล
+SCORING_EMBEDDING_RULES = "embedding_and_rules"
+
+
+def _engine(explained: bool, scoring: str | None = None) -> dict:
+    return {"explanation": chat_model_used() if explained else None, "scoring": scoring}
+
+
 def _rank_key(title: str) -> tuple[str, str | None]:
     """คีย์เทียบชื่อสาขาที่แยกระดับปริญญาด้วย — ใช้จับคู่อันดับกลับไปที่การ์ดบนหน้าเว็บ"""
     return normalise_title(title), degree_level_of(degree_of_title(title))
@@ -496,6 +510,7 @@ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db
     หลักสูตรตัวเองไว้ การให้โมเดลคิดข้อเสียขึ้นมาเองคือการแต่งข้อมูล ซึ่งเป็นสิ่งที่
     ระบบนี้ตั้งใจไม่ทำ หน้าเว็บตรวจความยาวก่อนแสดงอยู่แล้ว บล็อกนั้นจึงไม่ขึ้นเอง
     """
+    reset_chat_model()
     sent = [c.model_dump() for c in payload.courses]
     matched, unmatched = match_by_title(db, sent)
 
@@ -538,6 +553,8 @@ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db
         "summary": (result.get("summary") or "") + note,
         "courses": courses,
         "verdict": "ข้อมูลทั้งหมดสรุปจากเอกสารหลักสูตร (มคอ.2) ของแต่ละสาขา ยกเว้นค่าเทอมที่มาจากประกาศของคณะ",
+        # หน้านี้ไม่มีคะแนน มีแต่ข้อความที่โมเดลสรุปจากเอกสาร จึงไม่ส่ง scoring
+        "engine": _engine(explained=True),
     }
 
 
@@ -548,6 +565,7 @@ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_
 
     ชื่อช่องในแบบสอบถามของหน้าเว็บไม่ตรงกับของเรา (skills/goals/track) จึงแปลงก่อน
     """
+    reset_chat_model()
     a = payload.answers
     # แปลรหัสตัวเลือกเป็นข้อความไทยที่ผู้ใช้เห็นก่อนเสมอ — หน้าเว็บส่งรหัสอย่าง "tech"
     # หรือ "career-growth" มา ซึ่งแทบไม่มีความหมายให้เทียบกับเอกสารภาษาไทย
@@ -615,10 +633,18 @@ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_
         "ผลนี้คำนวณจากความใกล้เคียงระหว่างคำตอบของคุณกับเนื้อหาจริงในเอกสารหลักสูตรของแต่ละสาขา"
     )
 
+    cards = [card(e) for e in ranked[:1 + _MAX_ALTERNATIVES]]
+    # ติดป้ายชื่อรุ่นเฉพาะเมื่อข้อความของโมเดลถูกใช้จริงอย่างน้อยหนึ่งใบ — โมเดลล่ม
+    # หรือเขียนมาแล้วไม่ผ่านด่านตรวจข้อความอ้างอิง ทุกใบจะเป็นข้อความมาตรฐานของระบบ
+    explained = any(c["reason"] not in (NO_REASON, NO_EVIDENCE_REASON) for c in cards)
+
     return {
-        "primary": card(ranked[0]),
-        "alternatives": [card(e) for e in ranked[1:1 + _MAX_ALTERNATIVES]],
+        "primary": cards[0],
+        "alternatives": cards[1:],
         "summary": summary,
         # เปิดไว้ให้ตรวจสอบได้ว่าระบบเข้าใจคำตอบของนักเรียนว่าอย่างไร
         "profileText": build_profile_text(answers),
+        # คะแนนไม่ได้มาจากโมเดลที่เขียนคำอธิบาย — มาจากความใกล้เคียงของเวกเตอร์กับ
+        # เกณฑ์ของระบบ (ตัดหลักสูตรที่ปิดรับ ยุบฉบับซ้ำ ถ่วงน้ำหนักชื่อหลักสูตร)
+        "engine": _engine(explained, scoring=SCORING_EMBEDDING_RULES),
     }

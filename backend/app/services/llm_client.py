@@ -23,6 +23,7 @@ import logging
 import sys
 import threading
 import time
+from contextvars import ContextVar
 from pathlib import Path
 
 # monorepo: <root>/backend/app/services/llm_client.py -> <root>/llm
@@ -110,7 +111,9 @@ class _SplitConnector:
         # ขั้นที่ห้ามใช้ตัวสำรองไม่ต้องกัน เพราะไม่มีใครมารับช่วงต่อ
         full = reserve_budget() if allow_fallback else None
         try:
-            return self._chatter.chat(*args, **kwargs)
+            out = self._chatter.chat(*args, **kwargs)
+            record_chat_model(self.provider_name, self._chatter.chat_model)
+            return out
         except LLMConnectionError as e:
             if not allow_fallback:
                 llm_usage.record("fallback_declined")
@@ -138,6 +141,8 @@ class _SplitConnector:
             llm_usage.record("fallback_local_failed")
             raise
         llm_usage.record("fallback_local_ok")
+        # ข้อความที่ผู้ใช้จะเห็นมาจากตัวสำรอง ไม่ใช่เจ้าหลักที่ถูกเลือกไว้
+        record_chat_model("ollama", getattr(self._fallback, "chat_model", ""))
         return out
 
     def chat_stream(self, *args, allow_fallback: bool = True, **kwargs):
@@ -226,6 +231,7 @@ class _LocalPrimary:
             llm_usage.record("local_primary_failed")
             raise
         llm_usage.record("local_primary_ok")
+        record_chat_model("ollama", getattr(self._local, "chat_model", ""))
         return out
 
     def chat_stream(self, *args, **kwargs):
@@ -384,6 +390,35 @@ def connector_for(choice: ai_settings.Choice):
     logger.info("ใช้โมเดลเขียนคำตอบ: %s / %s (ที่มา: %s)",
                 choice.provider, choice.model, choice.source)
     return built
+
+
+# รุ่นที่ "เขียนข้อความให้คำขอนี้จริง" — บันทึกตอนเรียกสำเร็จ ไม่ใช่ตอนเลือก
+#
+# ต่างจาก answer_model_label() ที่บอกตัวที่ถูก **สั่ง** ให้เขียน · ถ้าเจ้าหลักล้มแล้ว
+# โมเดลในเครื่องรับช่วงต่อ ค่าที่นี่จะเป็นโมเดลในเครื่อง เพราะข้อความที่ผู้ใช้เห็นมาจาก
+# ตัวนั้นจริง · ไม่ได้เรียกโมเดลเลย = None ซึ่งต้องไม่ถูกแปลงเป็นชื่อรุ่นค่าตั้งต้น
+#
+# เก็บใน ContextVar ไม่ใช่ตัวแปรโมดูล เพราะหลายคำขอทำงานพร้อมกัน — endpoint แบบ sync
+# ของ FastAPI รันใน threadpool ซึ่งคัดลอก context ให้ทีละคำขออยู่แล้ว (กลไกเดียวกับที่
+# เพดานเวลาของคำขอใช้อยู่) ค่าของคำขอหนึ่งจึงไม่รั่วไปอีกคำขอ
+_chat_model_used: ContextVar[tuple[str, str] | None] = ContextVar(
+    "chat_model_used", default=None)
+
+
+def record_chat_model(provider: str, model: str) -> None:
+    """บันทึกว่าใครเพิ่งเขียนข้อความสำเร็จให้คำขอนี้ — เรียกหลังได้ผลลัพธ์เท่านั้น"""
+    _chat_model_used.set((provider or "unknown", model or "?"))
+
+
+def reset_chat_model() -> None:
+    """ล้างค่าก่อนเริ่มงานของคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกรายงานว่าเป็นของคำขอนี้"""
+    _chat_model_used.set(None)
+
+
+def chat_model_used() -> dict | None:
+    """{'provider', 'model'} ของการเขียนข้อความครั้งล่าสุดในคำขอนี้ · None = ไม่ได้เรียกโมเดล"""
+    pair = _chat_model_used.get()
+    return None if pair is None else {"provider": pair[0], "model": pair[1]}
 
 
 def answer_model_label(connector) -> str:
