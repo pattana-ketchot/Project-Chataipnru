@@ -18,6 +18,7 @@
 import os
 import sys
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -40,6 +41,20 @@ CHECKS = 0
 FAILURES: list[str] = []
 
 
+@contextmanager
+def _local_choice_on():
+    """เปิดสวิตช์ชั่วคราวในชุดทดสอบ แล้วคืนค่าเดิมเสมอ"""
+    before = os.environ.get("PUBLIC_LOCAL_CHOICE")
+    os.environ["PUBLIC_LOCAL_CHOICE"] = "1"
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop("PUBLIC_LOCAL_CHOICE", None)
+        else:
+            os.environ["PUBLIC_LOCAL_CHOICE"] = before
+
+
 def check(label: str, ok: bool, detail: str = "") -> None:
     global CHECKS
     CHECKS += 1
@@ -55,7 +70,12 @@ def check(label: str, ok: bool, detail: str = "") -> None:
 def test_options_list() -> None:
     print("\ntest_options_list")
     ids = [c["id"] for c in ai_settings.public_choices()]
-    check("มีตัวเลือกครบสามตัวเมื่อเซิร์ฟเวอร์มีคีย์", ids == ["fast", "detailed", "local"], str(ids))
+    check("ค่าตั้งต้นให้เลือกได้เฉพาะสองตัวของ Gemini (ไม่มีโมเดลในเครื่อง)",
+          ids == ["fast", "detailed"], str(ids))
+    with _local_choice_on():
+        ids_on = [c["id"] for c in ai_settings.public_choices()]
+    check("เปิด PUBLIC_LOCAL_CHOICE แล้วจึงเห็นตัวเลือกในเครื่อง",
+          ids_on == ["fast", "detailed", "local"], str(ids_on))
     default = [c["id"] for c in ai_settings.public_choices() if c["default"]]
     check("มีค่าตั้งต้นเดียว และเป็นตัวที่เร็วที่สุด", default == ["fast"], str(default))
     one = ai_settings.public_choices()[0]
@@ -67,7 +87,11 @@ def test_options_list() -> None:
     try:
         ai_settings.has_gemini_key = lambda: False
         ids_nokey = [c["id"] for c in ai_settings.public_choices()]
-        check("เซิร์ฟเวอร์ที่ไม่มีคีย์ไม่เห็นตัวเลือกของ Gemini", ids_nokey == ["local"], str(ids_nokey))
+        check("เซิร์ฟเวอร์ที่ไม่มีคีย์ไม่เห็นตัวเลือกของ Gemini", ids_nokey == [], str(ids_nokey))
+        with _local_choice_on():
+            ids_nokey_on = [c["id"] for c in ai_settings.public_choices()]
+        check("ไม่มีคีย์แต่เปิดตัวเลือกในเครื่อง -> เหลือตัวในเครื่องตัวเดียว",
+              ids_nokey_on == ["local"], str(ids_nokey_on))
     finally:
         ai_settings.has_gemini_key = real_key
 
@@ -76,8 +100,12 @@ def test_options_list() -> None:
 
 def test_choice_resolution() -> None:
     print("\ntest_choice_resolution")
-    picked = ai_settings.public_choice("local")
-    check("id ที่อนุญาต -> ได้ตัวเลือกคืนมา", picked is not None)
+    check("ปิดอยู่ -> ยิง model_choice=local ตรง ๆ ก็ไม่ได้ผล",
+          ai_settings.public_choice("local") is None,
+          "คำขอที่ส่งมาตรงต้องถูกปฏิเสธเหมือนกัน ไม่ใช่แค่ซ่อนจากรายการ")
+    with _local_choice_on():
+        picked = ai_settings.public_choice("local")
+    check("เปิดแล้ว id ที่อนุญาต -> ได้ตัวเลือกคืนมา", picked is not None)
     if picked:
         choice, budget = picked
         check("local ชี้ไปที่โมเดลในเครื่อง", choice.provider == "ollama", str(choice))
@@ -120,13 +148,22 @@ def test_route_passes_the_choice() -> None:
     try:
         r = client.get("/ai-options")
         check("GET /ai-options ตอบ 200", r.status_code == 200, str(r.status_code))
-        check("คืนรายการตัวเลือกให้หน้าเว็บ", len(r.json().get("options", [])) == 3, r.text[:120])
+        check("คืนรายการตัวเลือกให้หน้าเว็บ (สองตัวตามค่าตั้งต้น)",
+              len(r.json().get("options", [])) == 2, r.text[:160])
 
         body = {"messages": [{"role": "user", "content": "สาขานี้เรียนอะไร"}], "model_choice": "local"}
-        r = client.post("/chat-web", json=body)
-        check("เลือก local -> ส่ง connector ของในเครื่องเข้าไป",
+        client.post("/chat-web", json=body)
+        check("ปิดอยู่ -> คำขอที่ขอ local ไม่ได้ connector ของในเครื่อง",
+              spy.kwargs.get("connector") is None, str(spy.kwargs.get("connector")))
+        check("ปิดอยู่ -> ไม่ได้เพดานเวลาของในเครื่องด้วย",
+              spy.kwargs.get("budget_s") is None, str(spy.kwargs.get("budget_s")))
+
+        spy.kwargs = {}
+        with _local_choice_on():
+            client.post("/chat-web", json=body)
+        check("เปิดแล้ว -> เลือก local ได้ connector ของในเครื่อง",
               "ollama" in str(spy.kwargs.get("connector")), str(spy.kwargs.get("connector")))
-        check("เลือก local -> ส่งเพดานเวลาของตัวเลือกนั้นเข้าไป",
+        check("เปิดแล้ว -> ได้เพดานเวลาของตัวเลือกนั้น",
               (spy.kwargs.get("budget_s") or 0) >= 120, str(spy.kwargs.get("budget_s")))
 
         spy.kwargs = {}

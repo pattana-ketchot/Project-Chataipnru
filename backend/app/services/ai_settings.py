@@ -30,6 +30,7 @@ embedding เปลี่ยนไม่ได้
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -128,6 +129,20 @@ PUBLIC_CHOICES: tuple[dict, ...] = (
 # id ที่ใช้เมื่อผู้ใช้ไม่ได้เลือก — ต้องมีอยู่ใน PUBLIC_CHOICES เสมอ
 DEFAULT_PUBLIC_CHOICE = "fast"
 
+# เปิดให้ผู้ใช้หน้าเว็บเลือกโมเดลในเครื่องได้หรือไม่ · **ค่าตั้งต้นคือปิด**
+#
+# ปิดไว้เพราะวัดบนเซิร์ฟเวอร์ที่ไม่มีการ์ดจอแล้วได้ "ไม่พบข้อมูล" หลังรอ 233-249 วินาที
+# ทั้งสองคำถาม (docs/PUBLIC_MODEL_CHOICE_2569-10-29.md ข้อ 4.2) ปุ่มที่กดแล้วรอสี่นาที
+# เพื่อให้ได้คำตอบว่าไม่รู้ แย่กว่าไม่มีปุ่ม
+#
+# **ไม่เกี่ยวกับสวิตช์ของผู้ดูแล** — ผู้ดูแลยังเลือก ollama ให้ทั้งระบบได้จากหน้าหลังบ้าน
+# เหมือนเดิมทุกประการ ตัวนี้คุมเฉพาะ "สิ่งที่นักศึกษาเลือกเองได้"
+#
+# เปิดเมื่อมีเครื่องที่มีการ์ดจอแล้ว: PUBLIC_LOCAL_CHOICE=1
+def public_local_enabled() -> bool:
+    """อ่านทุกครั้งที่ใช้ ไม่ cache — จะได้สลับค่าในชุดทดสอบได้โดยไม่ต้อง import ใหม่"""
+    return (os.getenv("PUBLIC_LOCAL_CHOICE", "") or "").strip().lower() in ("1", "true", "yes", "on")
+
 
 def public_choices() -> list[dict]:
     """
@@ -139,6 +154,10 @@ def public_choices() -> list[dict]:
     out = []
     for c in PUBLIC_CHOICES:
         if c["provider"] == "gemini" and not has_gemini_key():
+            continue
+        # ปิดอยู่ = ไม่อยู่ในรายการ และ public_choice() ก็ปฏิเสธ id นี้ไปด้วย
+        # เพราะมันตรวจกับรายการเดียวกันนี้ คำขอที่ยิง model_choice=local ตรง ๆ จึงไม่ได้ผล
+        if c["provider"] == "ollama" and not public_local_enabled():
             continue
         out.append({
             "id": c["id"],
