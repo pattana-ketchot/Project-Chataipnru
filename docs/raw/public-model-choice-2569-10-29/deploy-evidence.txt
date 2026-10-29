@@ -211,3 +211,39 @@ it66.pdf หน้า 19 ไปเรียก answer_claims.verify() ด้ว�
 เก็บไว้บนเซิร์ฟเวอร์: ~/release-public-choice-2569-10-29/ (Dockerfile · SHA256SUMS ·
 compose pin/rollback · deploy_web.sh · rollback_web.sh · web-release · web-run-20261029-055758)
 อิมเมจเดิม switch-2569-10-28 ยังอยู่ครบสำหรับ rollback
+
+
+[9] ปล่อยเพิ่มวันเดียวกัน: หน้าแชทบอกชื่อรุ่นที่จะเขียนคำตอบ
+------------------------------------------------------------
+commit 16de266 (LastProject) · src/pages/ChatAdvisor.jsx ไฟล์เดียว · backend ไม่ถูกแตะ
+ชุด build จาก worktree แยกที่ 16de266 (D:\workspace\lastproject-rel-226ce4d\dist · git status สะอาด)
+
+ด่าน sha256sum -c ก่อนอัปโหลด: ผ่าน 19/19
+
+[3/6] วางไฟล์ assets ใหม่
+  วาง index-DSTdGTxh.css  6d5b433917407354ba406c2643b758ebd8ae44fe709149a1ca979c82335523cd
+  วาง index-Dr0BBWtp.js   2fc472fa39109f98605c1029dd53564598a8de31adefeb7d6b70b5082ab3ed14
+  (อีก 17 ไฟล์ข้ามเพราะ hash ตรงอยู่แล้ว)
+
+[4/6] ดึงไฟล์ผ่านเว็บจริงมาตรวจ hash ก่อนสลับ index.html
+  index-DSTdGTxh.css  HTTP 200  6d5b4339…  ตรง
+  index-Dr0BBWtp.js   HTTP 200  2fc472fa…  ตรง
+
+[5-6/6] สลับ index.html เป็นขั้นสุดท้าย แล้วดึงหน้าแรกมาตรวจ
+  hash ที่คาด = b467e0efb1ad6bfed1eacef8792bab1b9e1776aec847bbed263847abda0f2988
+  hash ที่ได้  = b467e0efb1ad6bfed1eacef8792bab1b9e1776aec847bbed263847abda0f2988
+  หน้าแรกชี้: assets/index-Dr0BBWtp.js · assets/index-DSTdGTxh.css
+
+ตรวจรับบนเว็บจริงหลัง deploy (อ่านจาก DOM)
+  bundle ที่โหลดจริง : /assets/index-Dr0BBWtp.js · /assets/index-DSTdGTxh.css
+  เลือก "ตอบเร็ว"    : ตอบด้วย | ตอบเร็ว | gemini-3.5-flash-lite | · แนะนำ · ตอบภายในไม่กี่วินาที
+  เลือก "ตอบละเอียด" : ตอบด้วย | ตอบละเอียด | gemini-3.5-flash | · ใช้รุ่นใหญ่กว่า ตอบละเอียดกว่า แต่ต้องรอราวครึ่งนาที
+
+ความกว้าง (วัดก่อนปล่อย บน dist ชุดเดียวกันที่เสิร์ฟในเครื่อง ต่อ /api ไปหา backend production)
+  จอ 1280 : แถวอยู่บรรทัดเดียว สูง 29px
+  จอ 375  : ขึ้นสองบรรทัด (บรรทัดบน ตอบด้วย+select+ชื่อรุ่น · บรรทัดล่างคำอธิบาย)
+            ชื่อรุ่น 134px คำอธิบาย 149px · scrollWidth - clientWidth = 0 คือไม่มีเลื่อนแนวนอน
+  ถ้าบังคับบรรทัดเดียวบนจอ 375: ชื่อรุ่น 102px คำอธิบายเหลือ 31px จึงไม่เอาแบบนั้น
+
+rollback: ~/release-web-model-name-2569-10-29/rollback_web.sh --run \
+          ~/release-web-model-name-2569-10-29/web-run-20261029-063029
