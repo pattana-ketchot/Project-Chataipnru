@@ -1354,9 +1354,11 @@ def prepare_answer(
     session_id: uuid.UUID | None,
     message: str,
     prior: list[PriorTurn] | None = None,
+    connector=None,
 ) -> Prepared:
+    """connector=None คือใช้ค่าที่ผู้ดูแลตั้งไว้ · ส่งมาเองเมื่อผู้ใช้เลือกโมเดลเอง"""
     stages = _Stages()
-    connector = get_llm_connector()
+    connector = connector or get_llm_connector()
     session = _load_session(db, user_id, session_id)
     # prior มาจากผู้เรียกที่เก็บบทสนทนาไว้เอง (หน้าเว็บ) ส่วนผู้เรียกที่ใช้ session_id
     # ให้อ่านจากฐานข้อมูลตามเดิม
@@ -2216,6 +2218,8 @@ def stream_answer(
     session_id: uuid.UUID | None,
     message: str,
     prior: list[PriorTurn] | None = None,
+    connector=None,
+    budget_s: float | None = None,
 ) -> Iterator[str]:
     """
     ตอบแบบทยอยส่ง — ตัวนี้ทำหน้าที่เดียวคือคุมเพดานเวลาให้ครอบทุก step ของการสตรีม
@@ -2237,8 +2241,10 @@ def stream_answer(
     เวลาสิ้นสุดไม่ขยับเพราะเป็นค่าสัมบูรณ์ ตั้งกี่ครั้งก็ได้ผลเท่ากัน
     """
     # ตั้งครั้งแรกเพื่อให้ได้เวลาสิ้นสุด แล้วใช้ค่าเดิมนี้ตั้งซ้ำทุก step
-    deadline = start_budget()
-    inner = _stream_answer_events(db, user_id, session_id, message, prior)
+    # budget_s มาจากตัวเลือกของผู้ใช้ · None = ค่าตั้งต้นของระบบ
+    # โมเดลในเครื่องต้องได้เพดานของตัวเอง ไม่งั้นไม่มีวันตอบทัน (ดู ai_settings.PUBLIC_CHOICES)
+    deadline = start_budget(budget_s)
+    inner = _stream_answer_events(db, user_id, session_id, message, prior, connector)
     try:
         while True:
             apply_budget(deadline)
@@ -2259,6 +2265,7 @@ def _stream_answer_events(
     session_id: uuid.UUID | None,
     message: str,
     prior: list[PriorTurn] | None = None,
+    connector=None,
 ) -> Iterator[str]:
     """
     เนื้องานจริงของการสตรีม — ไม่แตะเพดานเวลา ตัวเรียก (stream_answer) ดูแลให้
@@ -2281,7 +2288,8 @@ def _stream_answer_events(
     # ที่หายไปทั้งหมดแบบนี้ ทำให้หาสาเหตุความช้าจาก log ไม่ได้
     p: Prepared | None = None
     try:
-        p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
+        p = _with_structured(
+            prepare_answer(db, user_id, session_id, message, prior, connector), message)
     except BaseException as exc:  # noqa: BLE001 — บันทึกเวลาแล้วโยนต่อตามเดิม
         _log_timing("/chat-web", outer, p, message, f"ล้มตอนเตรียม:{type(exc).__name__}")
         raise

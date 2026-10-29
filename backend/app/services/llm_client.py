@@ -351,7 +351,17 @@ def get_llm_connector():
     """
     if _connector is not None:
         return _connector          # ชุดทดสอบใส่ของปลอมไว้ (ดูหมายเหตุที่ _connector)
-    choice = ai_settings.current()
+    return connector_for(ai_settings.current())
+
+
+def connector_for(choice: ai_settings.Choice):
+    """
+    connector ของตัวเลือกที่ระบุมาเอง — ใช้แคชชุดเดียวกับ get_llm_connector()
+
+    มีไว้ให้คำขอที่ผู้ใช้เลือกโมเดลเองระบุตัวที่ต้องการได้ โดยไม่ต้องไปแตะค่าที่
+    ผู้ดูแลตั้งไว้ · ใช้แคชร่วมกันเพราะ connector หนึ่งตัวถือ httpx client ของตัวเอง
+    ถ้าสร้างใหม่ทุกคำขอจะเปิดการเชื่อมต่อทิ้งไว้เรื่อย ๆ จนหมดโควตา file descriptor
+    """
     key = choice.key
     with _connectors_lock:
         found = _connectors.get(key)

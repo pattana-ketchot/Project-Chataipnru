@@ -32,6 +32,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import web_rate_limiter
 from app.db.session import get_db
 from app.services.chat import PriorTurn, stream_answer
+from app.services import ai_settings
+from app.services.llm_client import connector_for
 from app.services.curriculum_facts import LIST_FIELDS
 from app.services.program_compare import compare_programs
 from app.services.program_match import build_profile_text, confidence_of, match_programs
@@ -80,6 +82,11 @@ class WebMessage(BaseModel):
 
 class WebChatRequest(BaseModel):
     messages: list[WebMessage] = Field(min_length=1)
+    # id ของตัวเลือกโมเดลที่ผู้ใช้กดเลือก (ดู GET /ai-options)
+    #
+    # รับเป็น "id" ไม่ใช่ชื่อรุ่น เพราะชื่อรุ่นที่รับจากหน้าเว็บตรง ๆ แปลว่าใครก็สั่ง
+    # ให้เซิร์ฟเวอร์ไปเรียกรุ่นไหนก็ได้ · ค่าว่างหรือ id ที่ไม่รู้จัก = ใช้ค่าที่ผู้ดูแลตั้งไว้
+    model_choice: str = ""
 
 
 class WebCourse(BaseModel):
@@ -177,6 +184,17 @@ def _source_headers(db: Session, source: dict | None) -> dict[str, str]:
     return headers
 
 
+@router.get("/ai-options")
+def ai_options() -> dict:
+    """
+    ตัวเลือกโมเดลที่ผู้ใช้หน้าเว็บเลือกได้ — หน้าเว็บเอาไปทำปุ่ม ไม่ต้อง hardcode เอง
+
+    เปิดสาธารณะเพราะเป็นรายชื่อตัวเลือกกับคำอธิบาย ไม่มีคีย์หรือค่าตั้งค่าใดหลุดออกไป
+    และหน้าเว็บต้องเรียกได้ก่อนผู้ใช้ล็อกอิน · ตัวที่เซิร์ฟเวอร์นี้ใช้ไม่ได้จะไม่อยู่ในรายการ
+    """
+    return {"options": ai_settings.public_choices()}
+
+
 @router.post("/chat-web", dependencies=[Depends(web_rate_limiter)])
 def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
     """
@@ -222,7 +240,12 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
     prelude: str | None = None
     stream = iter(())
     try:
-        stream = stream_answer(db, user_id=user_id, session_id=None, message=message, prior=prior)
+        # ตัวเลือกของผู้ใช้ — ถ้า id ไม่รู้จักหรือใช้ไม่ได้ ให้ถอยไปใช้ค่าที่ผู้ดูแลตั้งไว้
+        # เงียบ ๆ ดีกว่าโยนข้อผิดพลาด เพราะหน้าเว็บรุ่นเก่าอาจยังจำ id เดิมไว้
+        picked = ai_settings.public_choice(payload.model_choice)
+        chosen, budget_s = (connector_for(picked[0]), picked[1]) if picked else (None, None)
+        stream = stream_answer(db, user_id=user_id, session_id=None, message=message,
+                               prior=prior, connector=chosen, budget_s=budget_s)
         kind, parsed = _parse_event(next(stream, ""))
         if kind == "meta" and parsed:
             source_headers = _source_headers(db, parsed.get("source"))

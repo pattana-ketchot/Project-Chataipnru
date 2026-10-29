@@ -83,6 +83,92 @@ class Choice:
         return self.saved_provider is not None and not self.note
 
 
+# ===========================================================================
+# ตัวเลือกที่ "ผู้ใช้หน้าเว็บ" เลือกเองได้ — คนละชุดกับที่ผู้ดูแลตั้ง
+#
+# ผู้ดูแลตั้งค่าตั้งต้นของทั้งระบบ (ตาราง web.ai_settings) ส่วนรายการนี้คือตัวเลือก
+# ที่ยอมให้นักศึกษาสลับเองเป็นรายคำขอ · แยกกันเพราะสองเรื่องนี้ต้องการการควบคุม
+# คนละระดับ: ค่าตั้งต้นกระทบทุกคน ส่วนตัวเลือกรายคำขอกระทบแค่คนที่กด
+#
+# **รับเฉพาะ id ในรายการนี้เท่านั้น ไม่รับชื่อรุ่นที่ส่งมาจากหน้าเว็บตรง ๆ**
+# ไม่งั้นใครก็ยิงชื่อรุ่นแพง ๆ เข้ามาเผาโควตาของคณะได้
+#
+# budget_s = เพดานเวลาของคำขอที่เลือกตัวนั้น · None = ใช้ค่าตั้งต้น (RAG_TIME_BUDGET_S)
+# โมเดลในเครื่องต้องได้เพดานของตัวเองเพราะวัดแล้วว่าใช้เวลาหลักนาทีบนเครื่องที่
+# ไม่มีการ์ดจอ ถ้าใช้เพดาน 30 วินาทีเท่าคลาวด์คือรับประกันว่าไม่มีวันตอบทัน
+# (ตัวเลขอยู่ใน docs/SWITCH_PLUS_FALLBACK_READINESS_2569-10-28.md ข้อ 4)
+# ===========================================================================
+PUBLIC_CHOICES: tuple[dict, ...] = (
+    {
+        "id": "fast",
+        "provider": "gemini",
+        "model": "",                 # ว่าง = ใช้รุ่นตั้งต้นของ env (ตัวที่ใช้อยู่จริง)
+        "label": "ตอบเร็ว",
+        "hint": "แนะนำ · ตอบภายในไม่กี่วินาที",
+        "budget_s": None,
+    },
+    {
+        "id": "detailed",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash",
+        "label": "ตอบละเอียด",
+        "hint": "ใช้รุ่นใหญ่กว่า ช้ากว่าเล็กน้อย",
+        "budget_s": None,
+    },
+    {
+        "id": "local",
+        "provider": "ollama",
+        "model": "",                 # ว่าง = รุ่นตั้งต้นของ env (LLM_MODEL)
+        "label": "ประมวลผลในเครื่อง",
+        "hint": "ทดลอง · ข้อมูลไม่ออกนอกเซิร์ฟเวอร์ แต่ช้ามาก ต้องรอ 2–4 นาที",
+        "budget_s": 240.0,
+    },
+)
+
+# id ที่ใช้เมื่อผู้ใช้ไม่ได้เลือก — ต้องมีอยู่ใน PUBLIC_CHOICES เสมอ
+DEFAULT_PUBLIC_CHOICE = "fast"
+
+
+def public_choices() -> list[dict]:
+    """
+    รายการที่หน้าเว็บเอาไปทำปุ่มได้ — ซ่อนตัวที่เซิร์ฟเวอร์นี้ใช้ไม่ได้ออกไปเลย
+
+    ซ่อนดีกว่าแสดงแล้วให้กดไม่ได้ เพราะผู้ใช้ไม่มีทางรู้ว่าทำไมมันไม่ทำงาน
+    เช่นเซิร์ฟเวอร์ที่ไม่ได้ตั้ง GEMINI_API_KEY จะไม่เห็นตัวเลือกของ Gemini เลย
+    """
+    out = []
+    for c in PUBLIC_CHOICES:
+        if c["provider"] == "gemini" and not has_gemini_key():
+            continue
+        out.append({
+            "id": c["id"],
+            "label": c["label"],
+            "hint": c["hint"],
+            "model": c["model"] or default_model_of(c["provider"]),
+            "default": c["id"] == DEFAULT_PUBLIC_CHOICE,
+        })
+    return out
+
+
+def public_choice(choice_id: str | None) -> tuple[Choice, float | None] | None:
+    """
+    แปลง id ที่หน้าเว็บส่งมาเป็นตัวเลือกจริง คืน (Choice, เพดานเวลา)
+
+    คืน None เมื่อ id ไม่อยู่ในรายการหรือใช้ไม่ได้บนเซิร์ฟเวอร์นี้ — ผู้เรียกต้อง
+    ถอยไปใช้ค่าของผู้ดูแลแทน ไม่ใช่โยนข้อผิดพลาดใส่ผู้ใช้ เพราะ id ที่ไม่รู้จัก
+    มักเกิดจากหน้าเว็บรุ่นเก่าที่ยังจำตัวเลือกเดิมไว้ ไม่ใช่การโจมตี
+    """
+    if not choice_id:
+        return None
+    allowed = {c["id"] for c in public_choices()}
+    for c in PUBLIC_CHOICES:
+        if c["id"] != choice_id or c["id"] not in allowed:
+            continue
+        model = c["model"] or default_model_of(c["provider"])
+        return Choice(provider=c["provider"], model=model, source="user"), c["budget_s"]
+    return None
+
+
 def default_model_of(provider: str) -> str:
     return settings.gemini_model if provider == "gemini" else settings.llm_model
 
