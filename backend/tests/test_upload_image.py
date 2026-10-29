@@ -121,7 +121,10 @@ class UploadImageTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    # ต้องคืน exit code ตามผลจริง ไม่งั้นด่าน deploy ที่ดู exit code จะเห็นว่า "ผ่าน"
+    # ทุกครั้งแม้มีข้อที่ตก · exit=False มีไว้เพื่อให้ลบโฟลเดอร์ชั่วคราวก่อนจบเท่านั้น
     try:
-        unittest.main(verbosity=2, exit=False)
+        run = unittest.main(verbosity=2, exit=False)
     finally:
         _TEMP.cleanup()
+    raise SystemExit(0 if run.result.wasSuccessful() else 1)
