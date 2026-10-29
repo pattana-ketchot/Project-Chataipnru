@@ -62,6 +62,15 @@ CATEGORY_TYPES: dict[str, tuple[str, ...]] = {
 
 CATEGORIES = tuple(CATEGORY_TYPES)
 
+# เพดานขนาดของบางหมวด — แคบกว่า UPLOAD_MAX_BYTES ของทั้งระบบเท่านั้น ไม่เคยกว้างกว่า
+#
+# รูปที่แสดงบนหน้าเว็บสาธารณะ (โลโก้หลักสูตร รูปประจำสาขา รูปคณาจารย์) ไม่ควรเกิน
+# ไม่กี่เมกะไบต์ เพราะผู้ใช้ปลายทางต้องโหลดทุกครั้งที่เปิดหน้า · เอกสารแนบกับไฟล์
+# คลังความรู้ยังใช้เพดานของทั้งระบบตามเดิม เพราะเป็นไฟล์ที่ผู้ใช้เลือกจะดาวน์โหลดเอง
+CATEGORY_MAX_BYTES: dict[str, int] = {
+    "logo": 5 * 1024 * 1024,
+}
+
 # หมวดที่ต้องเข้าสู่ระบบก่อนอ่าน
 #
 # ของเดิม bucket `knowledge-files` เป็นแบบ private และใช้ signed URL
@@ -137,8 +146,14 @@ def check_type(name: str, head: bytes, category: str | None = None) -> str:
     return media_type
 
 
-def check_size(size: int) -> None:
+def max_bytes_for(category: str | None = None) -> int:
+    """เพดานขนาดของหมวดนี้ — หมวดที่มีเพดานของตัวเองใช้ค่าที่แคบกว่าเสมอ"""
     limit = get_settings().upload_max_bytes
+    return min(limit, CATEGORY_MAX_BYTES.get(category or "", limit))
+
+
+def check_size(size: int, category: str | None = None) -> None:
+    limit = max_bytes_for(category)
     if size <= 0:
         raise FileRejected("ไฟล์ว่าง")
     if size > limit:
@@ -178,7 +193,7 @@ def save(category: str, original_name: str, data: bytes) -> StoredFile:
     ไฟล์เดิมที่เนื้อเหมือนกันทุกไบต์จะใช้ไฟล์เดียวกัน (ชื่อมาจาก hash)
     จึงไม่มีไฟล์ซ้ำและการอัปโหลดซ้ำไม่ทำให้ของเดิมเสีย
     """
-    check_size(len(data))
+    check_size(len(data), category)
     media_type = check_type(original_name, data[:16], category)
     digest = hashlib.sha256(data).hexdigest()
     relative = relative_path_for(category, digest, extension_of(original_name))
