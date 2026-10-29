@@ -1,0 +1,56 @@
+diff --git a/src/lib/apiRequest.js b/src/lib/apiRequest.js
+new file mode 100644
+index 0000000..89ee081
+--- /dev/null
++++ b/src/lib/apiRequest.js
+@@ -0,0 +1,50 @@
++// ยิง POST ไปที่ API ของระบบ พร้อมเพดานเวลาของฝั่งเบราว์เซอร์
++//
++// ทำไมต้องมีเพดานตรงนี้ด้วย ทั้งที่หลังบ้านมีของตัวเองแล้ว
++// ------------------------------------------------------
++// fetch() ไม่มี timeout ในตัว ถ้าคำขอค้าง หน้าจอจะหมุนรอไปเรื่อย ๆ โดยไม่มีอะไรหยุดให้
++// วัดจาก production เมื่อ 29 ต.ค. 2569: คำขอ /recommend-major หนึ่งครั้งใช้เวลา
++// 6 นาที 15 วินาที (Gemini ตอบ 503 ครบทุกรุ่น แล้วตกไปใช้โมเดลในเครื่องที่ช้ามาก)
++// หน้าเว็บหมุนรอทั้งหมดนั้นโดยไม่บอกอะไรผู้ใช้เลย
++//
++// เพดานนี้ตั้งให้ "ยาวกว่า" เพดานของหลังบ้านเล็กน้อยโดยตั้งใจ เพื่อให้ข้อความบอกเหตุ
++// ที่หลังบ้านเขียนไว้ (ซึ่งอธิบายสาเหตุได้ดีกว่า) มาถึงผู้ใช้ก่อน ส่วนเพดานฝั่งนี้เป็น
++// ตาข่ายรองรับกรณีที่คำขอไปไม่ถึงหลังบ้านหรือค้างระหว่างทาง
++
++export const TIMEOUT_MESSAGE =
++  'ระบบใช้เวลาตอบนานเกินปกติ จึงหยุดรอครับ — คำตอบของคุณยังถูกเก็บไว้ กดลองใหม่ได้เลย'
++
++export class RequestTimeoutError extends Error {
++  constructor() {
++    super(TIMEOUT_MESSAGE)
++    this.name = 'RequestTimeoutError'
++  }
++}
++
++export const postJsonWithTimeout = async (url, body, timeoutMs) => {
++  const controller = new AbortController()
++  const timer = setTimeout(() => controller.abort(), timeoutMs)
++
++  try {
++    const response = await fetch(url, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify(body),
++      signal: controller.signal
++    })
++
++    if (!response.ok) {
++      const payload = await response.json().catch(() => ({}))
++      // FastAPI ส่งเหตุผลมาในช่อง detail ซึ่งเป็นข้อความไทยที่เขียนไว้ให้ผู้ใช้อ่าน
++      // ของเดิมอ่านแต่ช่อง error ข้อความจริงจึงไม่เคยไปถึงผู้ใช้เลย
++      throw new Error(payload.detail || payload.error || `คำขอไม่สำเร็จ (HTTP ${response.status})`)
++    }
++
++    return await response.json()
++  } catch (err) {
++    if (err.name === 'AbortError') throw new RequestTimeoutError()
++    throw err
++  } finally {
++    clearTimeout(timer)
++  }
++}
