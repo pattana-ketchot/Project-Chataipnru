@@ -41,13 +41,29 @@ from app.services.program_names import program_about, program_facts
 from app.services.course_scope import degree_level_of, degree_of_title
 from app.services.web_compat import canonical_labels, label_of, match_by_title, normalise_title, shared_user
 
-from llm.connector import LLMConnectionError  # noqa: E402
+from llm.connector import (LLMConnectionError, reset_budget,  # noqa: E402
+                           start_budget)
 from llm.prompts import NO_EVIDENCE_MARKER  # noqa: E402
 
 router = APIRouter(tags=["web-compat"])
 logger = logging.getLogger("course_advisor")
 
 BUSY = "ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
+
+# เพดานเวลาของหน้าแนะนำสาขาและหน้าเปรียบเทียบ
+#
+# สองเส้นทางนี้ไม่เคยตั้งเพดานเวลาเลย ต่างจาก /chat-web ที่ตั้งมาตั้งแต่ต้น ผลคือเมื่อ
+# Gemini ตอบ 503 ครบทุกรุ่นแล้วตกไปใช้โมเดลในเครื่อง (ซึ่งช้ามากเพราะเซิร์ฟเวอร์ไม่มี
+# การ์ดจอ) คำขอหนึ่งใช้เวลาเท่ากับ ReadTimeout ของ Ollama คูณจำนวนครั้งที่ลองซ้ำ
+# วัดจาก production เมื่อ 29 ต.ค. 2569: คำขอ /recommend-major เวลา 09:29:01 ตอบกลับ
+# 09:35:16 — **6 นาที 15 วินาที** โดยหน้าเว็บหมุนรออยู่ทั้งหมดนั้น
+#
+# ตั้งเพดานแล้ว http_timeout() จะหดเวลาของทุกคำขอ HTTP ให้ไม่เกินเวลาที่เหลือ และ
+# check_budget() จะหยุดลองรุ่นถัดไปเมื่อหมดเวลา ผู้ใช้จึงได้ข้อความบอกเหตุแทนการรอ
+#
+# 90 วินาทีเพราะคำขอที่สำเร็จตามปกติใช้ 9-35 วินาที (วัดวันเดียวกัน: compare 31 วินาที
+# ตอนที่ Gemini ล่มไปรอบหนึ่งแล้วกลับมา) เผื่อไว้อีกเท่าตัวกว่า แต่ยังสั้นกว่าของเดิมหลายเท่า
+RESULT_PAGE_BUDGET_S = 90.0
 
 # แถวจากตารางเปรียบเทียบที่นำไปแสดงเป็นข้อดีของแต่ละสาขา เรียงตามที่นักเรียนอยากรู้ก่อน
 _PROS_ROWS = ["เรียนอะไรบ้าง", "ทักษะที่ได้รับ", "จบแล้วทำงานอะไร", "จำนวนหน่วยกิต", "ค่าเทอม"]
@@ -503,6 +519,16 @@ def _row_value(rows, dimension: str, index: int) -> str | None:
 
 @router.post("/compare-courses", dependencies=[Depends(web_rate_limiter)])
 def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db)) -> dict:
+    """เปรียบเทียบสาขา — ห่อด้วยเพดานเวลาของคำขอ (ดู RESULT_PAGE_BUDGET_S)"""
+    budget = start_budget(RESULT_PAGE_BUDGET_S)
+    try:
+        return _compare_courses(payload, db)
+    finally:
+        # ล้างเสมอ ไม่ว่าจะสำเร็จหรือไม่ ไม่งั้นเพดานค้างไปถึงงานถัดไปในบริบทเดียวกัน
+        reset_budget(budget)
+
+
+def _compare_courses(payload: WebCompareRequest, db: Session) -> dict:
     """
     เปรียบเทียบสาขาในรูปแบบที่หน้าเว็บรออยู่
 
@@ -560,6 +586,15 @@ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db
 
 @router.post("/recommend-major", dependencies=[Depends(web_rate_limiter)])
 def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_db)) -> dict:
+    """แนะนำสาขา — ห่อด้วยเพดานเวลาของคำขอ (ดู RESULT_PAGE_BUDGET_S)"""
+    budget = start_budget(RESULT_PAGE_BUDGET_S)
+    try:
+        return _recommend_major(payload, db)
+    finally:
+        reset_budget(budget)
+
+
+def _recommend_major(payload: WebRecommendRequest, db: Session) -> dict:
     """
     แนะนำสาขาในรูปแบบที่หน้าเว็บรออยู่
 
