@@ -568,25 +568,48 @@ def _breakdown_of(s: dict) -> dict:
     }
 
 
+# ความยาวข้อความตัวอย่างของชิ้นเอกสารที่ส่งให้หน้าเว็บ
+#
+# ส่งมาเพื่อให้ผู้ใช้เห็นว่า "ส่วนที่ใช้เทียบ" มีเนื้อหาอะไรอยู่จริง ไม่ใช่เห็นแค่เลขหน้า
+# กับตัวเลขความคล้ายซึ่งตรวจสอบอะไรไม่ได้เลย · ยาวพอให้รู้เรื่องแต่ไม่ยาวจนกลายเป็น
+# การเสิร์ฟเนื้อหาเอกสารทั้งเล่มผ่านผลการจัดอันดับ
+_EXCERPT_CHARS = 160
+
+
+def _excerpt(content: str | None) -> str:
+    """ข้อความต้นฉบับสั้นๆ ของชิ้นหนึ่ง — ยุบช่องว่างทุกชนิดก่อน เพราะข้อความจาก PDF
+    ภาษาไทยมีขึ้นบรรทัดคั่นกลางคำจนอ่านบนหน้าเว็บไม่ออก"""
+    text_ = " ".join((content or "").split())
+    return text_[:_EXCERPT_CHARS] + "…" if len(text_) > _EXCERPT_CHARS else text_
+
+
 def _evidence_sources(db: Session, chunk_ids: list) -> dict:
-    """(ชื่อไฟล์, เลขหน้า) ของชิ้นหลักฐาน — คีย์เป็น chunk_id เป็นสตริง"""
+    """(ชื่อไฟล์, เลขหน้า, ข้อความ) ของชิ้นหลักฐาน — คีย์เป็น chunk_id เป็นสตริง"""
     if not chunk_ids:
         return {}
     rows = db.execute(
         text("""
-            SELECT ch.id AS chunk_id, ch.page_number, d.original_filename AS file
+            SELECT ch.id AS chunk_id, ch.page_number, ch.content,
+                   d.original_filename AS file
               FROM course_chunks ch
               LEFT JOIN course_documents d ON d.id = ch.document_id
              WHERE ch.id = ANY(:ids)
         """),
         {"ids": [str(i) for i in chunk_ids]},
     ).mappings().all()
-    return {str(r["chunk_id"]): {"file": r["file"], "page": r["page_number"]} for r in rows}
+    return {
+        str(r["chunk_id"]): {"file": r["file"], "page": r["page_number"],
+                             "excerpt": _excerpt(r["content"])}
+        for r in rows
+    }
 
 
 def _evidence_of(s: dict, sources: dict) -> list[dict]:
     """
-    หน้าเอกสารที่ใช้เป็นหลักฐานของใบนี้ พร้อมความคล้ายรายชิ้นที่วัดได้จริง
+    ส่วนของเอกสารที่ถูกใช้เทียบคะแนนของใบนี้ พร้อมค่าความคล้ายเชิงเวกเตอร์ของแต่ละชิ้น
+
+    ค่า similarity คือความใกล้เคียงของเวกเตอร์ข้อความ **ไม่ใช่การยืนยันว่าเนื้อหาตรง
+    กับคำตอบของผู้ใช้** จึงส่งข้อความต้นฉบับไปด้วยให้ผู้อ่านตัดสินเองได้
 
     ชิ้นทั้งหมดมาจาก chunk_ids ของหลักสูตรใบนี้ ซึ่งถูกแบ่งตาม course_id ตั้งแต่ใน SQL
     จึงเป็นเอกสารของสาขานี้และฉบับนี้เสมอ ข้ามสาขาหรือข้ามฉบับไม่ได้เชิงโครงสร้าง
@@ -596,7 +619,8 @@ def _evidence_of(s: dict, sources: dict) -> list[dict]:
         source = sources.get(str(chunk_id))
         if not source or not source.get("file"):
             continue
-        out.append({"file": source["file"], "page": source["page"], "similarity": round(sim, 4)})
+        out.append({"file": source["file"], "page": source["page"],
+                    "similarity": round(sim, 4), "excerpt": source.get("excerpt", "")})
     return out
 
 

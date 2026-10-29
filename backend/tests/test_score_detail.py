@@ -34,19 +34,27 @@ from llm.connector import LLMConnectionError  # noqa: E402
 from app.api.routes.web_compat import (_SCORED_FIELDS, _UNSCORED_FIELDS,  # noqa: E402
                                        _answer_rows, _engine)
 from app.services import llm_client, program_match  # noqa: E402
-from app.services.program_match import (CHUNKS_PER_COURSE, _breakdown_of,  # noqa: E402
-                                        _evidence_of, _to_percent, build_match_query,
-                                        match_programs)
+from app.services.program_match import (CHUNKS_PER_COURSE, _EXCERPT_CHARS,  # noqa: E402
+                                        _breakdown_of, _evidence_of, _excerpt, _to_percent,
+                                        build_match_query, match_programs)
 
 MATH = uuid.UUID("11111111-1111-1111-1111-111111111111")
 ANIMATION = uuid.UUID("22222222-2222-2222-2222-222222222222")
 
+NEWLINE = chr(10)
+TAB = chr(9)
+
 # ชิ้นเอกสารของสองสาขา — คนละไฟล์ คนละหน้า เพื่อให้การสลับกันมองเห็นได้ทันที
 CHUNKS = {
-    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001"): (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 11),
-    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002"): (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 12),
-    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001"): (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 7),
-    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002"): (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 8),
+    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001"):
+        # ขึ้นบรรทัดกลางข้อความแบบที่ข้อความจาก PDF ภาษาไทยเป็นจริง
+        (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 11, "รายวิชา" + NEWLINE + "การวิเคราะห์ข้อมูลเบื้องต้น 3(2-2-5)"),
+    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002"):
+        (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 12, "อาชีพที่สามารถประกอบได้ นักวิเคราะห์ข้อมูล"),
+    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001"):
+        (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 7, "การผลิตงานแอนิเมชันสามมิติ"),
+    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002"):
+        (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 8, "เทคนิคการจัดแสงและการเรนเดอร์"),
 }
 TITLES = {MATH: "วิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์",
           ANIMATION: "วิทยาศาสตรบัณฑิต สาขาวิชาคอมพิวเตอร์แอนิเมชันและมัลติมีเดีย"}
@@ -97,8 +105,8 @@ class _FakeDB:
         if "original_filename" in sql:
             wanted = {str(i) for i in params["ids"]}
             return _Result([
-                _Row(chunk_id=cid, page_number=page, file=name)
-                for cid, (_course, name, page) in CHUNKS.items() if str(cid) in wanted
+                _Row(chunk_id=cid, page_number=page, file=name, content=content)
+                for cid, (_course, name, page, content) in CHUNKS.items() if str(cid) in wanted
             ])
         if "content LIKE" in sql:            # แก่นของหลักสูตร
             return _Result([])
@@ -164,8 +172,8 @@ class BreakdownMathTests(_ScoreDetailBase):
 
 class EvidenceIsolationTests(_ScoreDetailBase):
     def _sources(self):
-        return {str(cid): {"file": name, "page": page}
-                for cid, (_c, name, page) in CHUNKS.items()}
+        return {str(cid): {"file": name, "page": page, "excerpt": _excerpt(content)}
+                for cid, (_c, name, page, content) in CHUNKS.items()}
 
     def test_หลักฐานของแต่ละสาขาไม่ข้ามไปอีกสาขา(self):
         math_ids = [c for c, v in CHUNKS.items() if v[0] == MATH]
@@ -187,6 +195,24 @@ class EvidenceIsolationTests(_ScoreDetailBase):
         ids = [c for c, v in CHUNKS.items() if v[0] == MATH]
         out = _evidence_of({"chunk_ids": ids, "sims": [0.61, 0.42]}, self._sources())
         self.assertEqual([(i["page"], i["similarity"]) for i in out], [(11, 0.61), (12, 0.42)])
+
+    def test_ข้อความตัวอย่างเป็นของชิ้นนั้นจริง_ไม่สลับกัน(self):
+        """ข้อความที่ผู้ใช้อ่านต้องเป็นของหน้านั้น ไม่ใช่ของชิ้นอื่นในสาขาเดียวกัน"""
+        ids = [c for c, v in CHUNKS.items() if v[0] == MATH]
+        out = _evidence_of({"chunk_ids": ids, "sims": [0.61, 0.42]}, self._sources())
+        self.assertEqual([(i["page"], i["excerpt"]) for i in out], [
+            (11, "รายวิชา การวิเคราะห์ข้อมูลเบื้องต้น 3(2-2-5)"),
+            (12, "อาชีพที่สามารถประกอบได้ นักวิเคราะห์ข้อมูล"),
+        ])
+
+    def test_ข้อความตัวอย่างยุบช่องว่างและจำกัดความยาว(self):
+        """ข้อความจาก PDF ภาษาไทยมีขึ้นบรรทัดคั่นกลางคำ ถ้าไม่ยุบจะอ่านบนหน้าเว็บไม่ออก"""
+        messy = "ก" + NEWLINE + "ข" + TAB + " ค" + NEWLINE + NEWLINE + "ง"
+        self.assertEqual(_excerpt(messy), "ก ข ค ง")
+        long = _excerpt("ก" * (_EXCERPT_CHARS + 50))
+        self.assertEqual(len(long), _EXCERPT_CHARS + 1)
+        self.assertTrue(long.endswith("…"))
+        self.assertEqual(_excerpt(None), "")
 
 
 class WholeResultTests(_ScoreDetailBase):
@@ -211,6 +237,8 @@ class WholeResultTests(_ScoreDetailBase):
             self.assertEqual({i["file"] for i in m.evidence}, own)
             self.assertEqual([i["page"] for i in m.evidence],
                              [CHUNKS[c][2] for c in m.evidence_chunk_ids])
+            self.assertEqual([i["excerpt"] for i in m.evidence],
+                             [_excerpt(CHUNKS[c][3]) for c in m.evidence_chunk_ids])
 
     def test_โมเดลล่ม_ยังได้คะแนนและรายละเอียดการคำนวณครบ(self):
         matches, connector = self._match(chat_fails=True)
