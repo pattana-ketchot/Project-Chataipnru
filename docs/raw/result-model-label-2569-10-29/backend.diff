@@ -1,0 +1,295 @@
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index 61d2499..b4d82d5 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -33,7 +33,7 @@ from app.api.deps import web_rate_limiter
+ from app.db.session import get_db
+ from app.services.chat import PriorTurn, stream_answer
+ from app.services import ai_settings
+-from app.services.llm_client import connector_for
++from app.services.llm_client import chat_model_used, connector_for, reset_chat_model
+ from app.services.curriculum_facts import LIST_FIELDS
+ from app.services.program_compare import compare_programs
+ from app.services.program_match import build_profile_text, confidence_of, match_programs
+@@ -474,6 +474,20 @@ def career_lists_web(db: Session = Depends(get_db)) -> dict:
+     return {"programmes": programmes}
+ 
+ 
++# ที่มาของสิ่งที่ผู้ใช้เห็นในผลชุดหนึ่ง — ส่งเป็นโครงสร้าง ไม่ใช่ประโยคสำเร็จรูป
++#
++# หน้าเว็บเลือกถ้อยคำเอง แต่ **ชื่อรุ่นต้องมาจากที่นี่เท่านั้น** ห้ามหน้าเว็บเขียนทับไว้เอง
++# เพราะผู้ดูแลเปลี่ยนรุ่นได้ตลอด และเส้นทาง Gemini มีโมเดลในเครื่องรับช่วงต่อได้
++#
++# explanation เป็น None เมื่อ "ไม่ได้เรียกโมเดล" หรือ "เรียกแล้วแต่ข้อความของมันไม่ได้ถูกใช้"
++# หน้าเว็บจะได้ไม่ติดป้ายชื่อรุ่นให้ผลที่ไม่ได้มาจากโมเดล
++SCORING_EMBEDDING_RULES = "embedding_and_rules"
++
++
++def _engine(explained: bool, scoring: str | None = None) -> dict:
++    return {"explanation": chat_model_used() if explained else None, "scoring": scoring}
++
++
+ def _rank_key(title: str) -> tuple[str, str | None]:
+     """คีย์เทียบชื่อสาขาที่แยกระดับปริญญาด้วย — ใช้จับคู่อันดับกลับไปที่การ์ดบนหน้าเว็บ"""
+     return normalise_title(title), degree_level_of(degree_of_title(title))
+@@ -496,6 +510,7 @@ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db
+     หลักสูตรตัวเองไว้ การให้โมเดลคิดข้อเสียขึ้นมาเองคือการแต่งข้อมูล ซึ่งเป็นสิ่งที่
+     ระบบนี้ตั้งใจไม่ทำ หน้าเว็บตรวจความยาวก่อนแสดงอยู่แล้ว บล็อกนั้นจึงไม่ขึ้นเอง
+     """
++    reset_chat_model()
+     sent = [c.model_dump() for c in payload.courses]
+     matched, unmatched = match_by_title(db, sent)
+ 
+@@ -538,6 +553,8 @@ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db
+         "summary": (result.get("summary") or "") + note,
+         "courses": courses,
+         "verdict": "ข้อมูลทั้งหมดสรุปจากเอกสารหลักสูตร (มคอ.2) ของแต่ละสาขา ยกเว้นค่าเทอมที่มาจากประกาศของคณะ",
++        # หน้านี้ไม่มีคะแนน มีแต่ข้อความที่โมเดลสรุปจากเอกสาร จึงไม่ส่ง scoring
++        "engine": _engine(explained=True),
+     }
+ 
+ 
+@@ -548,6 +565,7 @@ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_
+ 
+     ชื่อช่องในแบบสอบถามของหน้าเว็บไม่ตรงกับของเรา (skills/goals/track) จึงแปลงก่อน
+     """
++    reset_chat_model()
+     a = payload.answers
+     # แปลรหัสตัวเลือกเป็นข้อความไทยที่ผู้ใช้เห็นก่อนเสมอ — หน้าเว็บส่งรหัสอย่าง "tech"
+     # หรือ "career-growth" มา ซึ่งแทบไม่มีความหมายให้เทียบกับเอกสารภาษาไทย
+@@ -615,10 +633,18 @@ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_
+         "ผลนี้คำนวณจากความใกล้เคียงระหว่างคำตอบของคุณกับเนื้อหาจริงในเอกสารหลักสูตรของแต่ละสาขา"
+     )
+ 
++    cards = [card(e) for e in ranked[:1 + _MAX_ALTERNATIVES]]
++    # ติดป้ายชื่อรุ่นเฉพาะเมื่อข้อความของโมเดลถูกใช้จริงอย่างน้อยหนึ่งใบ — โมเดลล่ม
++    # หรือเขียนมาแล้วไม่ผ่านด่านตรวจข้อความอ้างอิง ทุกใบจะเป็นข้อความมาตรฐานของระบบ
++    explained = any(c["reason"] not in (NO_REASON, NO_EVIDENCE_REASON) for c in cards)
++
+     return {
+-        "primary": card(ranked[0]),
+-        "alternatives": [card(e) for e in ranked[1:1 + _MAX_ALTERNATIVES]],
++        "primary": cards[0],
++        "alternatives": cards[1:],
+         "summary": summary,
+         # เปิดไว้ให้ตรวจสอบได้ว่าระบบเข้าใจคำตอบของนักเรียนว่าอย่างไร
+         "profileText": build_profile_text(answers),
++        # คะแนนไม่ได้มาจากโมเดลที่เขียนคำอธิบาย — มาจากความใกล้เคียงของเวกเตอร์กับ
++        # เกณฑ์ของระบบ (ตัดหลักสูตรที่ปิดรับ ยุบฉบับซ้ำ ถ่วงน้ำหนักชื่อหลักสูตร)
++        "engine": _engine(explained, scoring=SCORING_EMBEDDING_RULES),
+     }
+diff --git a/backend/app/services/llm_client.py b/backend/app/services/llm_client.py
+index ab14d26..5098f54 100644
+--- a/backend/app/services/llm_client.py
++++ b/backend/app/services/llm_client.py
+@@ -23,6 +23,7 @@ import logging
+ import sys
+ import threading
+ import time
++from contextvars import ContextVar
+ from pathlib import Path
+ 
+ # monorepo: <root>/backend/app/services/llm_client.py -> <root>/llm
+@@ -110,7 +111,9 @@ class _SplitConnector:
+         # ขั้นที่ห้ามใช้ตัวสำรองไม่ต้องกัน เพราะไม่มีใครมารับช่วงต่อ
+         full = reserve_budget() if allow_fallback else None
+         try:
+-            return self._chatter.chat(*args, **kwargs)
++            out = self._chatter.chat(*args, **kwargs)
++            record_chat_model(self.provider_name, self._chatter.chat_model)
++            return out
+         except LLMConnectionError as e:
+             if not allow_fallback:
+                 llm_usage.record("fallback_declined")
+@@ -138,6 +141,8 @@ class _SplitConnector:
+             llm_usage.record("fallback_local_failed")
+             raise
+         llm_usage.record("fallback_local_ok")
++        # ข้อความที่ผู้ใช้จะเห็นมาจากตัวสำรอง ไม่ใช่เจ้าหลักที่ถูกเลือกไว้
++        record_chat_model("ollama", getattr(self._fallback, "chat_model", ""))
+         return out
+ 
+     def chat_stream(self, *args, allow_fallback: bool = True, **kwargs):
+@@ -226,6 +231,7 @@ class _LocalPrimary:
+             llm_usage.record("local_primary_failed")
+             raise
+         llm_usage.record("local_primary_ok")
++        record_chat_model("ollama", getattr(self._local, "chat_model", ""))
+         return out
+ 
+     def chat_stream(self, *args, **kwargs):
+@@ -386,6 +392,35 @@ def connector_for(choice: ai_settings.Choice):
+     return built
+ 
+ 
++# รุ่นที่ "เขียนข้อความให้คำขอนี้จริง" — บันทึกตอนเรียกสำเร็จ ไม่ใช่ตอนเลือก
++#
++# ต่างจาก answer_model_label() ที่บอกตัวที่ถูก **สั่ง** ให้เขียน · ถ้าเจ้าหลักล้มแล้ว
++# โมเดลในเครื่องรับช่วงต่อ ค่าที่นี่จะเป็นโมเดลในเครื่อง เพราะข้อความที่ผู้ใช้เห็นมาจาก
++# ตัวนั้นจริง · ไม่ได้เรียกโมเดลเลย = None ซึ่งต้องไม่ถูกแปลงเป็นชื่อรุ่นค่าตั้งต้น
++#
++# เก็บใน ContextVar ไม่ใช่ตัวแปรโมดูล เพราะหลายคำขอทำงานพร้อมกัน — endpoint แบบ sync
++# ของ FastAPI รันใน threadpool ซึ่งคัดลอก context ให้ทีละคำขออยู่แล้ว (กลไกเดียวกับที่
++# เพดานเวลาของคำขอใช้อยู่) ค่าของคำขอหนึ่งจึงไม่รั่วไปอีกคำขอ
++_chat_model_used: ContextVar[tuple[str, str] | None] = ContextVar(
++    "chat_model_used", default=None)
++
++
++def record_chat_model(provider: str, model: str) -> None:
++    """บันทึกว่าใครเพิ่งเขียนข้อความสำเร็จให้คำขอนี้ — เรียกหลังได้ผลลัพธ์เท่านั้น"""
++    _chat_model_used.set((provider or "unknown", model or "?"))
++
++
++def reset_chat_model() -> None:
++    """ล้างค่าก่อนเริ่มงานของคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกรายงานว่าเป็นของคำขอนี้"""
++    _chat_model_used.set(None)
++
++
++def chat_model_used() -> dict | None:
++    """{'provider', 'model'} ของการเขียนข้อความครั้งล่าสุดในคำขอนี้ · None = ไม่ได้เรียกโมเดล"""
++    pair = _chat_model_used.get()
++    return None if pair is None else {"provider": pair[0], "model": pair[1]}
++
++
+ def answer_model_label(connector) -> str:
+     """
+     ชื่อผู้ให้บริการและรุ่นที่ถูก "สั่งให้เขียน" คำตอบของคำขอนี้
+diff --git a/backend/tests/test_result_model_label.py b/backend/tests/test_result_model_label.py
+new file mode 100644
+index 0000000..2cf75bf
+--- /dev/null
++++ b/backend/tests/test_result_model_label.py
+@@ -0,0 +1,133 @@
++"""
++ชื่อรุ่นที่หน้าผลลัพธ์แสดง ต้องเป็นตัวที่เขียนข้อความให้คำขอนั้นจริง
++
++    cd backend && python tests/test_result_model_label.py
++
++ไม่ต่อฐานข้อมูล ไม่เรียกโมเดลจริง — ใช้ของจับพฤติกรรมแทน connector ชั้นใน
++
++ทำไมต้องมีชุดนี้
++---------------
++หน้า "ค้นหาสาขาที่เหมาะกับฉัน" และ "เปรียบเทียบสาขา" จะติดป้ายว่าใครเขียนคำอธิบาย
++ให้ผู้ใช้เห็น · สามอย่างที่ผิดแล้วผู้ใช้จะถูกบอกข้อมูลเท็จโดยไม่มีใครรู้
++
++1. **ติดป้ายด้วยค่าตั้งต้นแทนตัวที่ทำงานจริง** — เส้นทาง Gemini มีโมเดลในเครื่อง
++   รับช่วงต่อเมื่อเจ้าหลักล้ม ถ้ารายงานตามค่าที่เลือกไว้ ผู้ใช้จะเห็นว่า Gemini เขียน
++   ทั้งที่ข้อความมาจากโมเดลในเครื่อง
++2. **ติดป้ายทั้งที่ไม่ได้เรียกโมเดลเลย** — ถ้าโมเดลล่ม ผลยังออกได้ด้วยข้อความมาตรฐาน
++   ของระบบ กรณีนั้นต้องไม่มีชื่อรุ่น
++3. **ค่าของคำขอหนึ่งรั่วไปอีกคำขอ** — หลายคำขอทำงานพร้อมกัน
++"""
++import os
++import sys
++import unittest
++from contextvars import copy_context
++from pathlib import Path
++
++sys.stdout.reconfigure(encoding="utf-8", errors="replace")
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
++
++os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.0.1:1/unused")
++os.environ.setdefault("JWT_SECRET", "ชุดทดสอบไม่ได้ออก token")
++os.environ.setdefault("GEMINI_API_KEY", "คีย์ปลอมสำหรับชุดทดสอบ")
++
++from llm.connector import LLMConnectionError  # noqa: E402
++
++from app.api.routes.web_compat import _engine  # noqa: E402
++from app.services import llm_client  # noqa: E402
++
++
++class _Fake:
++    """connector ชั้นในแบบปลอม — ตอบสำเร็จหรือล้มตามที่สั่ง"""
++
++    answer_token_cap = 512
++
++    def __init__(self, model: str, fail: bool = False) -> None:
++        self.chat_model = model
++        self._fail = fail
++        self.calls = 0
++
++    def chat(self, *_args, **_kwargs):
++        self.calls += 1
++        if self._fail:
++            raise LLMConnectionError("จำลองว่าเจ้าหลักล้ม")
++        return "ข้อความจาก " + self.chat_model
++
++    def embed(self, _text):
++        return [0.0]
++
++
++class ResultModelLabelTests(unittest.TestCase):
++    def setUp(self):
++        llm_client.reset_chat_model()
++
++    def test_ยังไม่ได้เรียกโมเดล_ต้องไม่มีชื่อรุ่น(self):
++        self.assertIsNone(llm_client.chat_model_used())
++
++    def test_เจ้าหลักเขียนสำเร็จ_รายงานเจ้าหลัก(self):
++        split = llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash"))
++        split.chat([])
++        self.assertEqual(llm_client.chat_model_used(),
++                         {"provider": "gemini", "model": "gemini-3.5-flash"})
++
++    def test_เจ้าหลักล้มแล้วตัวสำรองรับช่วง_ต้องรายงานตัวสำรอง(self):
++        """ข้อความที่ผู้ใช้เห็นมาจากโมเดลในเครื่อง การติดป้ายว่า Gemini คือการบอกผิด"""
++        local = _Fake("qwen2.5:3b")
++        split = llm_client._SplitConnector(local, _Fake("gemini-3.5-flash", fail=True))
++        out = split.chat([])
++        self.assertIn("qwen2.5:3b", out)
++        self.assertEqual(llm_client.chat_model_used(),
++                         {"provider": "ollama", "model": "qwen2.5:3b"})
++
++    def test_ทั้งเจ้าหลักและตัวสำรองล้ม_ต้องไม่มีชื่อรุ่น(self):
++        split = llm_client._SplitConnector(_Fake("qwen2.5:3b", fail=True),
++                                           _Fake("gemini-3.5-flash", fail=True))
++        with self.assertRaises(LLMConnectionError):
++            split.chat([])
++        self.assertIsNone(llm_client.chat_model_used())
++
++    def test_เลือกโมเดลในเครื่องเป็นตัวหลัก_รายงานตัวนั้น(self):
++        local = llm_client._LocalPrimary(_Fake("qwen2.5:3b"))
++        local.chat([])
++        self.assertEqual(llm_client.chat_model_used(),
++                         {"provider": "ollama", "model": "qwen2.5:3b"})
++
++    def test_ค่าของคำขอหนึ่งไม่รั่วไปอีกคำขอ(self):
++        """endpoint แบบ sync รันใน threadpool ซึ่งคัดลอก context ให้ทีละคำขอ"""
++        def one():
++            llm_client.reset_chat_model()
++            llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash")).chat([])
++            return llm_client.chat_model_used()
++
++        self.assertEqual(copy_context().run(one)["model"], "gemini-3.5-flash")
++        # คำขอนี้ไม่ได้เรียกโมเดลเอง จึงต้องไม่เห็นของคำขอก่อนหน้า
++        self.assertIsNone(llm_client.chat_model_used())
++
++    # ---------------- รูปร่างที่ส่งให้หน้าเว็บ ----------------
++
++    def test_ส่งชื่อรุ่นที่ทำงานจริงไปกับผล(self):
++        llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash-lite")).chat([])
++        engine = _engine(explained=True, scoring="embedding_and_rules")
++        self.assertEqual(engine["explanation"],
++                         {"provider": "gemini", "model": "gemini-3.5-flash-lite"})
++        self.assertEqual(engine["scoring"], "embedding_and_rules")
++
++    def test_ข้อความของโมเดลไม่ได้ถูกใช้_ต้องไม่ติดป้ายชื่อรุ่น(self):
++        """โมเดลเขียนมาแล้วไม่ผ่านด่านตรวจข้อความอ้างอิง ผู้ใช้เห็นข้อความมาตรฐานของระบบ"""
++        llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash")).chat([])
++        self.assertIsNone(_engine(explained=False)["explanation"])
++
++    def test_ไม่เรียกโมเดลเลย_ผลยังบอกวิธีให้คะแนนได้(self):
++        engine = _engine(explained=True, scoring="embedding_and_rules")
++        self.assertIsNone(engine["explanation"])
++        self.assertEqual(engine["scoring"], "embedding_and_rules")
++
++    def test_ไม่มีคีย์หรือข้อมูลการเชื่อมต่อหลุดไปกับผล(self):
++        llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash")).chat([])
++        engine = _engine(explained=True, scoring="embedding_and_rules")
++        self.assertEqual(set(engine), {"explanation", "scoring"})
++        self.assertEqual(set(engine["explanation"]), {"provider", "model"})
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=2)
