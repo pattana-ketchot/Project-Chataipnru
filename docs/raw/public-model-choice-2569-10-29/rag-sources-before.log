@@ -1,0 +1,46 @@
+/usr/local/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+== 1. คำตอบสาย RAG ต้องมีบรรทัดที่มา และต้องเป็นหน้าที่รองรับคำตอบ ==
+INFO:course_advisor:ใช้โมเดลเขียนคำตอบ: gemini / gemini-3.5-flash-lite (ที่มา: env)
+INFO:course_advisor:timing /chat-web total=59ms prepare=55ms write_answer=1ms persist=2ms | corpus_version=43ms structured_fast_early=12ms | source=structured status=answered outcome=ok q='คุณสมบัติผู้เข้าศึกษาของเทคโนโลยีสารสนเทศคืออะไร'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] มีบรรทัดที่มา — คุณสมบัติผู้เข้าศึกษาของเทคโนโลยีสารสนเท — กสูตร (มคอ.2) ฉบับนั้นระบุไว้ ไม่ใช่ประกาศรับสมัครของปีปัจจุบัน และมหาวิทยาลัยอาจมีประกาศ ระเบียบ หรือข้อบังคับเพิ่มเติม
+  [ผ่าน] ที่มาอ้าง it66.pdf หน้าใน [16] — ได้ [16]
+  [ผ่าน] ไม่อ้างหน้า [161] ที่ไม่ได้รองรับคำตอบ — ได้ [16]
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent?alt=sse "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat-web total=8481ms prepare=4746ms write_answer=3724ms persist=11ms | corpus_version=6ms gates=5ms structured_miss=2ms retrieve1=196ms decide=4535ms | source=rag status=answered outcome=ok q='หลักสูตรวิทยาการคอมพิวเตอร์เรียนกี่ปี'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] มีบรรทัดที่มา — หลักสูตรวิทยาการคอมพิวเตอร์เรียนกี่ปี — ปกติหลักสูตรปริญญาตรี 4 ปี จะใช้เวลาศึกษาไม่น้อยกว่า 6 ภาคการศึกษาปกติ และไม่เกิน 8 ปีการศึกษา  ที่มา: cs61.pdf หน้า 129
+  [ผ่าน] ที่มาอ้าง cs61.pdf หน้าใน [128, 129, 130] — ได้ [129]
+== 2. คำตอบที่สังเคราะห์จากหลายเอกสารต้องบอกที่มาหลายเล่ม ==
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://ollama:11434/api/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent?alt=sse "HTTP/1.1 200 OK"
+INFO:course_advisor:timing /chat-web total=5299ms prepare=3062ms write_answer=2224ms persist=12ms | corpus_version=5ms gates=2772ms structured_miss=3ms retrieve1=277ms decide=4ms | source=rag status=answered outcome=ok q='วิทยาการคอมพิวเตอร์กับเทคโนโลยีสารสนเทศต่างกันอย่างไร'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] ที่มามีเอกสารของทั้งสองหลักสูตร — ได้ ['cs66.pdf', 'cs66_brief.pdf', 'it66.pdf', 'it66_brief.pdf']
+== 3. ค่าเทอมต้องมีหน่วย ค่าแรกเข้า วันที่ข้อมูล และไม่สรุปสถานะเปิดรับ ==
+INFO:course_advisor:timing /chat-web total=11ms prepare=9ms persist=2ms | ไม่ได้จับเวลารายขั้น | source=rag status=answered outcome=ok q='ค่าเทอมสาขาวิทยาการคอมพิวเตอร์เท่าไหร่'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] มี 12,000 และ 14,000 — สาขาวิทยาการคอมพิวเตอร์ (วท.บ. 4 ปี) ค่าเทอม (บาทต่อภาคการศึกษา) ภาคปกติ 12,000 
+  [ผ่าน] บอกหน่วยต่อภาคการศึกษา
+  [ผ่าน] บอกค่าธรรมเนียมแรกเข้า 4,500
+  [ผ่าน] บอกวันที่ของข้อมูล 13 พฤศจิกายน 2568
+  [ผ่าน] ไม่เรียกวันนั้นว่าวันที่ออกประกาศ
+  [ผ่าน] มีลิงก์ต้นทาง
+  [ผ่าน] ไม่สรุปว่าไม่เปิดรับภาคเสาร์-อาทิตย์
+  [ผ่าน] ไม่มีเลข 22,000 จาก มคอ.
+== 4. สาขาที่ประกาศมีแต่ระบบเคยไม่มีข้อมูล ==
+INFO:course_advisor:timing /chat-web total=9ms prepare=7ms persist=1ms | ไม่ได้จับเวลารายขั้น | source=rag status=answered outcome=ok q='ค่าเทอมการประกอบอาหารและการบริการอาหารเท่าไหร่'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] ตอบค่าเทอมได้ ไม่บอกว่าไม่มีในประกาศ — สาขาการประกอบอาหารและการบริการอาหาร (ศศ.บ. 4 ปี) ค่าเทอม (บาทต่อภาคการศึกษา) ภาคปกติ 12,00
+== 5. คำถามต่อเนื่องเรื่องค่าเทอมต้องไม่ถามกลับว่าสาขาอะไร ==
+INFO:course_advisor:timing /chat-web total=11ms prepare=9ms persist=1ms | ไม่ได้จับเวลารายขั้น | source=rag status=answered outcome=ok q='แล้วค่าเทอมล่ะ'
+INFO:httpx:HTTP Request: POST http://testserver/chat-web "HTTP/1.1 200 OK"
+  [ผ่าน] ตอบค่าเทอมของสาขาเดิม — สาขาวิทยาการคอมพิวเตอร์ (วท.บ. 4 ปี) ค่าเทอม (บาทต่อภาคการศึกษา) ภาคปกติ 12,000 บาท · ภาค 
+  [ผ่าน] ไม่ถามกลับว่าสาขาอะไร
+
+จุดตรวจ 17 จุด · ตก 0 · บริการขัดข้อง 0
+EXIT=0
