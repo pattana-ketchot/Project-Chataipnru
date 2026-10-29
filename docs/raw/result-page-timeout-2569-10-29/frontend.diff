@@ -1,0 +1,143 @@
+diff --git a/src/lib/apiRequest.js b/src/lib/apiRequest.js
+new file mode 100644
+index 0000000..89ee081
+--- /dev/null
++++ b/src/lib/apiRequest.js
+@@ -0,0 +1,50 @@
++// ยิง POST ไปที่ API ของระบบ พร้อมเพดานเวลาของฝั่งเบราว์เซอร์
++//
++// ทำไมต้องมีเพดานตรงนี้ด้วย ทั้งที่หลังบ้านมีของตัวเองแล้ว
++// ------------------------------------------------------
++// fetch() ไม่มี timeout ในตัว ถ้าคำขอค้าง หน้าจอจะหมุนรอไปเรื่อย ๆ โดยไม่มีอะไรหยุดให้
++// วัดจาก production เมื่อ 29 ต.ค. 2569: คำขอ /recommend-major หนึ่งครั้งใช้เวลา
++// 6 นาที 15 วินาที (Gemini ตอบ 503 ครบทุกรุ่น แล้วตกไปใช้โมเดลในเครื่องที่ช้ามาก)
++// หน้าเว็บหมุนรอทั้งหมดนั้นโดยไม่บอกอะไรผู้ใช้เลย
++//
++// เพดานนี้ตั้งให้ "ยาวกว่า" เพดานของหลังบ้านเล็กน้อยโดยตั้งใจ เพื่อให้ข้อความบอกเหตุ
++// ที่หลังบ้านเขียนไว้ (ซึ่งอธิบายสาเหตุได้ดีกว่า) มาถึงผู้ใช้ก่อน ส่วนเพดานฝั่งนี้เป็น
++// ตาข่ายรองรับกรณีที่คำขอไปไม่ถึงหลังบ้านหรือค้างระหว่างทาง
++
++export const TIMEOUT_MESSAGE =
++  'ระบบใช้เวลาตอบนานเกินปกติ จึงหยุดรอครับ — คำตอบของคุณยังถูกเก็บไว้ กดลองใหม่ได้เลย'
++
++export class RequestTimeoutError extends Error {
++  constructor() {
++    super(TIMEOUT_MESSAGE)
++    this.name = 'RequestTimeoutError'
++  }
++}
++
++export const postJsonWithTimeout = async (url, body, timeoutMs) => {
++  const controller = new AbortController()
++  const timer = setTimeout(() => controller.abort(), timeoutMs)
++
++  try {
++    const response = await fetch(url, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify(body),
++      signal: controller.signal
++    })
++
++    if (!response.ok) {
++      const payload = await response.json().catch(() => ({}))
++      // FastAPI ส่งเหตุผลมาในช่อง detail ซึ่งเป็นข้อความไทยที่เขียนไว้ให้ผู้ใช้อ่าน
++      // ของเดิมอ่านแต่ช่อง error ข้อความจริงจึงไม่เคยไปถึงผู้ใช้เลย
++      throw new Error(payload.detail || payload.error || `คำขอไม่สำเร็จ (HTTP ${response.status})`)
++    }
++
++    return await response.json()
++  } catch (err) {
++    if (err.name === 'AbortError') throw new RequestTimeoutError()
++    throw err
++  } finally {
++    clearTimeout(timer)
++  }
++}
+diff --git a/src/pages/CompareResult.jsx b/src/pages/CompareResult.jsx
+index 5752c46..8766858 100644
+--- a/src/pages/CompareResult.jsx
++++ b/src/pages/CompareResult.jsx
+@@ -4,6 +4,10 @@ import { Plus, Trash2, X, Check, GraduationCap, Sparkles, Loader2, AlertTriangle
+ import { fetchSiteCoursesByIds } from '../lib/siteCourses'
+ import { levelOf } from '../lib/courseLevels'
+ import EngineNote from '../components/EngineNote'
++import { postJsonWithTimeout } from '../lib/apiRequest'
++
++// เหตุผลเดียวกับหน้าแนะนำสาขา — ยาวกว่าเพดานของหลังบ้านเล็กน้อย
++const REQUEST_TIMEOUT_MS = 100000
+ 
+ const CompareResult = () => {
+   const navigate = useNavigate()
+@@ -63,20 +67,12 @@ const CompareResult = () => {
+         careers: c.careers
+       }))
+ 
+-      const response = await fetch('/api/compare-courses', {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ courses: payload })
+-      })
+-
+-      if (!response.ok) {
+-        const body = await response.json().catch(() => ({}))
+-        throw new Error(body.error || 'AI request failed')
+-      }
+-
+-      setAiResult(await response.json())
+-    } catch {
+-      setAiError('ระบบ AI ไม่สามารถวิเคราะห์การเปรียบเทียบได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง')
++      setAiResult(await postJsonWithTimeout(
++        '/api/compare-courses', { courses: payload }, REQUEST_TIMEOUT_MS
++      ))
++    } catch (err) {
++      // สาขาที่เลือกอยู่ใน query string ของหน้า การล้มของคำขอจึงไม่ทำให้ตัวเลือกหาย
++      setAiError(err.message || 'ระบบ AI ไม่สามารถวิเคราะห์การเปรียบเทียบได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง')
+     } finally {
+       setAiLoading(false)
+     }
+diff --git a/src/pages/FindMajorResult.jsx b/src/pages/FindMajorResult.jsx
+index 4e2b2ac..b2489f7 100644
+--- a/src/pages/FindMajorResult.jsx
++++ b/src/pages/FindMajorResult.jsx
+@@ -5,6 +5,11 @@ import { fetchSiteCourses } from '../lib/siteCourses'
+ import { forUndergraduateAdvice } from '../lib/courseLevels'
+ import { getFindMajorAnswers, clearFindMajorAnswers } from '../lib/findMajorAnswers'
+ import EngineNote from '../components/EngineNote'
++import { postJsonWithTimeout } from '../lib/apiRequest'
++
++// ยาวกว่าเพดานของหลังบ้าน (90 วินาที) เล็กน้อย เพื่อให้ข้อความบอกเหตุของหลังบ้าน
++// มาถึงผู้ใช้ก่อน ส่วนค่านี้เป็นตาข่ายรองรับกรณีคำขอค้างระหว่างทาง
++const REQUEST_TIMEOUT_MS = 100000
+ 
+ const steps = [
+   { id: 1, title: 'ข้อมูลพื้นฐาน', status: 'completed' },
+@@ -109,20 +114,15 @@ const FindMajorResult = () => {
+     setResult(null)
+ 
+     try {
+-      const response = await fetch('/api/recommend-major', {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ answers: savedAnswers, courses: coursesData })
+-      })
+-
+-      if (!response.ok) {
+-        const body = await response.json().catch(() => ({}))
+-        throw new Error(body.error || 'AI request failed')
+-      }
+-
+-      setResult(await response.json())
++      setResult(await postJsonWithTimeout(
++        '/api/recommend-major',
++        { answers: savedAnswers, courses: coursesData },
++        REQUEST_TIMEOUT_MS
++      ))
+     } catch (err) {
+-      setError('ขออภัยครับ ระบบ AI ไม่สามารถวิเคราะห์ผลลัพธ์ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง')
++      // บอกเหตุที่หลังบ้านให้มา ถ้ามี — มันอธิบายได้ตรงกว่าข้อความกลาง ๆ ของหน้านี้
++      // คำตอบแบบสอบถามยังอยู่ใน sessionStorage ปุ่ม "ลองใหม่" จึงใช้ของเดิมได้ทันที
++      setError(err.message || 'ขออภัยครับ ระบบ AI ไม่สามารถวิเคราะห์ผลลัพธ์ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง')
+     } finally {
+       setLoading(false)
+     }

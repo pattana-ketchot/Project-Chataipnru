@@ -1,0 +1,178 @@
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index b4d82d5..dc225e8 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -41,7 +41,8 @@ from app.services.program_names import program_about, program_facts
+ from app.services.course_scope import degree_level_of, degree_of_title
+ from app.services.web_compat import canonical_labels, label_of, match_by_title, normalise_title, shared_user
+ 
+-from llm.connector import LLMConnectionError  # noqa: E402
++from llm.connector import (LLMConnectionError, reset_budget,  # noqa: E402
++                           start_budget)
+ from llm.prompts import NO_EVIDENCE_MARKER  # noqa: E402
+ 
+ router = APIRouter(tags=["web-compat"])
+@@ -49,6 +50,21 @@ logger = logging.getLogger("course_advisor")
+ 
+ BUSY = "ขออภัยครับ ระบบตอบไม่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
+ 
++# เพดานเวลาของหน้าแนะนำสาขาและหน้าเปรียบเทียบ
++#
++# สองเส้นทางนี้ไม่เคยตั้งเพดานเวลาเลย ต่างจาก /chat-web ที่ตั้งมาตั้งแต่ต้น ผลคือเมื่อ
++# Gemini ตอบ 503 ครบทุกรุ่นแล้วตกไปใช้โมเดลในเครื่อง (ซึ่งช้ามากเพราะเซิร์ฟเวอร์ไม่มี
++# การ์ดจอ) คำขอหนึ่งใช้เวลาเท่ากับ ReadTimeout ของ Ollama คูณจำนวนครั้งที่ลองซ้ำ
++# วัดจาก production เมื่อ 29 ต.ค. 2569: คำขอ /recommend-major เวลา 09:29:01 ตอบกลับ
++# 09:35:16 — **6 นาที 15 วินาที** โดยหน้าเว็บหมุนรออยู่ทั้งหมดนั้น
++#
++# ตั้งเพดานแล้ว http_timeout() จะหดเวลาของทุกคำขอ HTTP ให้ไม่เกินเวลาที่เหลือ และ
++# check_budget() จะหยุดลองรุ่นถัดไปเมื่อหมดเวลา ผู้ใช้จึงได้ข้อความบอกเหตุแทนการรอ
++#
++# 90 วินาทีเพราะคำขอที่สำเร็จตามปกติใช้ 9-35 วินาที (วัดวันเดียวกัน: compare 31 วินาที
++# ตอนที่ Gemini ล่มไปรอบหนึ่งแล้วกลับมา) เผื่อไว้อีกเท่าตัวกว่า แต่ยังสั้นกว่าของเดิมหลายเท่า
++RESULT_PAGE_BUDGET_S = 90.0
++
+ # แถวจากตารางเปรียบเทียบที่นำไปแสดงเป็นข้อดีของแต่ละสาขา เรียงตามที่นักเรียนอยากรู้ก่อน
+ _PROS_ROWS = ["เรียนอะไรบ้าง", "ทักษะที่ได้รับ", "จบแล้วทำงานอะไร", "จำนวนหน่วยกิต", "ค่าเทอม"]
+ _BEST_FOR_ROW = "คุณสมบัติผู้เข้าศึกษา"
+@@ -503,6 +519,16 @@ def _row_value(rows, dimension: str, index: int) -> str | None:
+ 
+ @router.post("/compare-courses", dependencies=[Depends(web_rate_limiter)])
+ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db)) -> dict:
++    """เปรียบเทียบสาขา — ห่อด้วยเพดานเวลาของคำขอ (ดู RESULT_PAGE_BUDGET_S)"""
++    budget = start_budget(RESULT_PAGE_BUDGET_S)
++    try:
++        return _compare_courses(payload, db)
++    finally:
++        # ล้างเสมอ ไม่ว่าจะสำเร็จหรือไม่ ไม่งั้นเพดานค้างไปถึงงานถัดไปในบริบทเดียวกัน
++        reset_budget(budget)
++
++
++def _compare_courses(payload: WebCompareRequest, db: Session) -> dict:
+     """
+     เปรียบเทียบสาขาในรูปแบบที่หน้าเว็บรออยู่
+ 
+@@ -560,6 +586,15 @@ def compare_courses_web(payload: WebCompareRequest, db: Session = Depends(get_db
+ 
+ @router.post("/recommend-major", dependencies=[Depends(web_rate_limiter)])
+ def recommend_major_web(payload: WebRecommendRequest, db: Session = Depends(get_db)) -> dict:
++    """แนะนำสาขา — ห่อด้วยเพดานเวลาของคำขอ (ดู RESULT_PAGE_BUDGET_S)"""
++    budget = start_budget(RESULT_PAGE_BUDGET_S)
++    try:
++        return _recommend_major(payload, db)
++    finally:
++        reset_budget(budget)
++
++
++def _recommend_major(payload: WebRecommendRequest, db: Session) -> dict:
+     """
+     แนะนำสาขาในรูปแบบที่หน้าเว็บรออยู่
+ 
+diff --git a/backend/tests/test_result_page_budget.py b/backend/tests/test_result_page_budget.py
+new file mode 100644
+index 0000000..129fd7b
+--- /dev/null
++++ b/backend/tests/test_result_page_budget.py
+@@ -0,0 +1,103 @@
++"""
++หน้าแนะนำสาขาและหน้าเปรียบเทียบต้องมีเพดานเวลาของคำขอ
++
++    cd backend && python tests/test_result_page_budget.py
++
++ไม่ต่อฐานข้อมูล ไม่เรียกโมเดล — แทนงานจริงด้วยของจับพฤติกรรม
++
++ที่มาของชุดนี้ — วัดจาก production เมื่อ 29 ต.ค. 2569
++----------------------------------------------------
++คำขอ `/recommend-major` เวลา 09:29:01 ตอบกลับ 09:35:16 รวม **6 นาที 15 วินาที**
++และหน้าเว็บหมุนรอทั้งหมดนั้น · ลำดับเหตุการณ์จาก log
++
++    09:29:01  embedding เสร็จ (เร็วปกติ)
++    09:29:04-16  Gemini ตอบ 503 ครบทั้งสี่รุ่น แล้วถูกพักไว้รุ่นละ 60 วินาที
++    09:29:16  ตกไปใช้โมเดลในเครื่อง
++    09:31:16 / 09:33:16 / 09:35:16  ollama /api/chat ReadTimeout ครั้งที่ 1/2/3
++    09:35:16  คืน 200 พร้อมข้อความมาตรฐานแทนเหตุผล
++
++ต้นเหตุคือสองเส้นทางนี้ไม่เคยตั้งเพดานเวลา ต่างจาก /chat-web ที่ตั้งไว้ตั้งแต่ต้น
++เมื่อไม่มีเพดาน `http_timeout()` จะไม่หดเวลาของคำขอ HTTP และ `check_budget()`
++ไม่มีอะไรให้ตรวจ คำขอจึงยาวเท่ากับ ReadTimeout ของ Ollama คูณจำนวนครั้งที่ลองซ้ำ
++"""
++import os
++import sys
++import unittest
++from pathlib import Path
++
++sys.stdout.reconfigure(encoding="utf-8", errors="replace")
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
++
++os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.0.1:1/unused")
++os.environ.setdefault("JWT_SECRET", "ชุดทดสอบไม่ได้ออก token")
++os.environ.setdefault("GEMINI_API_KEY", "คีย์ปลอมสำหรับชุดทดสอบ")
++
++from llm.connector import budget_left_s, reset_budget  # noqa: E402
++
++from app.api.routes import web_compat  # noqa: E402
++
++
++class ResultPageBudgetTests(unittest.TestCase):
++    def setUp(self):
++        reset_budget()
++        self.real_compare = web_compat._compare_courses
++        self.real_recommend = web_compat._recommend_major
++
++    def tearDown(self):
++        web_compat._compare_courses = self.real_compare
++        web_compat._recommend_major = self.real_recommend
++        reset_budget()
++
++    def test_เพดานถูกตั้งไว้สมเหตุผล(self):
++        """ยาวพอสำหรับคำขอปกติ (วัดได้ 9-35 วินาที) แต่สั้นกว่าของเดิมหลายเท่า"""
++        self.assertGreaterEqual(web_compat.RESULT_PAGE_BUDGET_S, 60)
++        self.assertLessEqual(web_compat.RESULT_PAGE_BUDGET_S, 120)
++
++    def test_หน้าเปรียบเทียบ_มีเพดานเวลาระหว่างทำงาน(self):
++        seen = {}
++
++        def fake(_payload, _db):
++            seen["left"] = budget_left_s()
++            return {"ok": True}
++
++        web_compat._compare_courses = fake
++        web_compat.compare_courses_web(payload=None, db=None)
++
++        self.assertIsNotNone(seen["left"], "ไม่มีเพดานเวลาระหว่างทำงาน")
++        self.assertLessEqual(seen["left"], web_compat.RESULT_PAGE_BUDGET_S)
++        self.assertGreater(seen["left"], 0)
++
++    def test_หน้าแนะนำสาขา_มีเพดานเวลาระหว่างทำงาน(self):
++        seen = {}
++
++        def fake(_payload, _db):
++            seen["left"] = budget_left_s()
++            return {"ok": True}
++
++        web_compat._recommend_major = fake
++        web_compat.recommend_major_web(payload=None, db=None)
++
++        self.assertIsNotNone(seen["left"], "ไม่มีเพดานเวลาระหว่างทำงาน")
++        self.assertLessEqual(seen["left"], web_compat.RESULT_PAGE_BUDGET_S)
++
++    def test_ล้างเพดานหลังจบเสมอ_แม้คำขอจะล้ม(self):
++        """เพดานที่ค้างอยู่จะไปตัดงานถัดไปในบริบทเดียวกันโดยไม่มีใครรู้"""
++        def ok(_payload, _db):
++            return {}
++
++        def boom(_payload, _db):
++            raise RuntimeError("จำลองว่างานล้ม")
++
++        web_compat._compare_courses = ok
++        web_compat.compare_courses_web(payload=None, db=None)
++        self.assertIsNone(budget_left_s(), "ไม่ได้ล้างเพดานหลังสำเร็จ")
++
++        web_compat._recommend_major = boom
++        with self.assertRaises(RuntimeError):
++            web_compat.recommend_major_web(payload=None, db=None)
++        self.assertIsNone(budget_left_s(), "ไม่ได้ล้างเพดานหลังล้ม")
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=2)
