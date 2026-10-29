@@ -43,7 +43,7 @@ import httpx
 
 from llm.connector import (ChatMessage, LLMBudgetExceeded, LLMConnectionError,
                            budget_left_s, check_budget, http_timeout,
-                           post_json_bounded)
+                           note_answered_model, post_json_bounded)
 
 logger = logging.getLogger("llm.gemini")
 
@@ -365,6 +365,9 @@ class GeminiConnector:
                 if model != self.chat_model:
                     logger.info("ตอบด้วยโมเดลสำรอง %s", model)
                 self._note("gemini_ok" if model == self.chat_model else f"gemini_backup:{model}")
+                # ตัวที่ตอบสำเร็จจริง ซึ่งไม่ใช่ chat_model ที่ตั้งไว้เสมอ — ผู้เรียกที่จะ
+                # บอกผู้ใช้ว่า "รุ่นไหนเขียนคำตอบนี้" ต้องใช้ค่านี้ ไม่ใช่ค่าที่ตั้งไว้
+                note_answered_model(model)
                 return text
             except _QuotaExhausted as e:
                 self._note(f"gemini_{e.kind}:{model}")

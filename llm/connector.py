@@ -160,6 +160,34 @@ def budget_left_s() -> float | None:
     return None if end is None else end - time.monotonic()
 
 
+# รุ่นที่ "ตอบสำเร็จ" ให้คำขอนี้ — ตัวเชื่อมต่อบันทึกเอง ผู้เรียกจึงไม่ต้องเดา
+#
+# ที่นี่เป็นที่เดียวที่รู้ความจริง: GeminiConnector วนลองหลายรุ่นเมื่อรุ่นหลักชนโควตา
+# หรือฝั่งผู้ให้บริการล่ม (ดู _models_to_try) รุ่นที่ตอบสำเร็จจึงไม่ใช่ chat_model ที่ตั้งไว้เสมอ
+#
+# **ต้องเป็น ContextVar ไม่ใช่แอตทริบิวต์ของตัวเชื่อมต่อ** เพราะตัวเชื่อมต่อถูกแคชไว้ใช้ร่วมกัน
+# ทุกคำขอ การเขียนทับบนวัตถุเดียวกันจะทำให้คำขอที่ทำงานพร้อมกันอ่านค่าของกันและกัน
+_answered_model: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "llm_answered_model", default=None
+)
+
+
+def note_answered_model(model: str) -> None:
+    """ตัวเชื่อมต่อเรียกเมื่อได้ข้อความกลับมาสำเร็จ — ห้ามเรียกตอนเริ่มลอง"""
+    if model:
+        _answered_model.set(model)
+
+
+def answered_model() -> str | None:
+    """รุ่นที่ตอบสำเร็จล่าสุดในคำขอนี้ · None = ยังไม่มีการตอบสำเร็จ"""
+    return _answered_model.get()
+
+
+def reset_answered_model() -> None:
+    """ล้างก่อนเริ่มคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกอ่านว่าเป็นของคำขอนี้"""
+    _answered_model.set(None)
+
+
 def check_budget(doing: str) -> None:
     """โยน LLMBudgetExceeded ถ้าหมดเวลาแล้ว · เรียกก่อนเริ่มงานที่กินเวลาทุกครั้ง"""
     left = budget_left_s()
@@ -330,6 +358,9 @@ class OllamaConnector:
         content = message.get("content")
         if content is None:
             raise LLMConnectionError(f"chat response missing content: {data!r}"[:200])
+        # บันทึกไว้ด้วย ไม่ใช่เพราะที่นี่มีหลายรุ่นให้เลือก (มีรุ่นเดียว) แต่เพื่อให้ค่าที่
+        # ผู้เรียกอ่านเป็นของการตอบ "ครั้งล่าสุด" จริง ๆ เมื่อคำขอหนึ่งเรียกข้ามผู้ให้บริการ
+        note_answered_model(self.chat_model)
         return content
 
     def chat_stream(

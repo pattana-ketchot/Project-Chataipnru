@@ -31,7 +31,8 @@ os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.
 os.environ.setdefault("JWT_SECRET", "ชุดทดสอบไม่ได้ออก token")
 os.environ.setdefault("GEMINI_API_KEY", "คีย์ปลอมสำหรับชุดทดสอบ")
 
-from llm.connector import LLMConnectionError  # noqa: E402
+from llm.connector import ChatMessage, LLMConnectionError  # noqa: E402
+from llm.gemini import GeminiConnector, _QuotaExhausted  # noqa: E402
 
 from app.api.routes.web_compat import _engine  # noqa: E402
 from app.services import llm_client  # noqa: E402
@@ -101,6 +102,65 @@ class ResultModelLabelTests(unittest.TestCase):
 
         self.assertEqual(copy_context().run(one)["model"], "gemini-3.5-flash")
         # คำขอนี้ไม่ได้เรียกโมเดลเอง จึงต้องไม่เห็นของคำขอก่อนหน้า
+        self.assertIsNone(llm_client.chat_model_used())
+
+    # ---------------- Gemini วนลองรุ่นของตัวเอง ----------------
+
+    def _gemini_that_falls_back(self):
+        """
+        GeminiConnector จริง แต่แทนการยิง HTTP ด้วยของจำลอง
+
+        รุ่นหลักชนโควตา (429 ของ Google เป็นแบบต่อโมเดล) รุ่นสำรองตอบสำเร็จ
+        """
+        # คีย์ต้องเป็น ASCII เพราะมันถูกใส่ลงส่วนหัวของ HTTP ตอนสร้างตัวเชื่อมต่อ
+        conn = GeminiConnector(api_key="not-a-real-key", chat_model="gemini-3.5-flash-lite",
+                               fallback_models=("gemini-3.6-flash",))
+        tried: list[str] = []
+
+        def fake_call(model, _payload):
+            tried.append(model)
+            if model == conn.chat_model:
+                raise _QuotaExhausted(model, 1.0)
+            return "ข้อความจากรุ่นสำรอง " + model
+
+        conn._chat_one_model = fake_call
+        return conn, tried
+
+    def test_รุ่นหลักของ_gemini_ชนโควตา_ต้องรายงานรุ่นสำรองที่ตอบจริง(self):
+        """
+        ค่าที่ตั้งไว้คือ gemini-3.5-flash-lite แต่ตัวที่เขียนคำตอบคือ gemini-3.6-flash
+
+        ถ้ารายงานตามค่าที่ตั้งไว้ ผู้ใช้จะเห็นชื่อรุ่นที่ไม่ได้เขียนข้อความนั้นเลย
+        """
+        gemini, tried = self._gemini_that_falls_back()
+        split = llm_client._SplitConnector(_Fake("bge-m3"), gemini)
+        out = split.chat([ChatMessage(role="user", content="ทดสอบ")])
+
+        self.assertEqual(tried, ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+        self.assertIn("gemini-3.6-flash", out)
+        self.assertEqual(llm_client.chat_model_used(),
+                         {"provider": "gemini", "model": "gemini-3.6-flash"})
+
+    def test_ค่าของคำขอที่ใช้รุ่นสำรองไม่รั่วไปคำขออื่นที่ใช้ตัวเชื่อมต่อเดียวกัน(self):
+        """
+        ตัวเชื่อมต่อถูกแคชไว้ใช้ร่วมทุกคำขอ — ถ้าเก็บรุ่นที่ตอบไว้บนวัตถุนั้น
+        คำขอที่ทำงานพร้อมกันจะอ่านค่าของกันและกัน
+        """
+        gemini, _ = self._gemini_that_falls_back()
+        split = llm_client._SplitConnector(_Fake("bge-m3"), gemini)
+
+        def request_with_backup():
+            llm_client.reset_chat_model()
+            split.chat([ChatMessage(role="user", content="คำขอที่ใช้รุ่นสำรอง")])
+            return llm_client.chat_model_used()
+
+        def request_without_model():
+            llm_client.reset_chat_model()
+            return llm_client.chat_model_used()
+
+        self.assertEqual(copy_context().run(request_with_backup)["model"], "gemini-3.6-flash")
+        # คำขอนี้ใช้ตัวเชื่อมต่อตัวเดียวกันแต่ไม่ได้เรียกโมเดล ต้องไม่เห็นรุ่นของคำขอก่อนหน้า
+        self.assertIsNone(copy_context().run(request_without_model))
         self.assertIsNone(llm_client.chat_model_used())
 
     # ---------------- รูปร่างที่ส่งให้หน้าเว็บ ----------------

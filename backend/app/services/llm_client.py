@@ -33,7 +33,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from llm.connector import (_DEFAULT_BUDGET_S, ChatMessage,  # noqa: E402
                            LLMConnectionError, OllamaConnector,
-                           apply_budget, reserve_budget, reset_budget, start_budget)
+                           answered_model, apply_budget, reserve_budget,
+                           reset_answered_model, reset_budget, start_budget)
 from llm.gemini import GeminiConnector  # noqa: E402
 from llm.prompts import (GROUNDING_CHECK_SYSTEM_PROMPT,  # noqa: E402
                          build_grounding_check_prompt)
@@ -112,7 +113,10 @@ class _SplitConnector:
         full = reserve_budget() if allow_fallback else None
         try:
             out = self._chatter.chat(*args, **kwargs)
-            record_chat_model(self.provider_name, self._chatter.chat_model)
+            # ตัวที่ตอบสำเร็จจริง ไม่ใช่ chat_model ที่ตั้งไว้ — Gemini วนลองรุ่นสำรองของ
+            # ตัวเองได้เมื่อรุ่นหลักชนโควตา (ดู gemini._models_to_try)
+            record_chat_model(self.provider_name,
+                              answered_model() or self._chatter.chat_model)
             return out
         except LLMConnectionError as e:
             if not allow_fallback:
@@ -142,7 +146,8 @@ class _SplitConnector:
             raise
         llm_usage.record("fallback_local_ok")
         # ข้อความที่ผู้ใช้จะเห็นมาจากตัวสำรอง ไม่ใช่เจ้าหลักที่ถูกเลือกไว้
-        record_chat_model("ollama", getattr(self._fallback, "chat_model", ""))
+        record_chat_model("ollama",
+                          answered_model() or getattr(self._fallback, "chat_model", ""))
         return out
 
     def chat_stream(self, *args, allow_fallback: bool = True, **kwargs):
@@ -231,7 +236,8 @@ class _LocalPrimary:
             llm_usage.record("local_primary_failed")
             raise
         llm_usage.record("local_primary_ok")
-        record_chat_model("ollama", getattr(self._local, "chat_model", ""))
+        record_chat_model("ollama",
+                          answered_model() or getattr(self._local, "chat_model", ""))
         return out
 
     def chat_stream(self, *args, **kwargs):
@@ -413,6 +419,7 @@ def record_chat_model(provider: str, model: str) -> None:
 def reset_chat_model() -> None:
     """ล้างค่าก่อนเริ่มงานของคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกรายงานว่าเป็นของคำขอนี้"""
     _chat_model_used.set(None)
+    reset_answered_model()
 
 
 def chat_model_used() -> dict | None:
