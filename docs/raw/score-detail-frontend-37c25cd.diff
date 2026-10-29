@@ -1,0 +1,294 @@
+commit 37c25cd1cb7444528b506ee1756811fbf52b3be8
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Thu Oct 29 17:59:02 2026 +0700
+
+    feat(web): เปิดที่มาของคะแนนรายสาขาในหน้าแนะนำสาขา
+    
+    ผู้ใช้เห็น "44% เหมาะสม" แล้วไม่มีทางรู้ว่าเลขนี้มาจากไหน รอบนี้เพิ่มบล็อก
+    "ทำไมได้คะแนนนี้" ใต้เปอร์เซ็นต์ของการ์ดทุกใบ ทั้งอันดับหลักและสาขาทางเลือก
+    
+    แสดงสี่ส่วนจากค่าที่หลังบ้านคำนวณมาแล้ว ไม่คิดเลขใหม่และไม่เรียกโมเดลเพิ่ม
+      * คำตอบของผู้ใช้ที่เข้าไปคิดคะแนนจริง
+      * จุดที่ตรงกับเนื้อหาหลักสูตร พร้อมไฟล์และหน้าของเอกสารสาขานั้น
+      * ส่วนที่ยังไม่พบข้อมูลเชื่อมโยง (เขียนจากค่าที่วัดได้ ไม่ใช่การคาดเดา)
+      * วิธีแปลงความใกล้เคียงเป็นเปอร์เซ็นต์ ตามสูตรที่หลังบ้านใช้
+    
+    พร้อมบรรทัดกำกับว่าเปอร์เซ็นต์คือระดับความสอดคล้องตามวิธีของระบบ ไม่ใช่โอกาส
+    สอบติดหรือการรับประกันความสำเร็จ
+    
+    EngineNote เพิ่มบรรทัด "โมเดลเทียบความคล้าย" จากค่าที่หลังบ้านส่งมา และเรียง
+    สามบรรทัดเป็น เทียบความคล้าย → วิธีให้คะแนน → ผู้เขียนคำอธิบาย · กรณีไม่ได้ใช้
+    ข้อความจาก AI ยังบอกตามจริงและไม่ติดป้ายชื่อรุ่นเหมือนเดิม
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/src/components/EngineNote.jsx b/src/components/EngineNote.jsx
+index 6979197..3d4d719 100644
+--- a/src/components/EngineNote.jsx
++++ b/src/components/EngineNote.jsx
+@@ -10,24 +10,35 @@ const PROVIDER_LABEL = { gemini: 'Gemini', ollama: 'โมเดลในเค
+ 
+ const SCORING_TEXT = {
+   embedding_and_rules:
+-    'คะแนนความเหมาะสมคำนวณจากความใกล้เคียงระหว่างคำตอบของคุณกับเนื้อหาในเอกสารหลักสูตร และเกณฑ์ของระบบ'
++    'คะแนนคำนวณด้วยสูตรและเกณฑ์ของระบบ จากความใกล้เคียงระหว่างคำตอบของคุณกับเนื้อหาในเอกสารหลักสูตร'
+ }
+ 
+ export const engineLines = (engine) => {
+   if (!engine) return []
+   const lines = []
+   const used = engine.explanation
++  const embedding = engine.embedding
++
++  // รุ่นที่เทียบความคล้าย — คนละตัวกับรุ่นที่เขียนข้อความ และหลังบ้านส่งมาเฉพาะผลที่
++  // คะแนนมาจากเวกเตอร์จริง ผลที่ไม่ได้ใช้เวกเตอร์จะไม่มีบรรทัดนี้
++  if (embedding) {
++    const provider = PROVIDER_LABEL[embedding.provider] || embedding.provider || 'ผู้ให้บริการที่ไม่ทราบชื่อ'
++    const model = embedding.model && embedding.model !== '?' ? embedding.model : 'ไม่มีข้อมูลรุ่น'
++    lines.push(`โมเดลเทียบความคล้าย: ${model} · ${provider}`)
++  }
++
++  if (engine.scoring && SCORING_TEXT[engine.scoring]) lines.push(SCORING_TEXT[engine.scoring])
+ 
+   if (used) {
+     const provider = PROVIDER_LABEL[used.provider] || used.provider || 'ผู้ให้บริการที่ไม่ทราบชื่อ'
+     // รุ่นที่หลังบ้านบอกว่าไม่รู้ ("?" หรือว่าง) ต้องไม่ถูกเติมด้วยค่าตั้งต้นของหน้าเว็บ
+     const model = used.model && used.model !== '?' ? used.model : 'ไม่มีข้อมูลรุ่น'
+-    lines.push(`คำอธิบายโดย ${provider} · ${model}`)
++    lines.push(`คำอธิบายโดย: ${provider} · ${model}`)
+   } else {
+-    lines.push('ประมวลผลจากข้อมูลและเกณฑ์ของระบบ')
++    // ไม่ได้ใช้ข้อความจากโมเดลเลย — ต้องบอกตามจริง ห้ามติดป้ายชื่อรุ่นแทน
++    lines.push('ไม่ได้ใช้ข้อความจาก AI ในผลชุดนี้ · ประมวลผลจากข้อมูลและเกณฑ์ของระบบ')
+   }
+ 
+-  if (engine.scoring && SCORING_TEXT[engine.scoring]) lines.push(SCORING_TEXT[engine.scoring])
+   return lines
+ }
+ 
+diff --git a/src/lib/scoreDetail.js b/src/lib/scoreDetail.js
+new file mode 100644
+index 0000000..da2d408
+--- /dev/null
++++ b/src/lib/scoreDetail.js
+@@ -0,0 +1,84 @@
++// แปลงตัวเลขที่หลังบ้าน "คำนวณไปแล้ว" ให้เป็นประโยคที่นักเรียนอ่านรู้เรื่อง
++//
++// กฎของไฟล์นี้: **ไม่คำนวณคะแนนใหม่ และไม่เติมตัวเลขที่หลังบ้านไม่ได้ส่งมา**
++// ทุกค่าที่แสดงมาจาก card.why / result.scoringDetail ตรง ๆ ที่นี่ทำแค่จัดถ้อยคำ
++// (การแปลงเปอร์เซ็นต์เขียนเป็นสูตรให้อ่านตาม ไม่ได้คิดเลขซ้ำเพื่อเอามาแสดงแทนค่าจริง)
++//
++// ของเก่าที่ยังไม่มี why (หลังบ้านรุ่นก่อน) ต้องไม่พัง — ทุกฟังก์ชันคืนรายการว่าง
++// แล้วหน้าเว็บจะไม่แสดงบล็อกนี้เลย ดีกว่าเดาตัวเลขแล้วบอกผิด
++
++export const PERCENT_DISCLAIMER =
++  'เปอร์เซ็นต์นี้คือระดับความสอดคล้องตามวิธีคำนวณของระบบ ไม่ใช่โอกาสสอบติด ' +
++  'ไม่ใช่การรับประกันว่าจะเรียนสำเร็จ และคะแนนของแต่ละสาขาคิดแยกกัน'
++
++const n = (v, digits = 2) =>
++  typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : null
++
++const pageOf = (item) => (item.page ? `หน้า ${item.page}` : 'ไม่ระบุหน้า')
++
++/** คำตอบของผู้ใช้ที่เข้าไปอยู่ในการคิดคะแนนจริง */
++export const answerLines = (detail) =>
++  (detail?.answersUsed || []).map((row) => `${row.label}: ${row.values.join(', ')}`)
++
++/** จุดที่ตรงกับเนื้อหาหลักสูตร — ไฟล์และหน้าที่ถูกใช้เป็นหลักฐานของสาขานี้ */
++export const matchLines = (why) =>
++  (why?.evidence || []).map((item) => {
++    const sim = n(item.similarity)
++    const where = `${item.file} · ${pageOf(item)}`
++    return sim ? `${where} (ความใกล้เคียง ${sim})` : where
++  })
++
++/** ส่วนที่ยังไม่พบข้อมูลเชื่อมโยง — เขียนจากค่าที่วัดได้ ไม่ใช่การคาดเดา */
++export const gapLines = (why, detail) => {
++  if (!why) return []
++  const lines = []
++  const floor = n(why.percent_floor)
++
++  if (!why.evidence?.length) {
++    lines.push('ยังไม่พบหน้าเอกสารของสาขานี้ที่เชื่อมโยงกับคำตอบของคุณ')
++  }
++  if (floor && typeof why.content_similarity === 'number' && why.content_similarity < why.percent_floor) {
++    lines.push(`เนื้อหาในเอกสารยังใกล้เคียงคำตอบของคุณน้อย (${n(why.content_similarity)} ต่ำกว่าเกณฑ์ที่ระบบเริ่มนับ ${floor})`)
++  }
++  if (floor && typeof why.title_similarity === 'number' && why.title_similarity < why.percent_floor) {
++    lines.push(`ชื่อสาขายังไม่ตรงกับคำตอบของคุณ (${n(why.title_similarity)} ต่ำกว่าเกณฑ์ที่ระบบเริ่มนับ ${floor})`)
++  }
++  const perCourse = detail?.chunksPerCourse
++  if (perCourse && typeof why.chunks_used === 'number' && why.chunks_used < perCourse) {
++    lines.push(`เอกสารของสาขานี้มีเนื้อหาให้เทียบ ${why.chunks_used} ส่วน น้อยกว่า ${perCourse} ส่วนที่ระบบใช้ตามปกติ`)
++  }
++  if (why.no_evidence) {
++    lines.push('ไม่พบข้อความในเอกสารที่ยืนยันเหตุผลของสาขานี้ได้ ระบบจึงไม่ใช้คำอธิบายจาก AI')
++  } else if (why.reason_from_model === false) {
++    lines.push('คำอธิบายของสาขานี้ไม่ได้มาจาก AI ในรอบนี้ แต่คะแนนด้านบนคำนวณครบตามปกติ')
++  }
++  for (const row of detail?.answersNotScored || []) {
++    lines.push(`${row.label} (${row.values.join(', ')}) ไม่ได้ถูกใช้คิดคะแนน ใช้เฉพาะตอนเขียนคำอธิบาย`)
++  }
++  return lines
++}
++
++/** วิธีแปลงความใกล้เคียงเป็นเปอร์เซ็นต์ — เขียนตามสูตรที่หลังบ้านใช้คำนวณ */
++export const formulaLines = (why) => {
++  if (!why) return []
++  const lines = []
++  const content = n(why.content_similarity)
++  const title = n(why.title_similarity)
++  const blended = n(why.blended_score)
++  const weight = why.title_weight
++
++  if (content && title && blended && typeof weight === 'number') {
++    lines.push(
++      `เนื้อหาเอกสาร ${content} × ${n(1 - weight)} + ชื่อสาขา ${title} × ${n(weight)} = ${blended}`
++    )
++  }
++  const floor = n(why.percent_floor)
++  const ceiling = n(why.percent_ceiling)
++  if (blended && floor && ceiling && typeof why.percent === 'number') {
++    lines.push(`เทียบในช่วง ${floor} – ${ceiling} ของระบบ แล้วแปลงเป็น ${why.percent}%`)
++  }
++  return lines
++}
++
++export const hasScoreDetail = (why) =>
++  Boolean(why) && (formulaLines(why).length > 0 || matchLines(why).length > 0)
+diff --git a/src/pages/FindMajorResult.jsx b/src/pages/FindMajorResult.jsx
+index b2489f7..55ac4e1 100644
+--- a/src/pages/FindMajorResult.jsx
++++ b/src/pages/FindMajorResult.jsx
+@@ -6,6 +6,9 @@ import { forUndergraduateAdvice } from '../lib/courseLevels'
+ import { getFindMajorAnswers, clearFindMajorAnswers } from '../lib/findMajorAnswers'
+ import EngineNote from '../components/EngineNote'
+ import { postJsonWithTimeout } from '../lib/apiRequest'
++import {
++  PERCENT_DISCLAIMER, answerLines, formulaLines, gapLines, hasScoreDetail, matchLines
++} from '../lib/scoreDetail'
+ 
+ // ยาวกว่าเพดานของหลังบ้าน (90 วินาที) เล็กน้อย เพื่อให้ข้อความบอกเหตุของหลังบ้าน
+ // มาถึงผู้ใช้ก่อน ส่วนค่านี้เป็นตาข่ายรองรับกรณีคำขอค้างระหว่างทาง
+@@ -19,7 +22,87 @@ const steps = [
+   { id: 5, title: 'ผลลัพธ์', status: 'current' }
+ ]
+ 
+-const RecommendationCard = ({ course, matchScore, reason, highlight }) => {
++/**
++ * "ทำไมได้คะแนนนี้" ของสาขาใบนี้ใบเดียว
++ *
++ * ทุกบรรทัดมาจาก why ของการ์ดใบนี้ ซึ่งหลังบ้านคำนวณมาแล้วและแยกตามหลักสูตรตั้งแต่
++ * ชั้น SQL — ไฟล์/หน้าหลักฐานจึงเป็นของสาขานี้และฉบับนี้เสมอ ที่นี่ไม่คิดเลขใหม่
++ * ไม่เรียกโมเดลเพิ่ม และไม่เอาค่าของการ์ดใบอื่นมาแทนเมื่อใบนี้ไม่มีค่า
++ */
++const WhyThisScore = ({ why, detail, courseId }) => {
++  const [open, setOpen] = useState(false)
++  const panelId = `why-score-${courseId}`
++
++  // หลังบ้านรุ่นก่อนไม่ส่ง why มา — ไม่แสดงปุ่มเลย ดีกว่าเปิดมาแล้วว่างเปล่า
++  if (!hasScoreDetail(why)) return null
++
++  const answers = answerLines(detail)
++  const matches = matchLines(why)
++  const gaps = gapLines(why, detail)
++  const formula = formulaLines(why)
++
++  const section = (title, items, empty) => (
++    <div>
++      <p className="font-semibold text-gray-800">{title}</p>
++      {items.length > 0 ? (
++        <ul className="mt-1 list-disc pl-5 space-y-0.5">
++          {items.map((item, index) => <li key={index}>{item}</li>)}
++        </ul>
++      ) : (
++        <p className="mt-1 text-gray-500">{empty}</p>
++      )}
++    </div>
++  )
++
++  return (
++    <div className="mt-3 border-t border-gray-200 pt-3">
++      <button
++        type="button"
++        onClick={() => setOpen((v) => !v)}
++        aria-expanded={open}
++        aria-controls={panelId}
++        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md text-sm font-medium text-pnru hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-pnru/40"
++      >
++        <Info className="w-4 h-4 shrink-0" aria-hidden="true" />
++        ทำไมได้คะแนนนี้?
++        <ChevronDown
++          className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
++          aria-hidden="true"
++        />
++      </button>
++      <div
++        id={panelId}
++        role="region"
++        aria-label="ทำไมได้คะแนนนี้"
++        hidden={!open}
++        className="mt-3 rounded-lg bg-white/70 border border-gray-200 p-4 text-sm text-gray-700 leading-relaxed space-y-3"
++      >
++        {section(
++          'คำตอบของคุณที่ใช้คิดคะแนน',
++          answers,
++          'ไม่มีคำตอบในข้อที่ระบบใช้คิดคะแนน'
++        )}
++        <p className="text-xs text-gray-500">
++          ระบบใช้คำตอบชุดนี้ชุดเดียวเทียบกับทุกสาขา คะแนนที่ต่างกันจึงมาจากเนื้อหาของแต่ละสาขา
++        </p>
++        {section(
++          'จุดที่ตรงกับเนื้อหาหลักสูตร (ไฟล์และหน้าที่ใช้จริง)',
++          matches,
++          'ยังไม่พบหน้าเอกสารที่เชื่อมโยงกับคำตอบของคุณ'
++        )}
++        {section(
++          'ส่วนที่ยังไม่พบข้อมูลเชื่อมโยง',
++          gaps,
++          'ไม่มีจุดที่ขาด — คำตอบทุกข้อที่ใช้คิดคะแนนเชื่อมโยงกับเอกสารได้'
++        )}
++        {section('เปอร์เซ็นต์นี้คิดมาอย่างไร', formula, 'หลังบ้านไม่ได้ส่งรายละเอียดการคำนวณมา')}
++        <p className="text-xs text-gray-500">{PERCENT_DISCLAIMER}</p>
++      </div>
++    </div>
++  )
++}
++
++const RecommendationCard = ({ course, matchScore, reason, why, detail, highlight }) => {
+   const navigate = useNavigate()
+   if (!course) return null
+ 
+@@ -34,10 +117,12 @@ const RecommendationCard = ({ course, matchScore, reason, highlight }) => {
+           {matchScore}% เหมาะสม
+         </div>
+       </div>
+-      <p className="text-sm lg:text-base text-gray-700 leading-relaxed mb-4">{reason}</p>
++      <p className="text-sm lg:text-base text-gray-700 leading-relaxed mb-2">{reason}</p>
++      {/* ที่มาของคะแนนใบนี้ — ใต้เปอร์เซ็นต์ของการ์ดใบเดียวกัน */}
++      <WhyThisScore why={why} detail={detail} courseId={course.id} />
+       <button
+         onClick={() => navigate(`/courses/${course.id}`)}
+-        className={`inline-flex min-h-[44px] items-center gap-2 text-sm font-medium ${highlight ? 'text-pnru' : 'text-gray-600'} hover:underline`}
++        className={`mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium ${highlight ? 'text-pnru' : 'text-gray-600'} hover:underline`}
+       >
+         ดูรายละเอียดหลักสูตร
+         <ArrowRight className="w-4 h-4" />
+@@ -278,6 +363,8 @@ const FindMajorResult = () => {
+                     course={findCourse(result.primary.courseId)}
+                     matchScore={result.primary.matchScore}
+                     reason={result.primary.reason}
++                    why={result.primary.why}
++                    detail={result.scoringDetail}
+                     highlight
+                   />
+                 </div>
+@@ -292,6 +379,8 @@ const FindMajorResult = () => {
+                           course={findCourse(alt.courseId)}
+                           matchScore={alt.matchScore}
+                           reason={alt.reason}
++                          why={alt.why}
++                          detail={result.scoringDetail}
+                         />
+                       ))}
+                     </div>

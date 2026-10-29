@@ -1,0 +1,677 @@
+commit 45958695de6b3f45d75e49d4860308dc3b0f9d4d
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Thu Oct 29 18:05:53 2026 +0700
+
+    feat(web): เปิดที่มาของคะแนนรายสาขาให้หน้าแนะนำสาขาแสดงได้
+    
+    หน้าผลลัพธ์แสดงเปอร์เซ็นต์โดยไม่มีอะไรบอกว่าเลขมาจากไหน รอบนี้ส่งค่าที่ระบบ
+    คำนวณไปแล้วออกไปให้หน้าเว็บอธิบาย — ไม่เปลี่ยนสูตร คะแนน หรืออันดับแม้แต่ค่าเดียว
+    และไม่เรียกโมเดลเพิ่มแม้แต่ครั้งเดียว
+    
+    program_match
+      * ProgramMatch ได้ breakdown (ความคล้ายเนื้อหา/ชื่อหลักสูตร น้ำหนัก คะแนนผสม
+        ช่วงที่ใช้แปลงเป็นเปอร์เซ็นต์ จำนวนชิ้นที่ใช้) และ evidence (ไฟล์ หน้า ความคล้าย)
+      * SQL คืนค่าความคล้ายรายชิ้นมาด้วย ซึ่งเดิมถูกคิดแล้วทิ้ง
+      * หลักฐานถามชื่อไฟล์/หน้าครั้งเดียวสำหรับทุกใบ และผูกกับ chunk ของหลักสูตรใบนั้น
+        ซึ่งถูกแบ่งตาม course_id มาตั้งแต่ชั้น SQL จึงข้ามสาขาหรือข้ามฉบับไม่ได้
+    
+    web_compat
+      * การ์ดแต่ละใบมีช่อง why ของตัวเอง และผลทั้งชุดมี scoringDetail บอกว่าคำตอบข้อไหน
+        เข้าไปอยู่ในเวกเตอร์ ข้อไหนไม่ได้เข้า (ความจริงข้อนี้อยู่ที่หลังบ้าน หน้าเว็บเดาเองไม่ได้)
+      * engine มี embedding = รุ่นที่แปลงเวกเตอร์ให้คำขอนี้จริง ส่งเฉพาะผลที่คะแนนมาจาก
+        เวกเตอร์ · ผลที่ไม่ได้ใช้เวกเตอร์ต้องไม่ติดป้ายนี้
+    
+    llm_client
+      * บันทึกรุ่นที่ embed สำเร็จลง ContextVar ต่อคำขอ แบบเดียวกับรุ่นที่เขียนข้อความ
+        ไม่ใช่อ่านค่าที่ตั้งไว้ และไม่ใช้ตัวแปรร่วมบน connector ที่หลายคำขอใช้พร้อมกัน
+    
+    ชุดทดสอบใหม่ tests/test_score_detail.py (16 ข้อ) · ข้อตรวจชุดคีย์ของ engine ใน
+    test_result_model_label.py ถูกแก้ให้รับคีย์ embedding เพิ่ม (เหตุผลอยู่ใน docstring)
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index 72d26c1..0d60d42 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -33,10 +33,12 @@ from app.api.deps import web_rate_limiter
+ from app.db.session import get_db
+ from app.services.chat import PriorTurn, stream_answer
+ from app.services import ai_settings
+-from app.services.llm_client import chat_model_used, connector_for, reset_chat_model
++from app.services.llm_client import (chat_model_used, connector_for, embed_model_used,
++                                     reset_chat_model)
+ from app.services.curriculum_facts import LIST_FIELDS
+ from app.services.program_compare import compare_programs
+-from app.services.program_match import build_profile_text, confidence_of, match_programs
++from app.services.program_match import (CHUNKS_PER_COURSE, build_match_query, build_profile_text,
++                                        confidence_of, match_programs)
+ from app.services.program_names import program_about, program_facts
+ from app.services.course_scope import degree_level_of, degree_of_title
+ from app.services.web_compat import canonical_labels, label_of, match_by_title, normalise_title, shared_user
+@@ -505,8 +507,42 @@ def _user_message(exc: Exception) -> str:
+     return (getattr(exc, "user_text", None) or "").strip() or BUSY
+ 
+ 
+-def _engine(explained: bool, scoring: str | None = None) -> dict:
+-    return {"explanation": chat_model_used() if explained else None, "scoring": scoring}
++def _engine(explained: bool, scoring: str | None = None, embedded: bool = False) -> dict:
++    return {
++        "explanation": chat_model_used() if explained else None,
++        "scoring": scoring,
++        # รุ่นที่เทียบความคล้ายให้ผลชุดนี้จริง — ส่งเฉพาะผลที่คะแนนมาจากเวกเตอร์
++        # ผลที่ไม่ได้ใช้เวกเตอร์ต้องไม่ได้ป้ายนี้ติดไป
++        "embedding": embed_model_used() if embedded else None,
++    }
++
++
++# ช่องคำตอบที่ "เข้าเวกเตอร์" จริง เทียบกับช่องที่ใช้เฉพาะตอนให้โมเดลเขียนคำอธิบาย
++#
++# แยกไว้ที่นี่เพราะหลังบ้านเป็นฝ่ายรู้ความจริงข้อนี้ (ดู program_match.build_match_query)
++# หน้าเว็บเดาเองไม่ได้ และถ้าวันหนึ่งสูตรเปลี่ยนช่อง ที่นี่ต้องเปลี่ยนตามในที่เดียว
++_SCORED_FIELDS = (
++    ("favorite_subjects", "วิชาที่ชอบ"),
++    ("interests", "ความสนใจ"),
++    ("aptitudes", "ความถนัด"),
++    ("career_goal", "เป้าหมายอาชีพ"),
++)
++_UNSCORED_FIELDS = (
++    ("study_track", "สายการเรียน"),
++    ("work_environment", "สภาพแวดล้อมการทำงาน"),
++)
++
++
++def _answer_rows(answers: dict, fields: tuple) -> list[dict]:
++    """คำตอบที่ผู้ใช้กรอกไว้จริงในช่องชุดหนึ่ง — ช่องที่ว่างไม่ต้องส่งไปให้หน้าเว็บ"""
++    rows = []
++    for key, label in fields:
++        value = answers.get(key)
++        values = [value] if isinstance(value, str) else list(value or [])
++        values = [v for v in values if v]
++        if values:
++            rows.append({"field": key, "label": label, "values": values})
++    return rows
+ 
+ 
+ def _rank_key(title: str) -> tuple[str, str | None]:
+@@ -668,6 +704,16 @@ def _recommend_major(payload: WebRecommendRequest, db: Session) -> dict:
+             "courseId": web_id,
+             "matchScore": m.match_percent,
+             "reason": reason,
++            # ที่มาของคะแนนใบนี้ — ค่าที่ระบบคำนวณจริงล้วน ๆ ไม่มีตัวเลขใดมาจากโมเดล
++            # และหน้าเว็บคำนวณย้อนกลับเองได้จากค่าชุดนี้
++            "why": {
++                **m.breakdown,
++                "evidence": m.evidence,
++                # เหตุผลใบนี้เป็นข้อความที่โมเดลเขียนจริงไหม — ใช้ตัดสินว่าจะติดป้าย
++                # ชื่อรุ่นให้ใบนี้ได้หรือไม่ ไม่ใช่เดาจากว่ามีข้อความอยู่หรือเปล่า
++                "reason_from_model": reason not in (NO_REASON, NO_EVIDENCE_REASON),
++                "no_evidence": reason == NO_EVIDENCE_REASON,
++            },
+         }
+ 
+     low = confidence_of(matches) == "low"
+@@ -691,5 +737,15 @@ def _recommend_major(payload: WebRecommendRequest, db: Session) -> dict:
+         "profileText": build_profile_text(answers),
+         # คะแนนไม่ได้มาจากโมเดลที่เขียนคำอธิบาย — มาจากความใกล้เคียงของเวกเตอร์กับ
+         # เกณฑ์ของระบบ (ตัดหลักสูตรที่ปิดรับ ยุบฉบับซ้ำ ถ่วงน้ำหนักชื่อหลักสูตร)
+-        "engine": _engine(explained, scoring=SCORING_EMBEDDING_RULES),
++        "engine": _engine(explained, scoring=SCORING_EMBEDDING_RULES, embedded=True),
++        # ที่มาของคะแนนที่เป็นของ "ทุกใบร่วมกัน" — ส่วนที่เป็นของแต่ละใบอยู่ใน card["why"]
++        #
++        # ผู้ใช้เทียบย้อนกลับได้ว่าคำตอบข้อไหนเข้าไปอยู่ในเวกเตอร์ และข้อไหนไม่ได้เข้า
++        # ไม่มีการคำนวณใหม่ตรงนี้ ทุกค่ามาจากขั้นจัดอันดับที่เพิ่งรันไป
++        "scoringDetail": {
++            "queryText": build_match_query(answers),
++            "answersUsed": _answer_rows(answers, _SCORED_FIELDS),
++            "answersNotScored": _answer_rows(answers, _UNSCORED_FIELDS),
++            "chunksPerCourse": CHUNKS_PER_COURSE,
++        },
+     }
+diff --git a/backend/app/services/llm_client.py b/backend/app/services/llm_client.py
+index 6efbd36..c1e7da7 100644
+--- a/backend/app/services/llm_client.py
++++ b/backend/app/services/llm_client.py
+@@ -87,10 +87,18 @@ class _SplitConnector:
+ 
+     # --- ฝั่ง embedding: โมเดลในเครื่อง ---
+     def embed(self, text):
+-        return self._embedder.embed(text)
++        out = self._embedder.embed(text)
++        self._note_embedder()
++        return out
+ 
+     def embed_batch(self, texts):
+-        return self._embedder.embed_batch(texts)
++        out = self._embedder.embed_batch(texts)
++        self._note_embedder()
++        return out
++
++    def _note_embedder(self) -> None:
++        """บันทึกรุ่นที่แปลงเวกเตอร์ให้คำขอนี้ — เรียกหลังสำเร็จเท่านั้น"""
++        record_embed_model(EMBED_PROVIDER, self.embed_model)
+ 
+     # --- ฝั่งเขียนคำตอบ: ใช้เจ้าหลักก่อน ล้มแล้วค่อยตกมาที่โมเดลในเครื่อง ---
+     def _fallback_kwargs(self, kwargs: dict) -> dict:
+@@ -198,6 +206,11 @@ class _SplitConnector:
+     def chat_model(self) -> str:
+         return self._chatter.chat_model
+ 
++    @property
++    def embed_model(self) -> str:
++        """รุ่นที่แปลงข้อความเป็นเวกเตอร์จริง — คนละตัวกับรุ่นที่เขียนคำตอบเสมอ"""
++        return getattr(self._embedder, "embed_model", "")
++
+     @property
+     def answer_token_cap(self) -> int:
+         return self._chatter.answer_token_cap
+@@ -223,10 +236,18 @@ class _LocalPrimary:
+         self._local = local
+ 
+     def embed(self, text):
+-        return self._local.embed(text)
++        out = self._local.embed(text)
++        record_embed_model(EMBED_PROVIDER, self.embed_model)
++        return out
+ 
+     def embed_batch(self, texts):
+-        return self._local.embed_batch(texts)
++        out = self._local.embed_batch(texts)
++        record_embed_model(EMBED_PROVIDER, self.embed_model)
++        return out
++
++    @property
++    def embed_model(self) -> str:
++        return getattr(self._local, "embed_model", "")
+ 
+     def chat(self, *args, **kwargs):
+         llm_usage.record("local_primary_attempt")
+@@ -417,8 +438,13 @@ def record_chat_model(provider: str, model: str) -> None:
+ 
+ 
+ def reset_chat_model() -> None:
+-    """ล้างค่าก่อนเริ่มงานของคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกรายงานว่าเป็นของคำขอนี้"""
++    """
++    ล้างค่าก่อนเริ่มงานของคำขอใหม่ ไม่งั้นค่าที่ค้างอยู่จะถูกรายงานว่าเป็นของคำขอนี้
++
++    ล้างรุ่นที่เทียบความคล้ายด้วย เพราะเป็นจุดเริ่มคำขอจุดเดียวกัน
++    """
+     _chat_model_used.set(None)
++    _embed_model_used.set(None)
+     reset_answered_model()
+ 
+ 
+@@ -428,6 +454,29 @@ def chat_model_used() -> dict | None:
+     return None if pair is None else {"provider": pair[0], "model": pair[1]}
+ 
+ 
++# รุ่นที่ "แปลงคำตอบเป็นเวกเตอร์ให้คำขอนี้จริง" — บันทึกตอนเรียกสำเร็จเหมือนกัน
++#
++# คนละตัวกับรุ่นที่เขียนข้อความเสมอ และเป็นโมเดลในเครื่องโดยโครงสร้าง เพราะเวกเตอร์
++# ของเอกสารทั้งคลังถูกสร้างด้วยรุ่นนี้และคอลัมน์ pgvector ตรึงจำนวนมิติไว้ (ดู _build_ollama)
++#
++# ไม่ได้เทียบความคล้ายเลยในคำขอนี้ = None ซึ่งต้องไม่ถูกแปลงเป็นชื่อรุ่นค่าตั้งต้น
++EMBED_PROVIDER = "ollama"
++
++_embed_model_used: ContextVar[tuple[str, str] | None] = ContextVar(
++    "embed_model_used", default=None)
++
++
++def record_embed_model(provider: str, model: str) -> None:
++    """บันทึกว่ารุ่นไหนเพิ่งแปลงเวกเตอร์สำเร็จให้คำขอนี้ — เรียกหลังได้ผลลัพธ์เท่านั้น"""
++    _embed_model_used.set((provider or "unknown", model or "?"))
++
++
++def embed_model_used() -> dict | None:
++    """{'provider', 'model'} ของการเทียบความคล้ายในคำขอนี้ · None = ไม่ได้ใช้เวกเตอร์"""
++    pair = _embed_model_used.get()
++    return None if pair is None else {"provider": pair[0], "model": pair[1]}
++
++
+ def answer_model_label(connector) -> str:
+     """
+     ชื่อผู้ให้บริการและรุ่นที่ถูก "สั่งให้เขียน" คำตอบของคำขอนี้
+diff --git a/backend/app/services/program_match.py b/backend/app/services/program_match.py
+index 4e27c63..c36c832 100644
+--- a/backend/app/services/program_match.py
++++ b/backend/app/services/program_match.py
+@@ -58,7 +58,7 @@ import json
+ import logging
+ import re
+ import uuid
+-from dataclasses import dataclass
++from dataclasses import dataclass, field
+ 
+ from sqlalchemy import text
+ from sqlalchemy.orm import Session
+@@ -130,6 +130,14 @@ class ProgramMatch:
+     match_percent: int    # ค่าเดียวกันที่แปลงเป็นเปอร์เซ็นต์เพื่อแสดงผล
+     rationale: str
+     evidence_chunk_ids: list[uuid.UUID]
++    # ที่มาของคะแนนใบนี้ — ค่าที่ "คำนวณจริง" ทั้งหมด ไม่มีตัวเลขใดที่โมเดลเป็นคนให้
++    #
++    # เปิดออกมาเพื่อให้หน้าเว็บอธิบายได้ว่าเปอร์เซ็นต์มาจากไหน · ไม่มีการคำนวณใหม่
++    # ไม่มีการเรียกโมเดลเพิ่ม และสูตรกับอันดับไม่เปลี่ยนแม้แต่ค่าเดียว
++    breakdown: dict = field(default_factory=dict)
++    # หน้าเอกสารที่ถูกใช้เป็นหลักฐานของ **หลักสูตรใบนี้เท่านั้น**
++    # ชิ้นหลักฐานถูกแบ่งตาม course_id มาตั้งแต่ชั้น SQL จึงข้ามสาขาหรือข้ามฉบับไม่ได้
++    evidence: list[dict] = field(default_factory=list)
+ 
+ 
+ def build_profile_text(answers: dict) -> str:
+@@ -242,7 +250,8 @@ def score_all_programs(db: Session, profile_embedding: list[float]) -> list[dict
+             SELECT r.course_id,
+                    c.title,
+                    avg(r.sim) AS score,
+-                   array_agg(r.chunk_id ORDER BY r.sim DESC) AS chunk_ids
++                   array_agg(r.chunk_id ORDER BY r.sim DESC) AS chunk_ids,
++                   array_agg(r.sim ORDER BY r.sim DESC) AS sims
+             FROM ranked r
+             JOIN courses c ON c.id = r.course_id
+             WHERE r.rn <= :k
+@@ -252,7 +261,8 @@ def score_all_programs(db: Session, profile_embedding: list[float]) -> list[dict
+         {"q": str(profile_embedding), "k": CHUNKS_PER_COURSE},
+     ).all()
+     return [
+-        {"course_id": r.course_id, "title": r.title, "score": float(r.score), "chunk_ids": list(r.chunk_ids)}
++        {"course_id": r.course_id, "title": r.title, "score": float(r.score),
++         "chunk_ids": list(r.chunk_ids), "sims": [float(x) for x in r.sims]}
+         for r in rows
+     ]
+ 
+@@ -481,9 +491,10 @@ def match_programs(
+     # ตอบว่าสนใจสิ่งแวดล้อมควรถูกจับคู่กับหลักสูตรที่ชื่อมีคำว่าสิ่งแวดล้อมตั้งแต่ต้น
+     titles = _title_vectors(db, connector)
+     for s in scored:
+-        s["score"] = (1 - _TITLE_WEIGHT) * s["score"] + _TITLE_WEIGHT * _cosine(
+-            profile_vec, titles[s["course_id"]]
+-        )
++        # เก็บสององค์ประกอบไว้เพื่ออธิบายที่มาของคะแนน — การผสมยังเป็นสูตรเดิมบรรทัดเดิม
++        s["content_similarity"] = s["score"]
++        s["title_similarity"] = _cosine(profile_vec, titles[s["course_id"]])
++        s["score"] = (1 - _TITLE_WEIGHT) * s["score"] + _TITLE_WEIGHT * s["title_similarity"]
+     scored.sort(key=lambda s: s["score"], reverse=True)
+ 
+     # ตัดหลักสูตรที่คณะไม่ได้เปิดรับสมัครแล้วออกก่อนจัดอันดับให้ผู้ใช้เห็น
+@@ -518,6 +529,10 @@ def match_programs(
+     ]
+     rationales = _generate_rationales(connector, profile_text, evidence)
+ 
++    # ชื่อไฟล์กับเลขหน้าของชิ้นที่ใช้เป็นหลักฐาน — ถามครั้งเดียวสำหรับทุกใบ
++    # ไม่ใช่ใบละครั้ง และไม่เรียกโมเดลเพิ่มแม้แต่ครั้งเดียว
++    sources = _evidence_sources(db, [i for s in scored for i in s["chunk_ids"][:CHUNKS_PER_COURSE]])
++
+     return [
+         ProgramMatch(
+             course_id=s["course_id"],
+@@ -526,11 +541,65 @@ def match_programs(
+             match_percent=_to_percent(s["score"]),
+             rationale=_rationale_for(rationales, s["title"]),
+             evidence_chunk_ids=s["chunk_ids"][:CHUNKS_PER_COURSE],
++            breakdown=_breakdown_of(s),
++            evidence=_evidence_of(s, sources),
+         )
+         for s in scored
+     ]
+ 
+ 
++def _breakdown_of(s: dict) -> dict:
++    """
++    ที่มาของคะแนนใบหนึ่ง — ทุกค่าเป็นค่าที่คำนวณไปแล้ว ไม่ได้คำนวณใหม่ตรงนี้
++
++    ค่าที่ส่งออกพอให้คำนวณย้อนกลับได้เอง:
++        blended = (1 - title_weight) * content + title_weight * title
++        percent = clamp((blended - floor) / (ceiling - floor) * 100)
++    """
++    return {
++        "content_similarity": round(s["content_similarity"], 4),
++        "title_similarity": round(s["title_similarity"], 4),
++        "title_weight": _TITLE_WEIGHT,
++        "blended_score": round(s["score"], 4),
++        "percent": _to_percent(s["score"]),
++        "percent_floor": _PCT_FLOOR,
++        "percent_ceiling": _PCT_CEILING,
++        "chunks_used": len(s["chunk_ids"][:CHUNKS_PER_COURSE]),
++    }
++
++
++def _evidence_sources(db: Session, chunk_ids: list) -> dict:
++    """(ชื่อไฟล์, เลขหน้า) ของชิ้นหลักฐาน — คีย์เป็น chunk_id เป็นสตริง"""
++    if not chunk_ids:
++        return {}
++    rows = db.execute(
++        text("""
++            SELECT ch.id AS chunk_id, ch.page_number, d.original_filename AS file
++              FROM course_chunks ch
++              LEFT JOIN course_documents d ON d.id = ch.document_id
++             WHERE ch.id = ANY(:ids)
++        """),
++        {"ids": [str(i) for i in chunk_ids]},
++    ).mappings().all()
++    return {str(r["chunk_id"]): {"file": r["file"], "page": r["page_number"]} for r in rows}
++
++
++def _evidence_of(s: dict, sources: dict) -> list[dict]:
++    """
++    หน้าเอกสารที่ใช้เป็นหลักฐานของใบนี้ พร้อมความคล้ายรายชิ้นที่วัดได้จริง
++
++    ชิ้นทั้งหมดมาจาก chunk_ids ของหลักสูตรใบนี้ ซึ่งถูกแบ่งตาม course_id ตั้งแต่ใน SQL
++    จึงเป็นเอกสารของสาขานี้และฉบับนี้เสมอ ข้ามสาขาหรือข้ามฉบับไม่ได้เชิงโครงสร้าง
++    """
++    out: list[dict] = []
++    for chunk_id, sim in zip(s["chunk_ids"][:CHUNKS_PER_COURSE], s.get("sims", [])):
++        source = sources.get(str(chunk_id))
++        if not source or not source.get("file"):
++            continue
++        out.append({"file": source["file"], "page": source["page"], "similarity": round(sim, 4)})
++    return out
++
++
+ def _verified_rationales(raw: dict, evidence: list[dict]) -> dict[str, str]:
+     """
+     รับเฉพาะเหตุผลที่มีข้อความอ้างอิงซึ่งอยู่ในเนื้อหาของหลักสูตรนั้นจริง
+diff --git a/backend/tests/test_result_model_label.py b/backend/tests/test_result_model_label.py
+index 4fa6311..b0398fa 100644
+--- a/backend/tests/test_result_model_label.py
++++ b/backend/tests/test_result_model_label.py
+@@ -183,9 +183,16 @@ class ResultModelLabelTests(unittest.TestCase):
+         self.assertEqual(engine["scoring"], "embedding_and_rules")
+ 
+     def test_ไม่มีคีย์หรือข้อมูลการเชื่อมต่อหลุดไปกับผล(self):
++        """
++        เกณฑ์ข้อนี้ถูกแก้เมื่อ 29 ต.ค. 2569 — เพิ่ม "embedding" เข้าไปในชุดคีย์ที่ยอมรับ
++
++        ของใหม่คือป้ายชื่อรุ่นที่เทียบความคล้าย (ดู test_score_detail.py) ซึ่งเป็นชื่อรุ่น
++        เหมือนอีกสองช่อง ไม่ใช่คีย์หรือข้อมูลการเชื่อมต่อ · ข้อตรวจเดิมที่ว่า "ไม่มีช่อง
++        อื่นหลุดออกไป" ยังอยู่ครบ เพราะยังเทียบชุดคีย์แบบตรงตัวทั้งชั้นนอกและชั้นใน
++        """
+         llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash")).chat([])
+         engine = _engine(explained=True, scoring="embedding_and_rules")
+-        self.assertEqual(set(engine), {"explanation", "scoring"})
++        self.assertEqual(set(engine), {"explanation", "scoring", "embedding"})
+         self.assertEqual(set(engine["explanation"]), {"provider", "model"})
+ 
+ 
+diff --git a/backend/tests/test_score_detail.py b/backend/tests/test_score_detail.py
+new file mode 100644
+index 0000000..e6e5e69
+--- /dev/null
++++ b/backend/tests/test_score_detail.py
+@@ -0,0 +1,277 @@
++"""
++รายละเอียดที่มาของคะแนนในหน้าแนะนำสาขา ต้องตรงกับคะแนนที่แสดง และเป็นของสาขาใบนั้นจริง
++
++    cd backend && python tests/test_score_detail.py
++
++ไม่ต่อฐานข้อมูล ไม่เรียกโมเดลจริง — ใช้ของจำลองแทนทั้งสองอย่าง
++
++ทำไมต้องมีชุดนี้
++---------------
++หน้าผลลัพธ์เปิด "ทำไมได้คะแนนนี้" ให้ผู้ใช้อ่าน สามอย่างที่ผิดแล้วผู้ใช้ถูกบอกข้อมูลเท็จ
++
++1. **ตัวเลขในรายละเอียดไม่ตรงกับเปอร์เซ็นต์ที่แสดง** — ผู้ใช้คิดตามแล้วไม่ได้เลขเดิม
++2. **หลักฐานข้ามสาขาหรือข้ามฉบับ** — ไฟล์/หน้าของสาขาอื่นไปโผล่ในใบนี้ ซึ่งเป็นการ
++   อ้างอิงเท็จที่จับได้ยากที่สุด เพราะข้อความรอบข้างยังดูสมเหตุสมผล
++3. **โมเดลล่มแล้วรายละเอียดการคำนวณหายไปด้วย** — คะแนนไม่ได้มาจากโมเดล จึงต้องยัง
++   อธิบายได้ครบแม้ไม่มีข้อความจาก AI เลย
++"""
++import os
++import sys
++import unittest
++import uuid
++from pathlib import Path
++
++sys.stdout.reconfigure(encoding="utf-8", errors="replace")
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
++
++os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.0.1:1/unused")
++os.environ.setdefault("JWT_SECRET", "ชุดทดสอบไม่ได้ออก token")
++os.environ.setdefault("GEMINI_API_KEY", "คีย์ปลอมสำหรับชุดทดสอบ")
++
++from llm.connector import LLMConnectionError  # noqa: E402
++
++from app.api.routes.web_compat import (_SCORED_FIELDS, _UNSCORED_FIELDS,  # noqa: E402
++                                       _answer_rows, _engine)
++from app.services import llm_client, program_match  # noqa: E402
++from app.services.program_match import (CHUNKS_PER_COURSE, _breakdown_of,  # noqa: E402
++                                        _evidence_of, _to_percent, build_match_query,
++                                        match_programs)
++
++MATH = uuid.UUID("11111111-1111-1111-1111-111111111111")
++ANIMATION = uuid.UUID("22222222-2222-2222-2222-222222222222")
++
++# ชิ้นเอกสารของสองสาขา — คนละไฟล์ คนละหน้า เพื่อให้การสลับกันมองเห็นได้ทันที
++CHUNKS = {
++    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001"): (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 11),
++    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002"): (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 12),
++    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001"): (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 7),
++    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002"): (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 8),
++}
++TITLES = {MATH: "วิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์",
++          ANIMATION: "วิทยาศาสตรบัณฑิต สาขาวิชาคอมพิวเตอร์แอนิเมชันและมัลติมีเดีย"}
++ANSWERS = {
++    "study_track": "วิทย์-คณิต",
++    "favorite_subjects": ["คณิตศาสตร์"],
++    "interests": ["การวิเคราะห์ข้อมูล"],
++    "aptitudes": ["คิดคำนวณ"],
++    "career_goal": ["นักวิเคราะห์ข้อมูล"],
++    "work_environment": ["ทำงานเป็นทีม"],
++}
++
++
++class _Row:
++    def __init__(self, **kw):
++        self.__dict__.update(kw)
++
++
++class _Result:
++    def __init__(self, rows):
++        self._rows = rows
++
++    def all(self):
++        return self._rows
++
++    def mappings(self):
++        return _Result([r.__dict__ for r in self._rows])
++
++
++class _FakeDB:
++    """ฐานข้อมูลจำลอง — ตอบตามคำสั่ง SQL ที่ถูกถาม ไม่ได้ต่อฐานจริง"""
++
++    def __init__(self, sims):
++        self.sims = sims   # {course_id: [ความใกล้เคียงรายชิ้น เรียงมากไปน้อย]}
++
++    def execute(self, statement, params=None):
++        sql = str(statement)
++        params = params or {}
++        if "array_agg" in sql:
++            rows = []
++            for course_id, sims in self.sims.items():
++                ids = [c for c, v in CHUNKS.items() if v[0] == course_id][:len(sims)]
++                rows.append(_Row(course_id=course_id, title=TITLES[course_id],
++                                 score=sum(sims) / len(sims), chunk_ids=ids, sims=sims))
++            return _Result(rows)
++        if "SELECT id, title FROM courses" in sql:
++            return _Result([_Row(id=c, title=t) for c, t in TITLES.items()])
++        if "original_filename" in sql:
++            wanted = {str(i) for i in params["ids"]}
++            return _Result([
++                _Row(chunk_id=cid, page_number=page, file=name)
++                for cid, (_course, name, page) in CHUNKS.items() if str(cid) in wanted
++            ])
++        if "content LIKE" in sql:            # แก่นของหลักสูตร
++            return _Result([])
++        if "page_number, content" in sql:    # เนื้อหาของชิ้นหลักฐาน
++            return _Result([])
++        raise AssertionError("คำสั่ง SQL ที่ชุดทดสอบยังไม่รู้จัก: " + sql[:80])
++
++
++class _FakeConnector:
++    """เวกเตอร์คงที่ และบังคับให้ขั้นเขียนเหตุผลล้มได้ตามต้องการ"""
++
++    answer_token_cap = 512
++    chat_model = "gemini-3.5-flash-lite"
++    embed_model = "bge-m3"
++    provider_name = "gemini"
++
++    def __init__(self, chat_fails=False):
++        self.chat_fails = chat_fails
++        self.chat_calls = 0
++
++    def embed(self, text):
++        # เวกเตอร์ของชื่อสาขาต่างกันตามชื่อ เพื่อให้ title_similarity ไม่เท่ากันทุกใบ
++        return [1.0, 0.5] if "คณิตศาสตร์" in text else [0.5, 1.0]
++
++    def chat(self, *_args, **_kwargs):
++        self.chat_calls += 1
++        if self.chat_fails:
++            raise LLMConnectionError("จำลองว่าโมเดลล่ม")
++        return "{}"
++
++
++class _ScoreDetailBase(unittest.TestCase):
++    def setUp(self):
++        program_match._TITLE_CACHE = None   # เวกเตอร์ชื่อหลักสูตรถูกแคชไว้ตลอดอายุโปรเซส
++        llm_client.reset_chat_model()
++
++
++class BreakdownMathTests(_ScoreDetailBase):
++    def test_ค่าที่ส่งออกคำนวณย้อนกลับได้เปอร์เซ็นต์เดิม(self):
++        """ผู้ใช้คิดตามสูตรที่หน้าเว็บแสดงแล้วต้องได้เลขเดียวกับที่เห็นบนการ์ด"""
++        weight = program_match._TITLE_WEIGHT
++        for content, title in [(0.62, 0.41), (0.30, 0.20), (0.71, 0.80), (0.55, 0.55)]:
++            blended = (1 - weight) * content + weight * title
++            s = {"content_similarity": content, "title_similarity": title,
++                 "score": blended, "chunk_ids": [uuid.uuid4()] * 5}
++            b = _breakdown_of(s)
++            again = ((1 - b["title_weight"]) * b["content_similarity"]
++                     + b["title_weight"] * b["title_similarity"])
++            ratio = (again - b["percent_floor"]) / (b["percent_ceiling"] - b["percent_floor"])
++            self.assertEqual(max(0, min(100, round(ratio * 100))), b["percent"],
++                             "คำนวณย้อนกลับไม่ตรงที่ {0}/{1}".format(content, title))
++            self.assertEqual(b["percent"], _to_percent(blended))
++
++    def test_ไม่ส่งคีย์หรือข้อมูลภายในที่ไม่เกี่ยวออกไป(self):
++        s = {"content_similarity": 0.6, "title_similarity": 0.4, "score": 0.5,
++             "chunk_ids": [uuid.uuid4()] * 7}
++        self.assertEqual(set(_breakdown_of(s)), {
++            "content_similarity", "title_similarity", "title_weight", "blended_score",
++            "percent", "percent_floor", "percent_ceiling", "chunks_used"})
++        # นับเฉพาะชิ้นที่ถูกใช้จริง ไม่ใช่จำนวนที่ค้นเจอทั้งหมด
++        self.assertEqual(_breakdown_of(s)["chunks_used"], CHUNKS_PER_COURSE)
++
++
++class EvidenceIsolationTests(_ScoreDetailBase):
++    def _sources(self):
++        return {str(cid): {"file": name, "page": page}
++                for cid, (_c, name, page) in CHUNKS.items()}
++
++    def test_หลักฐานของแต่ละสาขาไม่ข้ามไปอีกสาขา(self):
++        math_ids = [c for c, v in CHUNKS.items() if v[0] == MATH]
++        anim_ids = [c for c, v in CHUNKS.items() if v[0] == ANIMATION]
++        sources = self._sources()
++        math = _evidence_of({"chunk_ids": math_ids, "sims": [0.6, 0.5]}, sources)
++        anim = _evidence_of({"chunk_ids": anim_ids, "sims": [0.4, 0.3]}, sources)
++
++        self.assertEqual({i["file"] for i in math}, {"มคอ2-คณิตศาสตร์-2565.pdf"})
++        self.assertEqual({i["file"] for i in anim}, {"มคอ2-แอนิเมชัน-2566.pdf"})
++        self.assertEqual([i["page"] for i in math], [11, 12])
++        self.assertEqual([i["similarity"] for i in anim], [0.4, 0.3])
++
++    def test_ชิ้นที่ไม่รู้ที่มาถูกตัดออก_ไม่เดาไฟล์ให้(self):
++        out = _evidence_of({"chunk_ids": [uuid.uuid4()], "sims": [0.9]}, self._sources())
++        self.assertEqual(out, [])
++
++    def test_ความใกล้เคียงจับคู่กับชิ้นของตัวเอง(self):
++        ids = [c for c, v in CHUNKS.items() if v[0] == MATH]
++        out = _evidence_of({"chunk_ids": ids, "sims": [0.61, 0.42]}, self._sources())
++        self.assertEqual([(i["page"], i["similarity"]) for i in out], [(11, 0.61), (12, 0.42)])
++
++
++class WholeResultTests(_ScoreDetailBase):
++    def _match(self, chat_fails=False):
++        connector = _FakeConnector(chat_fails=chat_fails)
++        db = _FakeDB({MATH: [0.62, 0.58], ANIMATION: [0.47, 0.44]})
++        program_match.get_llm_connector = lambda: connector      # แทนตัวเชื่อมต่อจริง
++        return match_programs(db, ANSWERS, limit=5), connector
++
++    def test_ทุกใบมีรายละเอียดที่ตรงกับเปอร์เซ็นต์ของใบตัวเอง(self):
++        matches, _ = self._match()
++        self.assertEqual(len(matches), 2)
++        for m in matches:
++            self.assertEqual(m.breakdown["percent"], m.match_percent)
++            self.assertEqual(m.breakdown["blended_score"], round(m.score, 4))
++
++    def test_ไฟล์หลักฐานของทุกใบเป็นเอกสารของสาขาใบนั้น(self):
++        matches, _ = self._match()
++        for m in matches:
++            own = {CHUNKS[c][1] for c in CHUNKS if CHUNKS[c][0] == m.course_id}
++            self.assertTrue(m.evidence, "ใบนี้ไม่มีหลักฐานเลย")
++            self.assertEqual({i["file"] for i in m.evidence}, own)
++            self.assertEqual([i["page"] for i in m.evidence],
++                             [CHUNKS[c][2] for c in m.evidence_chunk_ids])
++
++    def test_โมเดลล่ม_ยังได้คะแนนและรายละเอียดการคำนวณครบ(self):
++        matches, connector = self._match(chat_fails=True)
++        self.assertEqual(connector.chat_calls, 1)
++        for m in matches:
++            self.assertEqual(m.rationale, "")          # ไม่มีข้อความจากโมเดล
++            self.assertEqual(m.breakdown["percent"], m.match_percent)
++            self.assertTrue(m.evidence)
++            self.assertEqual(m.breakdown["chunks_used"], 2)
++
++    def test_สององค์ประกอบต่างกันจริง_ไม่ใช่ค่าเดียวซ้ำสองช่อง(self):
++        matches, _ = self._match()
++        top = matches[0]
++        self.assertNotEqual(top.breakdown["content_similarity"],
++                            top.breakdown["title_similarity"])
++
++
++class AnswerDisclosureTests(_ScoreDetailBase):
++    def test_ส่งเฉพาะคำตอบที่เข้าไปคิดคะแนนจริง(self):
++        used = _answer_rows(ANSWERS, _SCORED_FIELDS)
++        self.assertEqual([r["field"] for r in used],
++                         ["favorite_subjects", "interests", "aptitudes", "career_goal"])
++        query = build_match_query(ANSWERS)
++        for row in used:
++            for value in row["values"]:
++                self.assertIn(value, query)
++
++    def test_คำตอบที่ไม่ได้คิดคะแนนต้องไม่ถูกนับว่าใช้คิดคะแนน(self):
++        not_scored = _answer_rows(ANSWERS, _UNSCORED_FIELDS)
++        self.assertEqual([r["field"] for r in not_scored], ["study_track", "work_environment"])
++        query = build_match_query(ANSWERS)
++        for row in not_scored:
++            for value in row["values"]:
++                self.assertNotIn(value, query)
++
++    def test_ช่องที่ผู้ใช้ไม่ได้ตอบไม่ถูกส่งไปเป็นบรรทัดว่าง(self):
++        rows = _answer_rows({"interests": [], "aptitudes": ["คิดคำนวณ"], "career_goal": None},
++                            _SCORED_FIELDS)
++        self.assertEqual([r["field"] for r in rows], ["aptitudes"])
++
++
++class EmbeddingLabelTests(_ScoreDetailBase):
++    def test_ป้ายรุ่นที่เทียบความคล้ายมาจากตัวที่แปลงเวกเตอร์จริง(self):
++        llm_client._SplitConnector(_FakeConnector(), _FakeConnector()).embed("ทดสอบ")
++        self.assertEqual(_engine(explained=False, embedded=True)["embedding"],
++                         {"provider": "ollama", "model": "bge-m3"})
++
++    def test_ไม่ได้เทียบความคล้ายในคำขอนี้_ต้องไม่ติดป้าย(self):
++        self.assertIsNone(_engine(explained=False, embedded=True)["embedding"])
++
++    def test_ผลที่คะแนนไม่ได้มาจากเวกเตอร์ต้องไม่ติดป้ายนี้(self):
++        """หน้าเปรียบเทียบไม่ได้ให้คะแนนด้วยเวกเตอร์ จึงต้องไม่มีบรรทัดนี้"""
++        llm_client._SplitConnector(_FakeConnector(), _FakeConnector()).embed("ทดสอบ")
++        self.assertIsNone(_engine(explained=True)["embedding"])
++
++    def test_ล้างค่าเมื่อเริ่มคำขอใหม่(self):
++        llm_client._SplitConnector(_FakeConnector(), _FakeConnector()).embed("ทดสอบ")
++        llm_client.reset_chat_model()
++        self.assertIsNone(llm_client.embed_model_used())
++
++
++if __name__ == "__main__":
++    run = unittest.main(verbosity=2, exit=False)
++    raise SystemExit(0 if run.result.wasSuccessful() else 1)
