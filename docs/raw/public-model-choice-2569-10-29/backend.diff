@@ -56,7 +56,7 @@ index dd1847d..61d2499 100644
          if kind == "meta" and parsed:
              source_headers = _source_headers(db, parsed.get("source"))
 diff --git a/backend/app/services/ai_settings.py b/backend/app/services/ai_settings.py
-index 68738a9..36eff8a 100644
+index 68738a9..7eba3a9 100644
 --- a/backend/app/services/ai_settings.py
 +++ b/backend/app/services/ai_settings.py
 @@ -30,6 +30,7 @@ embedding เปลี่ยนไม่ได้
@@ -67,7 +67,7 @@ index 68738a9..36eff8a 100644
  import threading
  import time
  from dataclasses import dataclass, replace
-@@ -83,6 +84,114 @@ class Choice:
+@@ -83,6 +84,122 @@ class Choice:
          return self.saved_provider is not None and not self.note
  
  
@@ -100,8 +100,16 @@ index 68738a9..36eff8a 100644
 +        "provider": "gemini",
 +        "model": "gemini-3.5-flash",
 +        "label": "ตอบละเอียด",
-+        "hint": "ใช้รุ่นใหญ่กว่า ช้ากว่าเล็กน้อย",
-+        "budget_s": None,
++        "hint": "ใช้รุ่นใหญ่กว่า ตอบละเอียดกว่า แต่ต้องรอราวครึ่งนาที",
++        # เพดานตั้งต้น 30 วินาทีแคบเกินไปสำหรับรุ่นนี้ — วัดบนเซิร์ฟเวอร์เมื่อ 29 ต.ค. 2569
++        # ด้วยคำถามเดียวกัน 3 ครั้ง ได้ 30.1 / 30.1 / 15.8 วินาที คือตอบไม่ได้สองในสาม
++        # ครั้งเพราะชนเพดาน · เวลาที่ใช้จริงเมื่อตอบได้อยู่ราว 13-16 วินาที แต่ยังต้องกัน
++        # ส่วนให้ตัวสำรองในเครื่องอีก 10 วินาที (RAG_FALLBACK_RESERVE_S) ตัวหลักจึงเหลือ
++        # เวลาไม่พอเมื่อระบบช้ากว่าปกติเล็กน้อย
++        #
++        # 60 วินาทีคือเพดานของตัวเลือกนี้เท่านั้น ไม่ได้ขยายเพดานของทั้งระบบ และยังต่ำกว่า
++        # 120 ซึ่งเป็นเส้นที่หน้าเว็บเปลี่ยนไปใช้ชุดข้อความของตัวเลือกที่ช้าเป็นหลักนาที
++        "budget_s": 60.0,
 +    },
 +    {
 +        "id": "local",
@@ -182,6 +190,93 @@ index 68738a9..36eff8a 100644
  def default_model_of(provider: str) -> str:
      return settings.gemini_model if provider == "gemini" else settings.llm_model
  
+diff --git a/backend/app/services/answer_claims.py b/backend/app/services/answer_claims.py
+index 5812aea..bed04a4 100644
+--- a/backend/app/services/answer_claims.py
++++ b/backend/app/services/answer_claims.py
+@@ -79,6 +79,16 @@ _POLARITY_WORDS = {
+ # เพราะข้ออ้างเชิงคุณภาพอย่าง "มีความรู้ความเชี่ยวชาญ" เป็นการสรุปความที่ถ้อยคำ
+ # ต่างจากต้นฉบับได้โดยไม่ผิด ชั้นนี้จึงไม่ตัดสินข้อเช่นนั้น
+ _EXISTENCE = re.compile(r"(ไม่มี|มี)([ก-๎0-9A-Za-z]{3,30})")
++# ตัวอักษรที่นับเป็นส่วนหนึ่งของสิ่งที่ "มี X" อ้างถึง — ใช้รู้ว่าเพดาน 30 ตัวอักษร
++# ข้างบนตัดคำกลางคันหรือไม่ (ดูเหตุผลที่ต้องทิ้งข้ออ้างที่ถูกตัด ใน claims_of)
++_TERM_CHAR = re.compile(r"[ก-๎0-9A-Za-z]")
++# คำเชื่อมที่บอกว่า "สาระอยู่ถัดจากนี้" — "มี X" ที่ลงท้ายด้วยคำพวกนี้เป็นประโยคนำ
++# ไม่ใช่ข้ออ้าง · เอกสารเขียนหัวข้อ ("3.1.2 โครงสร้างหลักสูตร") แล้วไล่ตัวเลขต่อ ไม่ได้
++# เขียนรวบเป็นวลีเดียวอย่างที่คำตอบสรุป การเทียบถ้อยคำทั้งวลีจึงไม่พบเสมอ แล้วรายงานว่า
++# ยืนยันไม่ได้ ทั้งที่ตัวเลขทุกตัวในประโยคเดียวกันรองรับครบ (วัดจากคำตอบ fast
++# เมื่อ 29 ต.ค. 2569: "มีโครงสร้างหลักสูตรแบ่งเป็น")
++_LEAD_IN_TAIL = ("แบ่งเป็น", "แบ่งออกเป็น", "ประกอบด้วย", "ได้แก่", "ดังนี้",
++                 "จำแนกเป็น", "แยกเป็น", "ดังต่อไปนี้")
+ _CONCRETE = ("วิชา", "ทุน", "หลักสูตร", "สาขา", "กลุ่ม", "หมวด", "หน่วยกิต")
+ # คำลักษณนามที่คำตอบมักใส่นำหน้าสิ่งที่อ้างถึง ("มีรายวิชาแคลคูลัส") แต่เอกสารเขียนเฉพาะ
+ # ตัวสิ่งนั้น ("4091403 แคลคูลัส 1") — ตรวจทั้งรูปเต็มและรูปที่ตัดคำนำหน้าออก ไม่งั้นจะ
+@@ -108,7 +118,21 @@ _NEGATORS = ("ไม่มี", "ไม่ได้ระบุ", "ไม่ร
+ #
+ # แบ่งเท่าที่จำเป็นเพื่อให้คำตอบเปรียบเทียบสองฝั่ง (ซึ่งหลักฐานอยู่คนละเล่มโดยชอบ)
+ # ยังผ่านได้ · ยิ่งแบ่งละเอียดยิ่งตรวจหลวม จึงไม่แบ่งด้วย "และ" หรือจุลภาค
+-_SEGMENT = re.compile(r"\n+|[·•;]|\sส่วน\s|\sขณะที่\s|\sในขณะที่\s|\sแต่\s|\sสำหรับ\s")
++#
++# "ส่วน" ต้องรับรูปที่เขียนติดกับคำถัดไปด้วย เพราะภาษาไทยไม่เว้นวรรคระหว่างคำ และคำตอบ
++# เปรียบเทียบสองฉบับเขียนว่า "…6 หน่วยกิต ส่วนหลักสูตร พ.ศ. 2561 กำหนด…" ซึ่งรูปที่
++# บังคับให้มีช่องว่างปิดท้ายจับไม่ได้ · ผลคือทั้งคำตอบเป็นท่อนเดียว แล้วข้ออ้างของฉบับ
++# 2561 ถูกตัดสินด้วยหน้าของฉบับ 2566 จึงรายงานว่า "ยืนยันไม่ได้" ทั้งที่ it61.pdf หน้า 21
++# รองรับข้อนั้นอยู่ (วัดจากคำตอบ detailed เมื่อ 29 ต.ค. 2569)
++#
++# กันคำที่ขึ้นต้นด้วย "ส่วน" แต่เป็นคำนามของมันเอง ("ส่วนใหญ่", "ส่วนประกอบ") ไม่ให้
++# กลายเป็นรอยแบ่ง เพราะนั่นไม่ใช่การเปลี่ยนเรื่อง และยิ่งแบ่งยิ่งตรวจหลวม
++_NOT_CONTRAST = ("ใหญ่", "ประกอบ", "ที่เหลือ", "ตัว", "ร่วม", "บุคคล", "ลด", "เกิน",
++                 "แบ่ง", "กลาง", "ราชการ", "หนึ่ง", "ใด", "ย่อย", "เพิ่ม", "ขาด")
++_SEGMENT = re.compile(
++    r"\n+|[·•;]"
++    r"|\sส่วน(?:\s|(?!" + "|".join(_NOT_CONTRAST) + r"))"
++    r"|\sขณะที่\s|\sในขณะที่\s|\sแต่\s|\sสำหรับ\s")
+ 
+ # ความยาวขั้นต่ำที่ใช้เทียบบนข้อความที่ตัดสระ/วรรณยุกต์ออกแล้ว
+ #
+@@ -245,8 +269,16 @@ def claims_of(answer: str) -> tuple[Claim, ...]:
+                 out.append(Claim("item", item, (item,), _norm_forms([item]), ANY_UNIT))
+             continue
+ 
+-        for word, term in _EXISTENCE.findall(piece):
+-            term = term.strip()
++        for m in _EXISTENCE.finditer(piece):
++            word, term = m.group(1), m.group(2).strip()
++            # เพดาน 30 ตัวอักษรตัดกลางคำได้ และชิ้นที่ถูกตัดกลางคำไม่มีทางพบในเอกสาร
++            # ("มีโครงสร้างหลักสูตรประกอบด้วยหมว" จากคำตอบ fast เมื่อ 29 ต.ค. 2569)
++            # ข้ออ้างที่ยืนยันไม่ได้ด้วยตัวนิยามของมันเองไม่ใช่การตรวจ เป็นการโยนข้อสงสัย
++            # ใส่ผู้ใช้ · ประโยคยาวแบบนั้นมีข้ออ้างตัวเลขของตัวเองอยู่แล้ว ซึ่งยังตรวจตามเดิม
++            if m.end() < len(piece) and _TERM_CHAR.match(piece[m.end()]):
++                continue
++            if term.endswith(_LEAD_IN_TAIL):
++                continue   # ประโยคนำ — สาระที่ตามมาถูกตรวจเป็นข้ออ้างของตัวเองอยู่แล้ว
+             if not any(c in term for c in _CONCRETE) and not any(ch.isdigit() for ch in term):
+                 continue   # ข้ออ้างเชิงคุณภาพ ไม่ตัดสินด้วยชั้นนี้
+             kind = "absence" if word == "ไม่มี" else "existence"
+diff --git a/backend/app/services/answer_evidence.py b/backend/app/services/answer_evidence.py
+index 19d5300..7733508 100644
+--- a/backend/app/services/answer_evidence.py
++++ b/backend/app/services/answer_evidence.py
+@@ -208,9 +208,17 @@ def _split_items(body: str) -> tuple[tuple[str, ...], str]:
+     out: list[str] = []
+     used: set[int] = set()
+ 
++    # วงเล็บที่เหลือค้างต้องตัดออกด้วย ไม่ใช่เฉพาะคู่ที่ปิดครบ
++    #
++    # คำตอบใส่รายการย่อยไว้ในวงเล็บ ("(ประกอบด้วยกลุ่มวิชาแกน 15 หน่วยกิต, … หรือ
++    # สหกิจศึกษา ไม่น้อยกว่า 7 หน่วยกิต)") แล้วชิ้นสุดท้ายติดวงเล็บปิดมาด้วย ซึ่งไม่มีใน
++    # เอกสาร จึงหาไม่พบและถูกรายงานว่ายืนยันไม่ได้ ทั้งที่ it66.pdf หน้า 19 เขียนข้อความ
++    # นั้นไว้ตรงตัว (วัดจากคำตอบ detailed เมื่อ 29 ต.ค. 2569)
++    _EDGE = " .·:–-()[]"
++
+     def clean(part: str) -> str:
+-        part = _PAREN.sub("", part).strip(" .·:–-")
+-        return _PARTICLE.sub("", part).strip(" .·:–-")
++        part = _PAREN.sub("", part).strip(_EDGE)
++        return _PARTICLE.sub("", part).strip(_EDGE)
+ 
+     lines = body.split("\n")
+     # แบบที่ 1: ไล่รายการในบรรทัดเดียวหลังคำนำ ("… ได้แก่ ก, ข และ ค")
 diff --git a/backend/app/services/chat.py b/backend/app/services/chat.py
 index 2776cae..6705005 100644
 --- a/backend/app/services/chat.py
@@ -262,12 +357,120 @@ index 025e941..ab14d26 100644
      key = choice.key
      with _connectors_lock:
          found = _connectors.get(key)
+diff --git a/backend/tests/test_answer_claims.py b/backend/tests/test_answer_claims.py
+index e74134b..6c72b5c 100644
+--- a/backend/tests/test_answer_claims.py
++++ b/backend/tests/test_answer_claims.py
+@@ -163,6 +163,67 @@ class ClaimTests(unittest.TestCase):
+         v = verify(answer, EV_CS66 + EV_IT61)
+         self.assertNotEqual(v.status, "รองรับครบ", [c.shown for c in v.checked])
+ 
++    def test_เปรียบเทียบที่เขียน_ส่วน_ติดคำถัดไป_ต้องยังแบ่งท่อนได้(self):
++        """
++        ภาษาไทยไม่เว้นวรรคระหว่างคำ คำตอบจริงจึงเขียน "ส่วนหลักสูตร" ติดกัน
++
++        สองข้อบนใช้ "ส่วน " ที่มีช่องว่างปิดท้าย จึงไม่เคยจับรูปที่เขียนติดกันได้ ·
++        ผลคือทั้งคำตอบเป็นท่อนเดียว แล้วข้ออ้างของฉบับ 2561 ถูกตัดสินด้วยหน้าของ
++        ฉบับ 2566 จึงรายงานว่ายืนยันไม่ได้ ทั้งที่หลักฐานของฝั่งตัวเองรองรับอยู่
++        (วัดจากคำตอบ detailed เมื่อ 29 ต.ค. 2569)
++        """
++        answer = ("หลักสูตรวิทยาการคอมพิวเตอร์ (พ.ศ. 2566) เรียนไม่น้อยกว่า 130 หน่วยกิต "
++                  "ส่วนหลักสูตรเทคโนโลยีสารสนเทศ (พ.ศ. 2561) เรียนไม่น้อยกว่า 127 หน่วยกิต")
++        v = verify(answer, EV_CS66 + EV_IT61)
++        self.assertEqual(v.status, "รองรับครบ", [c.shown for c in v.unsupported])
++
++    def test_เปรียบเทียบที่เขียนติดกันแล้วสลับตัวเลข_ต้องไม่ผ่าน(self):
++        """คู่ควบคุม — การแบ่งท่อนเพิ่มขึ้นต้องไม่ทำให้ด่านตรวจหลวมลง"""
++        answer = ("หลักสูตรวิทยาการคอมพิวเตอร์ (พ.ศ. 2566) เรียนไม่น้อยกว่า 127 หน่วยกิต "
++                  "ส่วนหลักสูตรเทคโนโลยีสารสนเทศ (พ.ศ. 2561) เรียนไม่น้อยกว่า 130 หน่วยกิต")
++        v = verify(answer, EV_CS66 + EV_IT61)
++        self.assertNotEqual(v.status, "รองรับครบ", [c.shown for c in v.checked])
++
++    def test_ส่วนใหญ่_ไม่ใช่รอยแบ่งท่อน(self):
++        """
++        "ส่วน" ที่เป็นคำนามของมันเอง ไม่ใช่การเปลี่ยนเรื่อง — ถ้านับเป็นรอยแบ่ง
++        ข้ออ้างที่ผิดจะได้เลือกหน้าของตัวเองแล้วรอดด่านไป
++        """
++        answer = ("หลักสูตรวิทยาการคอมพิวเตอร์ (พ.ศ. 2566) เรียนไม่น้อยกว่า 130 หน่วยกิต "
++                  "ส่วนใหญ่เป็นวิชาเฉพาะไม่น้อยกว่า 127 หน่วยกิต")
++        v = verify(answer, EV_CS66 + EV_IT61)
++        self.assertNotEqual(v.status, "รองรับครบ", [c.shown for c in v.checked])
++
++    def test_ข้ออ้างมี_X_ที่ถูกเพดานตัดกลางคำ_ต้องไม่ถูกนับเป็นข้ออ้าง(self):
++        """
++        เพดานความยาวของ "มี X" ตัดคำกลางคัน ชิ้นที่ได้จึงไม่มีทางพบในเอกสาร
++
++        คำตอบจริงขึ้นว่า "ยังยืนยันไม่ได้จากหน้าที่อ้าง: มีโครงสร้างหลักสูตรประกอบด้วยหมว"
++        ซึ่งเป็นข้อความที่ถูกตัดกลางคำ ไม่ใช่ข้ออ้างที่ตรวจได้ (วัดจากคำตอบ fast
++        เมื่อ 29 ต.ค. 2569) · ข้ออ้างตัวเลขของประโยคเดียวกันต้องยังถูกตรวจตามเดิม
++        """
++        answer = ("หลักสูตรนี้มีจำนวนหน่วยกิตรวมตลอดหลักสูตรไม่น้อยกว่า 130 หน่วยกิต "
++                  "โดยมีโครงสร้างหลักสูตรประกอบด้วยหมวดวิชาศึกษาทั่วไปและหมวดวิชาเฉพาะ")
++        shown = [c.shown for c in claims_of(answer)]
++        self.assertNotIn("มีโครงสร้างหลักสูตรประกอบด้วยหมว", shown, shown)
++        self.assertIn("ไม่น้อยกว่า 130 หน่วยกิต", shown, shown)
++        self.assertEqual(verify(answer, EV_CS66).status, "รองรับครบ",
++                         [c.shown for c in verify(answer, EV_CS66).unsupported])
++
++    def test_ข้ออ้างมี_X_ที่ลงท้ายด้วยคำเชื่อมประโยคนำ_ต้องไม่ถูกนับเป็นข้ออ้าง(self):
++        """
++        "มีโครงสร้างหลักสูตรแบ่งเป็น …" คือประโยคนำ สาระคือตัวเลขที่ตามมา
++
++        เอกสารเขียนเป็นหัวข้อแล้วไล่ตัวเลขต่อ ไม่ได้เขียนรวบเป็นวลีเดียวอย่างที่คำตอบสรุป
++        การเทียบถ้อยคำทั้งวลีจึงไม่พบเสมอ (วัดจากคำตอบ fast เมื่อ 29 ต.ค. 2569)
++        """
++        answer = ("หลักสูตรนี้เรียนไม่น้อยกว่า 130 หน่วยกิต "
++                  "โดยมีโครงสร้างหลักสูตรแบ่งเป็น หมวดวิชาศึกษาทั่วไปและหมวดวิชาเฉพาะ")
++        shown = [c.shown for c in claims_of(answer)]
++        self.assertNotIn("มีโครงสร้างหลักสูตรแบ่งเป็น", shown, shown)
++        v = verify(answer, EV_CS66)
++        self.assertEqual(v.status, "รองรับครบ", [c.shown for c in v.unsupported])
++
+ 
+ if __name__ == "__main__":
+     unittest.main(verbosity=2)
+diff --git a/backend/tests/test_answer_evidence.py b/backend/tests/test_answer_evidence.py
+index 340158a..a88d60b 100644
+--- a/backend/tests/test_answer_evidence.py
++++ b/backend/tests/test_answer_evidence.py
+@@ -18,7 +18,7 @@ from pathlib import Path
+ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ 
+-from app.services.answer_evidence import answer_body, quote_is_supported, supporting
++from app.services.answer_evidence import answer_body, list_items, quote_is_supported, supporting
+ 
+ 
+ @dataclass
+@@ -89,6 +89,22 @@ class EvidenceTests(unittest.TestCase):
+         self.assertFalse(quote_is_supported("สั้นไป", "ข้อความยาวที่มีคำว่าสั้นไปอยู่ด้วย"),
+                          "ข้อความสั้นเกินไปไม่ถือเป็นหลักฐาน")
+ 
++    def test_รายการในวงเล็บต้องไม่ติดวงเล็บปิดมาด้วย(self):
++        """
++        วงเล็บที่เหลือค้างทำให้รายการชิ้นสุดท้ายหาไม่พบในเอกสาร
++
++        คำตอบจริงเขียนรายการย่อยไว้ในวงเล็บ ชิ้นสุดท้ายจึงได้ ")" ติดมา แล้วถูกรายงานว่า
++        "ยังยืนยันไม่ได้" ทั้งที่ it66.pdf หน้า 19 เขียนข้อความนั้นไว้ตรงตัว
++        (วัดจากคำตอบ detailed เมื่อ 29 ต.ค. 2569)
++        """
++        reply = ("หมวดวิชาเฉพาะ ไม่น้อยกว่า 94 หน่วยกิต (ประกอบด้วยกลุ่มวิชาแกน 15 หน่วยกิต, "
++                 "กลุ่มวิชาเฉพาะด้าน 57 หน่วยกิต และกลุ่มวิชาฝึกประสบการณ์วิชาชีพหรือ"
++                 "สหกิจศึกษา ไม่น้อยกว่า 7 หน่วยกิต)")
++        items = list_items(reply)
++        self.assertTrue(items, "ควรอ่านรายการย่อยในวงเล็บออกมาได้")
++        self.assertNotIn(")", "".join(items), items)
++        self.assertIn("สหกิจศึกษา ไม่น้อยกว่า 7 หน่วยกิต", items, items)
++
+ 
+ if __name__ == "__main__":
+     unittest.main(verbosity=2)
 diff --git a/backend/tests/test_public_model_choice.py b/backend/tests/test_public_model_choice.py
 new file mode 100644
-index 0000000..97e55f3
+index 0000000..0a3f6bb
 --- /dev/null
 +++ b/backend/tests/test_public_model_choice.py
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,208 @@
 +"""
 +ผู้ใช้หน้าเว็บเลือกโมเดลเองได้ — รับเฉพาะ id ที่อนุญาต และตัวเลือกต้องได้เพดานเวลาของตัวเอง
 +
@@ -386,6 +589,16 @@ index 0000000..97e55f3
 +    fast = ai_settings.public_choice("fast")
 +    check("fast ชี้ไปที่ gemini", fast is not None and fast[0].provider == "gemini")
 +    check("fast ใช้เพดานเวลาตั้งต้นของระบบ", fast is not None and fast[1] is None)
++
++    # วัดบนเซิร์ฟเวอร์เมื่อ 29 ต.ค. 2569: ด้วยเพดานตั้งต้น 30 วินาที ตัวเลือกนี้ตอบไม่ได้
++    # สองในสามครั้งเพราะชนเพดาน (30.1 / 30.1 / 15.8 วินาที) จึงต้องมีเพดานของตัวเอง
++    detailed = ai_settings.public_choice("detailed")
++    check("detailed ชี้ไปที่รุ่นใหญ่กว่าของ gemini",
++          detailed is not None and detailed[0].model == "gemini-3.5-flash", str(detailed))
++    check("detailed มีเพดานเวลาของตัวเองที่กว้างกว่าค่าตั้งต้น",
++          detailed is not None and (detailed[1] or 0) >= 60, f"budget={detailed and detailed[1]}")
++    check("เพดานของ detailed ยังต่ำกว่าเส้นที่หน้าเว็บถือว่าช้าเป็นหลักนาที (120)",
++          detailed is not None and (detailed[1] or 0) < 120, f"budget={detailed and detailed[1]}")
 +
 +    for bad in ("", None, "ไม่มีตัวนี้", "gemini-3.6-flash", "../../etc/passwd"):
 +        check(f"ปฏิเสธ id ที่ไม่อยู่ในรายการ: {bad!r}", ai_settings.public_choice(bad) is None)
