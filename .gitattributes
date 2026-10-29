@@ -12,3 +12,14 @@
 # ล้มทุกไฟล์ และตัว SHA256SUMS เองก็เสียจนชื่อไฟล์มี \r ติดมาด้วย
 # วัดจริง 28 ต.ค. 2569: ล้มทั้ง 9 ไฟล์ด้วยข้อความ "No such file or directory"
 docs/raw/** text eol=lf
+
+# แต่รูปภาพในโฟลเดอร์เดียวกันต้องไม่ถูกแตะ — มันเป็นไบนารี การแปลงบรรทัดทำให้ไฟล์เสีย
+#
+# เจอจริง 29 ต.ค. 2569: ภาพหน้าจอ .jpg ที่ commit ลงไปได้ hash ไม่ตรงกับไฟล์ต้นทาง
+# เพราะไบต์ที่บังเอิญเป็น CR LF ถูกยุบเหลือ LF ไฟล์ที่ checkout กลับมาจึงเปิดไม่ขึ้น
+docs/raw/*.jpg -text
+docs/raw/*.jpeg -text
+docs/raw/*.png -text
+docs/raw/*.webp -text
+docs/raw/*.gif -text
+docs/raw/*.pdf -text

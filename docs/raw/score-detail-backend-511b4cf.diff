@@ -1,0 +1,181 @@
+commit 511b4cff84ddff70a31c12d1476d2cae5298ef63
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Thu Oct 29 18:33:25 2026 +0700
+
+    feat(web): ส่งข้อความต้นฉบับของส่วนเอกสารที่ใช้เทียบคะแนนไปด้วย
+    
+    เดิมหน้าเว็บได้แค่ชื่อไฟล์ เลขหน้า และตัวเลขความคล้าย ซึ่งผู้ใช้ตรวจสอบอะไรไม่ได้เลย
+    และทำให้ตัวเลขความคล้ายเชิงเวกเตอร์ถูกอ่านเป็น "ยืนยันว่าตรง" ทั้งที่ไม่ใช่
+    
+    evidence แต่ละชิ้นจึงมีข้อความต้นฉบับยาวไม่เกิน 160 ตัวอักษร ยุบช่องว่างทุกชนิดก่อน
+    เพราะข้อความจาก PDF ภาษาไทยมีขึ้นบรรทัดคั่นกลางคำจนอ่านบนหน้าเว็บไม่ออก
+    (เหตุผลเดียวกับที่ชุดเทียบข้อความอ้างอิงต้องตัดอักขระว่างทุกชนิด)
+    
+    ข้อความมาจาก chunk ของหลักสูตรใบนั้นในคำสั่ง SQL เดิม ไม่ได้ถามเพิ่มอีกรอบ
+    และไม่เรียกโมเดลเพิ่ม · ชุดทดสอบเพิ่มสองข้อ: ข้อความเป็นของชิ้นนั้นจริงไม่สลับกัน
+    และการยุบช่องว่าง/จำกัดความยาวทำงานถูกต้อง (รวมเป็น 18 ข้อ)
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/backend/app/services/program_match.py b/backend/app/services/program_match.py
+index c36c832..ecce2bc 100644
+--- a/backend/app/services/program_match.py
++++ b/backend/app/services/program_match.py
+@@ -568,25 +568,48 @@ def _breakdown_of(s: dict) -> dict:
+     }
+ 
+ 
++# ความยาวข้อความตัวอย่างของชิ้นเอกสารที่ส่งให้หน้าเว็บ
++#
++# ส่งมาเพื่อให้ผู้ใช้เห็นว่า "ส่วนที่ใช้เทียบ" มีเนื้อหาอะไรอยู่จริง ไม่ใช่เห็นแค่เลขหน้า
++# กับตัวเลขความคล้ายซึ่งตรวจสอบอะไรไม่ได้เลย · ยาวพอให้รู้เรื่องแต่ไม่ยาวจนกลายเป็น
++# การเสิร์ฟเนื้อหาเอกสารทั้งเล่มผ่านผลการจัดอันดับ
++_EXCERPT_CHARS = 160
++
++
++def _excerpt(content: str | None) -> str:
++    """ข้อความต้นฉบับสั้นๆ ของชิ้นหนึ่ง — ยุบช่องว่างทุกชนิดก่อน เพราะข้อความจาก PDF
++    ภาษาไทยมีขึ้นบรรทัดคั่นกลางคำจนอ่านบนหน้าเว็บไม่ออก"""
++    text_ = " ".join((content or "").split())
++    return text_[:_EXCERPT_CHARS] + "…" if len(text_) > _EXCERPT_CHARS else text_
++
++
+ def _evidence_sources(db: Session, chunk_ids: list) -> dict:
+-    """(ชื่อไฟล์, เลขหน้า) ของชิ้นหลักฐาน — คีย์เป็น chunk_id เป็นสตริง"""
++    """(ชื่อไฟล์, เลขหน้า, ข้อความ) ของชิ้นหลักฐาน — คีย์เป็น chunk_id เป็นสตริง"""
+     if not chunk_ids:
+         return {}
+     rows = db.execute(
+         text("""
+-            SELECT ch.id AS chunk_id, ch.page_number, d.original_filename AS file
++            SELECT ch.id AS chunk_id, ch.page_number, ch.content,
++                   d.original_filename AS file
+               FROM course_chunks ch
+               LEFT JOIN course_documents d ON d.id = ch.document_id
+              WHERE ch.id = ANY(:ids)
+         """),
+         {"ids": [str(i) for i in chunk_ids]},
+     ).mappings().all()
+-    return {str(r["chunk_id"]): {"file": r["file"], "page": r["page_number"]} for r in rows}
++    return {
++        str(r["chunk_id"]): {"file": r["file"], "page": r["page_number"],
++                             "excerpt": _excerpt(r["content"])}
++        for r in rows
++    }
+ 
+ 
+ def _evidence_of(s: dict, sources: dict) -> list[dict]:
+     """
+-    หน้าเอกสารที่ใช้เป็นหลักฐานของใบนี้ พร้อมความคล้ายรายชิ้นที่วัดได้จริง
++    ส่วนของเอกสารที่ถูกใช้เทียบคะแนนของใบนี้ พร้อมค่าความคล้ายเชิงเวกเตอร์ของแต่ละชิ้น
++
++    ค่า similarity คือความใกล้เคียงของเวกเตอร์ข้อความ **ไม่ใช่การยืนยันว่าเนื้อหาตรง
++    กับคำตอบของผู้ใช้** จึงส่งข้อความต้นฉบับไปด้วยให้ผู้อ่านตัดสินเองได้
+ 
+     ชิ้นทั้งหมดมาจาก chunk_ids ของหลักสูตรใบนี้ ซึ่งถูกแบ่งตาม course_id ตั้งแต่ใน SQL
+     จึงเป็นเอกสารของสาขานี้และฉบับนี้เสมอ ข้ามสาขาหรือข้ามฉบับไม่ได้เชิงโครงสร้าง
+@@ -596,7 +619,8 @@ def _evidence_of(s: dict, sources: dict) -> list[dict]:
+         source = sources.get(str(chunk_id))
+         if not source or not source.get("file"):
+             continue
+-        out.append({"file": source["file"], "page": source["page"], "similarity": round(sim, 4)})
++        out.append({"file": source["file"], "page": source["page"],
++                    "similarity": round(sim, 4), "excerpt": source.get("excerpt", "")})
+     return out
+ 
+ 
+diff --git a/backend/tests/test_score_detail.py b/backend/tests/test_score_detail.py
+index e6e5e69..9f503f2 100644
+--- a/backend/tests/test_score_detail.py
++++ b/backend/tests/test_score_detail.py
+@@ -34,19 +34,27 @@ from llm.connector import LLMConnectionError  # noqa: E402
+ from app.api.routes.web_compat import (_SCORED_FIELDS, _UNSCORED_FIELDS,  # noqa: E402
+                                        _answer_rows, _engine)
+ from app.services import llm_client, program_match  # noqa: E402
+-from app.services.program_match import (CHUNKS_PER_COURSE, _breakdown_of,  # noqa: E402
+-                                        _evidence_of, _to_percent, build_match_query,
+-                                        match_programs)
++from app.services.program_match import (CHUNKS_PER_COURSE, _EXCERPT_CHARS,  # noqa: E402
++                                        _breakdown_of, _evidence_of, _excerpt, _to_percent,
++                                        build_match_query, match_programs)
+ 
+ MATH = uuid.UUID("11111111-1111-1111-1111-111111111111")
+ ANIMATION = uuid.UUID("22222222-2222-2222-2222-222222222222")
+ 
++NEWLINE = chr(10)
++TAB = chr(9)
++
+ # ชิ้นเอกสารของสองสาขา — คนละไฟล์ คนละหน้า เพื่อให้การสลับกันมองเห็นได้ทันที
+ CHUNKS = {
+-    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001"): (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 11),
+-    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002"): (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 12),
+-    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001"): (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 7),
+-    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002"): (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 8),
++    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001"):
++        # ขึ้นบรรทัดกลางข้อความแบบที่ข้อความจาก PDF ภาษาไทยเป็นจริง
++        (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 11, "รายวิชา" + NEWLINE + "การวิเคราะห์ข้อมูลเบื้องต้น 3(2-2-5)"),
++    uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002"):
++        (MATH, "มคอ2-คณิตศาสตร์-2565.pdf", 12, "อาชีพที่สามารถประกอบได้ นักวิเคราะห์ข้อมูล"),
++    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001"):
++        (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 7, "การผลิตงานแอนิเมชันสามมิติ"),
++    uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002"):
++        (ANIMATION, "มคอ2-แอนิเมชัน-2566.pdf", 8, "เทคนิคการจัดแสงและการเรนเดอร์"),
+ }
+ TITLES = {MATH: "วิทยาศาสตรบัณฑิต สาขาวิชาคณิตศาสตร์",
+           ANIMATION: "วิทยาศาสตรบัณฑิต สาขาวิชาคอมพิวเตอร์แอนิเมชันและมัลติมีเดีย"}
+@@ -97,8 +105,8 @@ class _FakeDB:
+         if "original_filename" in sql:
+             wanted = {str(i) for i in params["ids"]}
+             return _Result([
+-                _Row(chunk_id=cid, page_number=page, file=name)
+-                for cid, (_course, name, page) in CHUNKS.items() if str(cid) in wanted
++                _Row(chunk_id=cid, page_number=page, file=name, content=content)
++                for cid, (_course, name, page, content) in CHUNKS.items() if str(cid) in wanted
+             ])
+         if "content LIKE" in sql:            # แก่นของหลักสูตร
+             return _Result([])
+@@ -164,8 +172,8 @@ class BreakdownMathTests(_ScoreDetailBase):
+ 
+ class EvidenceIsolationTests(_ScoreDetailBase):
+     def _sources(self):
+-        return {str(cid): {"file": name, "page": page}
+-                for cid, (_c, name, page) in CHUNKS.items()}
++        return {str(cid): {"file": name, "page": page, "excerpt": _excerpt(content)}
++                for cid, (_c, name, page, content) in CHUNKS.items()}
+ 
+     def test_หลักฐานของแต่ละสาขาไม่ข้ามไปอีกสาขา(self):
+         math_ids = [c for c, v in CHUNKS.items() if v[0] == MATH]
+@@ -188,6 +196,24 @@ class EvidenceIsolationTests(_ScoreDetailBase):
+         out = _evidence_of({"chunk_ids": ids, "sims": [0.61, 0.42]}, self._sources())
+         self.assertEqual([(i["page"], i["similarity"]) for i in out], [(11, 0.61), (12, 0.42)])
+ 
++    def test_ข้อความตัวอย่างเป็นของชิ้นนั้นจริง_ไม่สลับกัน(self):
++        """ข้อความที่ผู้ใช้อ่านต้องเป็นของหน้านั้น ไม่ใช่ของชิ้นอื่นในสาขาเดียวกัน"""
++        ids = [c for c, v in CHUNKS.items() if v[0] == MATH]
++        out = _evidence_of({"chunk_ids": ids, "sims": [0.61, 0.42]}, self._sources())
++        self.assertEqual([(i["page"], i["excerpt"]) for i in out], [
++            (11, "รายวิชา การวิเคราะห์ข้อมูลเบื้องต้น 3(2-2-5)"),
++            (12, "อาชีพที่สามารถประกอบได้ นักวิเคราะห์ข้อมูล"),
++        ])
++
++    def test_ข้อความตัวอย่างยุบช่องว่างและจำกัดความยาว(self):
++        """ข้อความจาก PDF ภาษาไทยมีขึ้นบรรทัดคั่นกลางคำ ถ้าไม่ยุบจะอ่านบนหน้าเว็บไม่ออก"""
++        messy = "ก" + NEWLINE + "ข" + TAB + " ค" + NEWLINE + NEWLINE + "ง"
++        self.assertEqual(_excerpt(messy), "ก ข ค ง")
++        long = _excerpt("ก" * (_EXCERPT_CHARS + 50))
++        self.assertEqual(len(long), _EXCERPT_CHARS + 1)
++        self.assertTrue(long.endswith("…"))
++        self.assertEqual(_excerpt(None), "")
++
+ 
+ class WholeResultTests(_ScoreDetailBase):
+     def _match(self, chat_fails=False):
+@@ -211,6 +237,8 @@ class WholeResultTests(_ScoreDetailBase):
+             self.assertEqual({i["file"] for i in m.evidence}, own)
+             self.assertEqual([i["page"] for i in m.evidence],
+                              [CHUNKS[c][2] for c in m.evidence_chunk_ids])
++            self.assertEqual([i["excerpt"] for i in m.evidence],
++                             [_excerpt(CHUNKS[c][3]) for c in m.evidence_chunk_ids])
+ 
+     def test_โมเดลล่ม_ยังได้คะแนนและรายละเอียดการคำนวณครบ(self):
+         matches, connector = self._match(chat_fails=True)

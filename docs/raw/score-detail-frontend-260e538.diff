@@ -1,0 +1,164 @@
+commit 260e538a5bbdadd8c18826118a1d03fd9961219c
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Thu Oct 29 18:33:13 2026 +0700
+
+    fix(web): ให้คำอธิบายคะแนนพูดเท่าที่ข้อมูลจริงบอกได้
+    
+    สี่จุดที่เขียนเกินกว่าที่ระบบรู้จริง
+    
+    1. ช่องว่างที่ว่างเปล่าเคยสรุปว่า "ไม่มีจุดที่ขาด — คำตอบทุกข้อเชื่อมโยงกับเอกสารได้"
+       ซึ่งเป็นข้อสรุปที่ระบบไม่ได้ตรวจ เปลี่ยนเป็นบอกตามจริงว่ารอบนี้ไม่มีรายละเอียด
+       ช่องว่างเพิ่มเติมจากข้อมูลที่ตรวจ
+    2. เลิกใช้ช่วง 0.35-0.72 ตัดสินความคล้ายของเนื้อหาและชื่อสาขาทีละตัว — ช่วงนั้นเป็น
+       ของคะแนนผสมตอนแปลงเป็นเปอร์เซ็นต์ ระบบไม่เคยมีเกณฑ์ผ่าน/ไม่ผ่านรายองค์ประกอบ
+       ค่าทั้งสองยังแสดงตามจริงในส่วนที่อธิบายสูตร
+    3. หัวข้อหลักฐานเปลี่ยนจาก "จุดที่ตรงกับเนื้อหาหลักสูตร" เป็น "ส่วนของเอกสารที่ใช้
+       เทียบคะแนน" พร้อมข้อความต้นฉบับสั้น ๆ ของชิ้นนั้น และบอกกำกับว่าความใกล้เคียง
+       เชิงข้อความไม่ใช่การยืนยันว่าเนื้อหาตรงกับคำตอบ
+    4. บรรทัดสูตรใช้ ≈ แทน = เพราะเลขที่แสดงถูกปัดสองตำแหน่งแล้ว และเพิ่มบรรทัดอธิบาย
+       ว่าระบบจำกัดคะแนนไว้ในช่วง 0-100 ตามสูตรเดิม
+    
+    ไม่แตะสูตร คะแนน อันดับ และไม่เพิ่มการเรียกโมเดล
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/src/lib/scoreDetail.js b/src/lib/scoreDetail.js
+index da2d408..1ffb571 100644
+--- a/src/lib/scoreDetail.js
++++ b/src/lib/scoreDetail.js
+@@ -20,29 +20,37 @@ const pageOf = (item) => (item.page ? `หน้า ${item.page}` : 'ไม่
+ export const answerLines = (detail) =>
+   (detail?.answersUsed || []).map((row) => `${row.label}: ${row.values.join(', ')}`)
+ 
+-/** จุดที่ตรงกับเนื้อหาหลักสูตร — ไฟล์และหน้าที่ถูกใช้เป็นหลักฐานของสาขานี้ */
+-export const matchLines = (why) =>
++/**
++ * ส่วนของเอกสารที่ถูกใช้เทียบคะแนนของสาขานี้
++ *
++ * คืนเป็นวัตถุ ไม่ใช่ประโยคเดียว เพราะหน้าเว็บต้องแสดงข้อความต้นฉบับคนละบรรทัดกับ
++ * ที่มา · ค่าความใกล้เคียงเป็นค่าของเวกเตอร์ข้อความ ไม่ใช่การยืนยันว่าเนื้อหาตรงกับ
++ * คำตอบของผู้ใช้ ถ้อยคำที่ใช้เรียกจึงต้องไม่พูดเกินกว่านั้น
++ */
++export const matchItems = (why) =>
+   (why?.evidence || []).map((item) => {
+     const sim = n(item.similarity)
+     const where = `${item.file} · ${pageOf(item)}`
+-    return sim ? `${where} (ความใกล้เคียง ${sim})` : where
++    return {
++      where: sim ? `${where} · ความใกล้เคียงเชิงข้อความ ${sim}` : where,
++      excerpt: (item.excerpt || '').trim()
++    }
+   })
+ 
+ /** ส่วนที่ยังไม่พบข้อมูลเชื่อมโยง — เขียนจากค่าที่วัดได้ ไม่ใช่การคาดเดา */
+ export const gapLines = (why, detail) => {
+   if (!why) return []
+   const lines = []
+-  const floor = n(why.percent_floor)
+ 
+   if (!why.evidence?.length) {
+-    lines.push('ยังไม่พบหน้าเอกสารของสาขานี้ที่เชื่อมโยงกับคำตอบของคุณ')
+-  }
+-  if (floor && typeof why.content_similarity === 'number' && why.content_similarity < why.percent_floor) {
+-    lines.push(`เนื้อหาในเอกสารยังใกล้เคียงคำตอบของคุณน้อย (${n(why.content_similarity)} ต่ำกว่าเกณฑ์ที่ระบบเริ่มนับ ${floor})`)
+-  }
+-  if (floor && typeof why.title_similarity === 'number' && why.title_similarity < why.percent_floor) {
+-    lines.push(`ชื่อสาขายังไม่ตรงกับคำตอบของคุณ (${n(why.title_similarity)} ต่ำกว่าเกณฑ์ที่ระบบเริ่มนับ ${floor})`)
++    lines.push('ยังไม่พบส่วนของเอกสารสาขานี้ที่ระบบใช้เทียบกับคำตอบของคุณได้')
+   }
++  // ไม่ตัดสินความคล้ายขององค์ประกอบทีละตัวด้วยช่วง 0.35-0.72
++  //
++  // ช่วงนั้นเป็นของ **คะแนนผสม** ตอนแปลงเป็นเปอร์เซ็นต์ (ดู _to_percent ในหลังบ้าน)
++  // ระบบไม่เคยมีเกณฑ์ผ่าน/ไม่ผ่านของเนื้อหาหรือชื่อสาขาแยกกันเลย การเอาเลขนั้นมา
++  // ตัดสินทีละองค์ประกอบคือการสร้างเกณฑ์ใหม่ขึ้นมาเองแล้วบอกผู้ใช้ว่าเป็นของระบบ
++  // ค่าทั้งสองแสดงตามจริงอยู่แล้วในส่วน "เปอร์เซ็นต์นี้คิดมาอย่างไร"
+   const perCourse = detail?.chunksPerCourse
+   if (perCourse && typeof why.chunks_used === 'number' && why.chunks_used < perCourse) {
+     lines.push(`เอกสารของสาขานี้มีเนื้อหาให้เทียบ ${why.chunks_used} ส่วน น้อยกว่า ${perCourse} ส่วนที่ระบบใช้ตามปกติ`)
+@@ -67,18 +75,22 @@ export const formulaLines = (why) => {
+   const blended = n(why.blended_score)
+   const weight = why.title_weight
+ 
++  // ใช้ ≈ ไม่ใช่ = เพราะเลขที่แสดงถูกปัดเป็นทศนิยมสองตำแหน่งแล้ว การคิดตามเลขที่เห็น
++  // จะไม่ได้ผลลัพธ์ตรงเป๊ะกับค่าที่ระบบใช้จริง
+   if (content && title && blended && typeof weight === 'number') {
+     lines.push(
+-      `เนื้อหาเอกสาร ${content} × ${n(1 - weight)} + ชื่อสาขา ${title} × ${n(weight)} = ${blended}`
++      `เนื้อหาเอกสาร ${content} × ${n(1 - weight)} + ชื่อสาขา ${title} × ${n(weight)} ≈ ${blended}`
+     )
+   }
+   const floor = n(why.percent_floor)
+   const ceiling = n(why.percent_ceiling)
+   if (blended && floor && ceiling && typeof why.percent === 'number') {
+-    lines.push(`เทียบในช่วง ${floor} – ${ceiling} ของระบบ แล้วแปลงเป็น ${why.percent}%`)
++    lines.push(`เทียบในช่วง ${floor} – ${ceiling} ของระบบ แล้วแปลงเป็นเปอร์เซ็นต์ ≈ ${why.percent}%`)
++    // สูตรเดิมตัดผลให้อยู่ใน 0-100 เสมอ ต่ำกว่า 0.35 จึงเป็น 0% และสูงกว่า 0.72 เป็น 100%
++    lines.push(`ค่าที่ต่ำกว่า ${floor} นับเป็น 0% และสูงกว่า ${ceiling} นับเป็น 100% เพราะระบบจำกัดคะแนนไว้ในช่วง 0–100`)
+   }
+   return lines
+ }
+ 
+ export const hasScoreDetail = (why) =>
+-  Boolean(why) && (formulaLines(why).length > 0 || matchLines(why).length > 0)
++  Boolean(why) && (formulaLines(why).length > 0 || matchItems(why).length > 0)
+diff --git a/src/pages/FindMajorResult.jsx b/src/pages/FindMajorResult.jsx
+index 55ac4e1..c90e296 100644
+--- a/src/pages/FindMajorResult.jsx
++++ b/src/pages/FindMajorResult.jsx
+@@ -7,7 +7,7 @@ import { getFindMajorAnswers, clearFindMajorAnswers } from '../lib/findMajorAnsw
+ import EngineNote from '../components/EngineNote'
+ import { postJsonWithTimeout } from '../lib/apiRequest'
+ import {
+-  PERCENT_DISCLAIMER, answerLines, formulaLines, gapLines, hasScoreDetail, matchLines
++  PERCENT_DISCLAIMER, answerLines, formulaLines, gapLines, hasScoreDetail, matchItems
+ } from '../lib/scoreDetail'
+ 
+ // ยาวกว่าเพดานของหลังบ้าน (90 วินาที) เล็กน้อย เพื่อให้ข้อความบอกเหตุของหลังบ้าน
+@@ -37,7 +37,7 @@ const WhyThisScore = ({ why, detail, courseId }) => {
+   if (!hasScoreDetail(why)) return null
+ 
+   const answers = answerLines(detail)
+-  const matches = matchLines(why)
++  const matches = matchItems(why)
+   const gaps = gapLines(why, detail)
+   const formula = formulaLines(why)
+ 
+@@ -85,15 +85,32 @@ const WhyThisScore = ({ why, detail, courseId }) => {
+         <p className="text-xs text-gray-500">
+           ระบบใช้คำตอบชุดนี้ชุดเดียวเทียบกับทุกสาขา คะแนนที่ต่างกันจึงมาจากเนื้อหาของแต่ละสาขา
+         </p>
+-        {section(
+-          'จุดที่ตรงกับเนื้อหาหลักสูตร (ไฟล์และหน้าที่ใช้จริง)',
+-          matches,
+-          'ยังไม่พบหน้าเอกสารที่เชื่อมโยงกับคำตอบของคุณ'
+-        )}
++        <div>
++          <p className="font-semibold text-gray-800">ส่วนของเอกสารที่ใช้เทียบคะแนน</p>
++          {matches.length > 0 ? (
++            <ul className="mt-1 space-y-2">
++              {matches.map((item, index) => (
++                <li key={index}>
++                  <p className="text-gray-600">{item.where}</p>
++                  {item.excerpt && (
++                    <p className="mt-0.5 border-l-2 border-gray-300 pl-2 text-gray-700">
++                      “{item.excerpt}”
++                    </p>
++                  )}
++                </li>
++              ))}
++            </ul>
++          ) : (
++            <p className="mt-1 text-gray-500">ยังไม่พบส่วนของเอกสารที่ระบบใช้เทียบกับคำตอบของคุณ</p>
++          )}
++          <p className="mt-1 text-xs text-gray-500">
++            ความใกล้เคียงเชิงข้อความเป็นค่าที่วัดจากเวกเตอร์ของข้อความ ไม่ใช่การยืนยันว่าเนื้อหาส่วนนี้ตรงกับคำตอบของคุณ
++          </p>
++        </div>
+         {section(
+           'ส่วนที่ยังไม่พบข้อมูลเชื่อมโยง',
+           gaps,
+-          'ไม่มีจุดที่ขาด — คำตอบทุกข้อที่ใช้คิดคะแนนเชื่อมโยงกับเอกสารได้'
++          'ยังไม่มีรายละเอียดช่องว่างเพิ่มเติมจากข้อมูลที่ระบบตรวจในรอบนี้'
+         )}
+         {section('เปอร์เซ็นต์นี้คิดมาอย่างไร', formula, 'หลังบ้านไม่ได้ส่งรายละเอียดการคำนวณมา')}
+         <p className="text-xs text-gray-500">{PERCENT_DISCLAIMER}</p>
