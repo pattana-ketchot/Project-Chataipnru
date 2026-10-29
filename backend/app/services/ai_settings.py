@@ -146,6 +146,10 @@ def public_choices() -> list[dict]:
             "hint": c["hint"],
             "model": c["model"] or default_model_of(c["provider"]),
             "default": c["id"] == DEFAULT_PUBLIC_CHOICE,
+            # เพดานเวลาของตัวเลือกนั้น — หน้าเว็บใช้ตั้งความคาดหวังของคนรอ
+            # ถ้าไม่บอก หน้าเว็บจะขึ้นว่า "รอไม่ไหวลองใหม่" ตั้งแต่วินาทีที่ 45
+            # ทั้งที่ตัวเลือกในเครื่องต้องใช้เวลาหลักนาที
+            "wait_s": int(c["budget_s"] or 0) or None,
         })
     return out
 
