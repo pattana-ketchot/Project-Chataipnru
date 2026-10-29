@@ -1,0 +1,468 @@
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index dd1847d..61d2499 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -32,6 +32,8 @@ from sqlalchemy.orm import Session
+ from app.api.deps import web_rate_limiter
+ from app.db.session import get_db
+ from app.services.chat import PriorTurn, stream_answer
++from app.services import ai_settings
++from app.services.llm_client import connector_for
+ from app.services.curriculum_facts import LIST_FIELDS
+ from app.services.program_compare import compare_programs
+ from app.services.program_match import build_profile_text, confidence_of, match_programs
+@@ -80,6 +82,11 @@ class WebMessage(BaseModel):
+ 
+ class WebChatRequest(BaseModel):
+     messages: list[WebMessage] = Field(min_length=1)
++    # id ของตัวเลือกโมเดลที่ผู้ใช้กดเลือก (ดู GET /ai-options)
++    #
++    # รับเป็น "id" ไม่ใช่ชื่อรุ่น เพราะชื่อรุ่นที่รับจากหน้าเว็บตรง ๆ แปลว่าใครก็สั่ง
++    # ให้เซิร์ฟเวอร์ไปเรียกรุ่นไหนก็ได้ · ค่าว่างหรือ id ที่ไม่รู้จัก = ใช้ค่าที่ผู้ดูแลตั้งไว้
++    model_choice: str = ""
+ 
+ 
+ class WebCourse(BaseModel):
+@@ -177,6 +184,17 @@ def _source_headers(db: Session, source: dict | None) -> dict[str, str]:
+     return headers
+ 
+ 
++@router.get("/ai-options")
++def ai_options() -> dict:
++    """
++    ตัวเลือกโมเดลที่ผู้ใช้หน้าเว็บเลือกได้ — หน้าเว็บเอาไปทำปุ่ม ไม่ต้อง hardcode เอง
++
++    เปิดสาธารณะเพราะเป็นรายชื่อตัวเลือกกับคำอธิบาย ไม่มีคีย์หรือค่าตั้งค่าใดหลุดออกไป
++    และหน้าเว็บต้องเรียกได้ก่อนผู้ใช้ล็อกอิน · ตัวที่เซิร์ฟเวอร์นี้ใช้ไม่ได้จะไม่อยู่ในรายการ
++    """
++    return {"options": ai_settings.public_choices()}
++
++
+ @router.post("/chat-web", dependencies=[Depends(web_rate_limiter)])
+ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
+     """
+@@ -222,7 +240,12 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
+     prelude: str | None = None
+     stream = iter(())
+     try:
+-        stream = stream_answer(db, user_id=user_id, session_id=None, message=message, prior=prior)
++        # ตัวเลือกของผู้ใช้ — ถ้า id ไม่รู้จักหรือใช้ไม่ได้ ให้ถอยไปใช้ค่าที่ผู้ดูแลตั้งไว้
++        # เงียบ ๆ ดีกว่าโยนข้อผิดพลาด เพราะหน้าเว็บรุ่นเก่าอาจยังจำ id เดิมไว้
++        picked = ai_settings.public_choice(payload.model_choice)
++        chosen, budget_s = (connector_for(picked[0]), picked[1]) if picked else (None, None)
++        stream = stream_answer(db, user_id=user_id, session_id=None, message=message,
++                               prior=prior, connector=chosen, budget_s=budget_s)
+         kind, parsed = _parse_event(next(stream, ""))
+         if kind == "meta" and parsed:
+             source_headers = _source_headers(db, parsed.get("source"))
+diff --git a/backend/app/services/ai_settings.py b/backend/app/services/ai_settings.py
+index 68738a9..36eff8a 100644
+--- a/backend/app/services/ai_settings.py
++++ b/backend/app/services/ai_settings.py
+@@ -30,6 +30,7 @@ embedding เปลี่ยนไม่ได้
+ from __future__ import annotations
+ 
+ import logging
++import os
+ import threading
+ import time
+ from dataclasses import dataclass, replace
+@@ -83,6 +84,114 @@ class Choice:
+         return self.saved_provider is not None and not self.note
+ 
+ 
++# ===========================================================================
++# ตัวเลือกที่ "ผู้ใช้หน้าเว็บ" เลือกเองได้ — คนละชุดกับที่ผู้ดูแลตั้ง
++#
++# ผู้ดูแลตั้งค่าตั้งต้นของทั้งระบบ (ตาราง web.ai_settings) ส่วนรายการนี้คือตัวเลือก
++# ที่ยอมให้นักศึกษาสลับเองเป็นรายคำขอ · แยกกันเพราะสองเรื่องนี้ต้องการการควบคุม
++# คนละระดับ: ค่าตั้งต้นกระทบทุกคน ส่วนตัวเลือกรายคำขอกระทบแค่คนที่กด
++#
++# **รับเฉพาะ id ในรายการนี้เท่านั้น ไม่รับชื่อรุ่นที่ส่งมาจากหน้าเว็บตรง ๆ**
++# ไม่งั้นใครก็ยิงชื่อรุ่นแพง ๆ เข้ามาเผาโควตาของคณะได้
++#
++# budget_s = เพดานเวลาของคำขอที่เลือกตัวนั้น · None = ใช้ค่าตั้งต้น (RAG_TIME_BUDGET_S)
++# โมเดลในเครื่องต้องได้เพดานของตัวเองเพราะวัดแล้วว่าใช้เวลาหลักนาทีบนเครื่องที่
++# ไม่มีการ์ดจอ ถ้าใช้เพดาน 30 วินาทีเท่าคลาวด์คือรับประกันว่าไม่มีวันตอบทัน
++# (ตัวเลขอยู่ใน docs/SWITCH_PLUS_FALLBACK_READINESS_2569-10-28.md ข้อ 4)
++# ===========================================================================
++PUBLIC_CHOICES: tuple[dict, ...] = (
++    {
++        "id": "fast",
++        "provider": "gemini",
++        "model": "",                 # ว่าง = ใช้รุ่นตั้งต้นของ env (ตัวที่ใช้อยู่จริง)
++        "label": "ตอบเร็ว",
++        "hint": "แนะนำ · ตอบภายในไม่กี่วินาที",
++        "budget_s": None,
++    },
++    {
++        "id": "detailed",
++        "provider": "gemini",
++        "model": "gemini-3.5-flash",
++        "label": "ตอบละเอียด",
++        "hint": "ใช้รุ่นใหญ่กว่า ช้ากว่าเล็กน้อย",
++        "budget_s": None,
++    },
++    {
++        "id": "local",
++        "provider": "ollama",
++        "model": "",                 # ว่าง = รุ่นตั้งต้นของ env (LLM_MODEL)
++        "label": "ประมวลผลในเครื่อง",
++        "hint": "ทดลอง · ข้อมูลไม่ออกนอกเซิร์ฟเวอร์ แต่ช้ามาก ต้องรอ 2–4 นาที",
++        "budget_s": 240.0,
++    },
++)
++
++# id ที่ใช้เมื่อผู้ใช้ไม่ได้เลือก — ต้องมีอยู่ใน PUBLIC_CHOICES เสมอ
++DEFAULT_PUBLIC_CHOICE = "fast"
++
++# เปิดให้ผู้ใช้หน้าเว็บเลือกโมเดลในเครื่องได้หรือไม่ · **ค่าตั้งต้นคือปิด**
++#
++# ปิดไว้เพราะวัดบนเซิร์ฟเวอร์ที่ไม่มีการ์ดจอแล้วได้ "ไม่พบข้อมูล" หลังรอ 233-249 วินาที
++# ทั้งสองคำถาม (docs/PUBLIC_MODEL_CHOICE_2569-10-29.md ข้อ 4.2) ปุ่มที่กดแล้วรอสี่นาที
++# เพื่อให้ได้คำตอบว่าไม่รู้ แย่กว่าไม่มีปุ่ม
++#
++# **ไม่เกี่ยวกับสวิตช์ของผู้ดูแล** — ผู้ดูแลยังเลือก ollama ให้ทั้งระบบได้จากหน้าหลังบ้าน
++# เหมือนเดิมทุกประการ ตัวนี้คุมเฉพาะ "สิ่งที่นักศึกษาเลือกเองได้"
++#
++# เปิดเมื่อมีเครื่องที่มีการ์ดจอแล้ว: PUBLIC_LOCAL_CHOICE=1
++def public_local_enabled() -> bool:
++    """อ่านทุกครั้งที่ใช้ ไม่ cache — จะได้สลับค่าในชุดทดสอบได้โดยไม่ต้อง import ใหม่"""
++    return (os.getenv("PUBLIC_LOCAL_CHOICE", "") or "").strip().lower() in ("1", "true", "yes", "on")
++
++
++def public_choices() -> list[dict]:
++    """
++    รายการที่หน้าเว็บเอาไปทำปุ่มได้ — ซ่อนตัวที่เซิร์ฟเวอร์นี้ใช้ไม่ได้ออกไปเลย
++
++    ซ่อนดีกว่าแสดงแล้วให้กดไม่ได้ เพราะผู้ใช้ไม่มีทางรู้ว่าทำไมมันไม่ทำงาน
++    เช่นเซิร์ฟเวอร์ที่ไม่ได้ตั้ง GEMINI_API_KEY จะไม่เห็นตัวเลือกของ Gemini เลย
++    """
++    out = []
++    for c in PUBLIC_CHOICES:
++        if c["provider"] == "gemini" and not has_gemini_key():
++            continue
++        # ปิดอยู่ = ไม่อยู่ในรายการ และ public_choice() ก็ปฏิเสธ id นี้ไปด้วย
++        # เพราะมันตรวจกับรายการเดียวกันนี้ คำขอที่ยิง model_choice=local ตรง ๆ จึงไม่ได้ผล
++        if c["provider"] == "ollama" and not public_local_enabled():
++            continue
++        out.append({
++            "id": c["id"],
++            "label": c["label"],
++            "hint": c["hint"],
++            "model": c["model"] or default_model_of(c["provider"]),
++            "default": c["id"] == DEFAULT_PUBLIC_CHOICE,
++            # เพดานเวลาของตัวเลือกนั้น — หน้าเว็บใช้ตั้งความคาดหวังของคนรอ
++            # ถ้าไม่บอก หน้าเว็บจะขึ้นว่า "รอไม่ไหวลองใหม่" ตั้งแต่วินาทีที่ 45
++            # ทั้งที่ตัวเลือกในเครื่องต้องใช้เวลาหลักนาที
++            "wait_s": int(c["budget_s"] or 0) or None,
++        })
++    return out
++
++
++def public_choice(choice_id: str | None) -> tuple[Choice, float | None] | None:
++    """
++    แปลง id ที่หน้าเว็บส่งมาเป็นตัวเลือกจริง คืน (Choice, เพดานเวลา)
++
++    คืน None เมื่อ id ไม่อยู่ในรายการหรือใช้ไม่ได้บนเซิร์ฟเวอร์นี้ — ผู้เรียกต้อง
++    ถอยไปใช้ค่าของผู้ดูแลแทน ไม่ใช่โยนข้อผิดพลาดใส่ผู้ใช้ เพราะ id ที่ไม่รู้จัก
++    มักเกิดจากหน้าเว็บรุ่นเก่าที่ยังจำตัวเลือกเดิมไว้ ไม่ใช่การโจมตี
++    """
++    if not choice_id:
++        return None
++    allowed = {c["id"] for c in public_choices()}
++    for c in PUBLIC_CHOICES:
++        if c["id"] != choice_id or c["id"] not in allowed:
++            continue
++        model = c["model"] or default_model_of(c["provider"])
++        return Choice(provider=c["provider"], model=model, source="user"), c["budget_s"]
++    return None
++
++
+ def default_model_of(provider: str) -> str:
+     return settings.gemini_model if provider == "gemini" else settings.llm_model
+ 
+diff --git a/backend/app/services/chat.py b/backend/app/services/chat.py
+index 2776cae..6705005 100644
+--- a/backend/app/services/chat.py
++++ b/backend/app/services/chat.py
+@@ -1354,9 +1354,11 @@ def prepare_answer(
+     session_id: uuid.UUID | None,
+     message: str,
+     prior: list[PriorTurn] | None = None,
++    connector=None,
+ ) -> Prepared:
++    """connector=None คือใช้ค่าที่ผู้ดูแลตั้งไว้ · ส่งมาเองเมื่อผู้ใช้เลือกโมเดลเอง"""
+     stages = _Stages()
+-    connector = get_llm_connector()
++    connector = connector or get_llm_connector()
+     session = _load_session(db, user_id, session_id)
+     # prior มาจากผู้เรียกที่เก็บบทสนทนาไว้เอง (หน้าเว็บ) ส่วนผู้เรียกที่ใช้ session_id
+     # ให้อ่านจากฐานข้อมูลตามเดิม
+@@ -2216,6 +2218,8 @@ def stream_answer(
+     session_id: uuid.UUID | None,
+     message: str,
+     prior: list[PriorTurn] | None = None,
++    connector=None,
++    budget_s: float | None = None,
+ ) -> Iterator[str]:
+     """
+     ตอบแบบทยอยส่ง — ตัวนี้ทำหน้าที่เดียวคือคุมเพดานเวลาให้ครอบทุก step ของการสตรีม
+@@ -2237,8 +2241,10 @@ def stream_answer(
+     เวลาสิ้นสุดไม่ขยับเพราะเป็นค่าสัมบูรณ์ ตั้งกี่ครั้งก็ได้ผลเท่ากัน
+     """
+     # ตั้งครั้งแรกเพื่อให้ได้เวลาสิ้นสุด แล้วใช้ค่าเดิมนี้ตั้งซ้ำทุก step
+-    deadline = start_budget()
+-    inner = _stream_answer_events(db, user_id, session_id, message, prior)
++    # budget_s มาจากตัวเลือกของผู้ใช้ · None = ค่าตั้งต้นของระบบ
++    # โมเดลในเครื่องต้องได้เพดานของตัวเอง ไม่งั้นไม่มีวันตอบทัน (ดู ai_settings.PUBLIC_CHOICES)
++    deadline = start_budget(budget_s)
++    inner = _stream_answer_events(db, user_id, session_id, message, prior, connector)
+     try:
+         while True:
+             apply_budget(deadline)
+@@ -2259,6 +2265,7 @@ def _stream_answer_events(
+     session_id: uuid.UUID | None,
+     message: str,
+     prior: list[PriorTurn] | None = None,
++    connector=None,
+ ) -> Iterator[str]:
+     """
+     เนื้องานจริงของการสตรีม — ไม่แตะเพดานเวลา ตัวเรียก (stream_answer) ดูแลให้
+@@ -2281,7 +2288,8 @@ def _stream_answer_events(
+     # ที่หายไปทั้งหมดแบบนี้ ทำให้หาสาเหตุความช้าจาก log ไม่ได้
+     p: Prepared | None = None
+     try:
+-        p = _with_structured(prepare_answer(db, user_id, session_id, message, prior), message)
++        p = _with_structured(
++            prepare_answer(db, user_id, session_id, message, prior, connector), message)
+     except BaseException as exc:  # noqa: BLE001 — บันทึกเวลาแล้วโยนต่อตามเดิม
+         _log_timing("/chat-web", outer, p, message, f"ล้มตอนเตรียม:{type(exc).__name__}")
+         raise
+diff --git a/backend/app/services/llm_client.py b/backend/app/services/llm_client.py
+index 025e941..ab14d26 100644
+--- a/backend/app/services/llm_client.py
++++ b/backend/app/services/llm_client.py
+@@ -351,7 +351,17 @@ def get_llm_connector():
+     """
+     if _connector is not None:
+         return _connector          # ชุดทดสอบใส่ของปลอมไว้ (ดูหมายเหตุที่ _connector)
+-    choice = ai_settings.current()
++    return connector_for(ai_settings.current())
++
++
++def connector_for(choice: ai_settings.Choice):
++    """
++    connector ของตัวเลือกที่ระบุมาเอง — ใช้แคชชุดเดียวกับ get_llm_connector()
++
++    มีไว้ให้คำขอที่ผู้ใช้เลือกโมเดลเองระบุตัวที่ต้องการได้ โดยไม่ต้องไปแตะค่าที่
++    ผู้ดูแลตั้งไว้ · ใช้แคชร่วมกันเพราะ connector หนึ่งตัวถือ httpx client ของตัวเอง
++    ถ้าสร้างใหม่ทุกคำขอจะเปิดการเชื่อมต่อทิ้งไว้เรื่อย ๆ จนหมดโควตา file descriptor
++    """
+     key = choice.key
+     with _connectors_lock:
+         found = _connectors.get(key)
+diff --git a/backend/tests/test_public_model_choice.py b/backend/tests/test_public_model_choice.py
+new file mode 100644
+index 0000000..97e55f3
+--- /dev/null
++++ b/backend/tests/test_public_model_choice.py
+@@ -0,0 +1,198 @@
++"""
++ผู้ใช้หน้าเว็บเลือกโมเดลเองได้ — รับเฉพาะ id ที่อนุญาต และตัวเลือกต้องได้เพดานเวลาของตัวเอง
++
++    cd backend && python tests/test_public_model_choice.py
++
++ไม่ต่อฐานข้อมูล ไม่ต่อโมเดล — แทน stream_answer กับ connector_for ด้วยของจับพฤติกรรม
++
++ทำไมต้องมีชุดนี้
++---------------
++สองข้อที่พังแล้วจะไม่มีใครเห็นจนกว่าจะสาย
++
++1. ถ้ารับ "ชื่อรุ่น" จากหน้าเว็บตรง ๆ ใครก็สั่งให้เซิร์ฟเวอร์ไปเรียกรุ่นไหนก็ได้
++   ชุดนี้จึงยืนยันว่า id นอกรายการถูกปฏิเสธและถอยไปใช้ค่าของผู้ดูแล ไม่ใช่ทำตาม
++2. ตัวเลือกโมเดลในเครื่องต้องได้เพดานเวลาของตัวเอง — วัดแล้วว่าบนเครื่องที่ไม่มี
++   การ์ดจอมันใช้เวลาหลักนาที ถ้าใช้เพดาน 30 วินาทีเท่าคลาวด์คือรับประกันว่าไม่มี
++   วันตอบทัน ปุ่มจะมีไว้ให้กดแล้วพังเท่านั้น
++"""
++import os
++import sys
++import uuid
++from contextlib import contextmanager
++from pathlib import Path
++from types import SimpleNamespace
++
++sys.stdout.reconfigure(encoding="utf-8", errors="replace")
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
++
++os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.0.1:1/unused")
++os.environ.setdefault("JWT_SECRET", "ชุดทดสอบไม่ได้ออก token")
++os.environ.setdefault("GEMINI_API_KEY", "คีย์ปลอมสำหรับชุดทดสอบ")
++
++from fastapi.testclient import TestClient  # noqa: E402
++
++from app.api.routes import web_compat  # noqa: E402
++from app.db.session import get_db  # noqa: E402
++from app.main import app  # noqa: E402
++from app.services import ai_settings  # noqa: E402
++
++CHECKS = 0
++FAILURES: list[str] = []
++
++
++@contextmanager
++def _local_choice_on():
++    """เปิดสวิตช์ชั่วคราวในชุดทดสอบ แล้วคืนค่าเดิมเสมอ"""
++    before = os.environ.get("PUBLIC_LOCAL_CHOICE")
++    os.environ["PUBLIC_LOCAL_CHOICE"] = "1"
++    try:
++        yield
++    finally:
++        if before is None:
++            os.environ.pop("PUBLIC_LOCAL_CHOICE", None)
++        else:
++            os.environ["PUBLIC_LOCAL_CHOICE"] = before
++
++
++def check(label: str, ok: bool, detail: str = "") -> None:
++    global CHECKS
++    CHECKS += 1
++    if ok:
++        print(f"  [ผ่าน] {label}")
++    else:
++        FAILURES.append(f"{label} — {detail}")
++        print(f"  [ตก]  {label} — {detail}")
++
++
++# ───────────── 1. รายการตัวเลือก ─────────────
++
++def test_options_list() -> None:
++    print("\ntest_options_list")
++    ids = [c["id"] for c in ai_settings.public_choices()]
++    check("ค่าตั้งต้นให้เลือกได้เฉพาะสองตัวของ Gemini (ไม่มีโมเดลในเครื่อง)",
++          ids == ["fast", "detailed"], str(ids))
++    with _local_choice_on():
++        ids_on = [c["id"] for c in ai_settings.public_choices()]
++    check("เปิด PUBLIC_LOCAL_CHOICE แล้วจึงเห็นตัวเลือกในเครื่อง",
++          ids_on == ["fast", "detailed", "local"], str(ids_on))
++    default = [c["id"] for c in ai_settings.public_choices() if c["default"]]
++    check("มีค่าตั้งต้นเดียว และเป็นตัวที่เร็วที่สุด", default == ["fast"], str(default))
++    one = ai_settings.public_choices()[0]
++    check("ทุกตัวเลือกบอกชื่อรุ่นจริงที่จะถูกเรียก", bool(one["model"]), str(one))
++    check("ทุกตัวเลือกมีคำอธิบายกำกับ",
++          all(c["hint"] for c in ai_settings.public_choices()))
++
++    real_key = ai_settings.has_gemini_key
++    try:
++        ai_settings.has_gemini_key = lambda: False
++        ids_nokey = [c["id"] for c in ai_settings.public_choices()]
++        check("เซิร์ฟเวอร์ที่ไม่มีคีย์ไม่เห็นตัวเลือกของ Gemini", ids_nokey == [], str(ids_nokey))
++        with _local_choice_on():
++            ids_nokey_on = [c["id"] for c in ai_settings.public_choices()]
++        check("ไม่มีคีย์แต่เปิดตัวเลือกในเครื่อง -> เหลือตัวในเครื่องตัวเดียว",
++              ids_nokey_on == ["local"], str(ids_nokey_on))
++    finally:
++        ai_settings.has_gemini_key = real_key
++
++
++# ───────────── 2. แปลง id เป็นตัวเลือกจริง ─────────────
++
++def test_choice_resolution() -> None:
++    print("\ntest_choice_resolution")
++    check("ปิดอยู่ -> ยิง model_choice=local ตรง ๆ ก็ไม่ได้ผล",
++          ai_settings.public_choice("local") is None,
++          "คำขอที่ส่งมาตรงต้องถูกปฏิเสธเหมือนกัน ไม่ใช่แค่ซ่อนจากรายการ")
++    with _local_choice_on():
++        picked = ai_settings.public_choice("local")
++    check("เปิดแล้ว id ที่อนุญาต -> ได้ตัวเลือกคืนมา", picked is not None)
++    if picked:
++        choice, budget = picked
++        check("local ชี้ไปที่โมเดลในเครื่อง", choice.provider == "ollama", str(choice))
++        check("local ได้เพดานเวลาของตัวเอง ไม่ใช่ค่าตั้งต้น",
++              budget is not None and budget >= 120, f"budget={budget}")
++        check("ที่มาของตัวเลือกระบุว่ามาจากผู้ใช้", choice.source == "user", choice.source)
++
++    fast = ai_settings.public_choice("fast")
++    check("fast ชี้ไปที่ gemini", fast is not None and fast[0].provider == "gemini")
++    check("fast ใช้เพดานเวลาตั้งต้นของระบบ", fast is not None and fast[1] is None)
++
++    for bad in ("", None, "ไม่มีตัวนี้", "gemini-3.6-flash", "../../etc/passwd"):
++        check(f"ปฏิเสธ id ที่ไม่อยู่ในรายการ: {bad!r}", ai_settings.public_choice(bad) is None)
++
++
++# ───────────── 3. เส้นทางของหน้าเว็บ ─────────────
++
++class _Spy:
++    """จดว่า stream_answer ถูกเรียกด้วยอะไร โดยไม่แตะโมเดลหรือฐานข้อมูลจริง"""
++
++    def __init__(self) -> None:
++        self.kwargs: dict = {}
++
++    def __call__(self, db, **kwargs):
++        self.kwargs = kwargs
++        yield 'event: done\ndata: {"answer_model": null}\n\n'
++
++
++def test_route_passes_the_choice() -> None:
++    print("\ntest_route_passes_the_choice")
++    app.dependency_overrides[get_db] = lambda: None
++    spy = _Spy()
++    real_stream, real_conn = web_compat.stream_answer, web_compat.connector_for
++    real_user = web_compat.shared_user
++    web_compat.stream_answer = spy
++    web_compat.connector_for = lambda choice: f"connector:{choice.provider}/{choice.model}"
++    # เส้นทางนี้หาผู้ใช้ร่วมจากฐานก่อนเริ่มสตรีม ชุดนี้ไม่ต่อฐานจึงแทนด้วยของปลอม
++    web_compat.shared_user = lambda db: SimpleNamespace(id=uuid.uuid4())
++    client = TestClient(app)
++    try:
++        r = client.get("/ai-options")
++        check("GET /ai-options ตอบ 200", r.status_code == 200, str(r.status_code))
++        check("คืนรายการตัวเลือกให้หน้าเว็บ (สองตัวตามค่าตั้งต้น)",
++              len(r.json().get("options", [])) == 2, r.text[:160])
++
++        body = {"messages": [{"role": "user", "content": "สาขานี้เรียนอะไร"}], "model_choice": "local"}
++        client.post("/chat-web", json=body)
++        check("ปิดอยู่ -> คำขอที่ขอ local ไม่ได้ connector ของในเครื่อง",
++              spy.kwargs.get("connector") is None, str(spy.kwargs.get("connector")))
++        check("ปิดอยู่ -> ไม่ได้เพดานเวลาของในเครื่องด้วย",
++              spy.kwargs.get("budget_s") is None, str(spy.kwargs.get("budget_s")))
++
++        spy.kwargs = {}
++        with _local_choice_on():
++            client.post("/chat-web", json=body)
++        check("เปิดแล้ว -> เลือก local ได้ connector ของในเครื่อง",
++              "ollama" in str(spy.kwargs.get("connector")), str(spy.kwargs.get("connector")))
++        check("เปิดแล้ว -> ได้เพดานเวลาของตัวเลือกนั้น",
++              (spy.kwargs.get("budget_s") or 0) >= 120, str(spy.kwargs.get("budget_s")))
++
++        spy.kwargs = {}
++        body["model_choice"] = "ไม่มีตัวนี้"
++        client.post("/chat-web", json=body)
++        check("id ที่ไม่รู้จัก -> ถอยไปใช้ค่าของผู้ดูแล ไม่ใช่ error",
++              spy.kwargs.get("connector") is None and spy.kwargs.get("budget_s") is None,
++              str(spy.kwargs))
++
++        spy.kwargs = {}
++        client.post("/chat-web", json={"messages": body["messages"]})
++        check("ไม่ส่งตัวเลือกมาเลย -> ใช้ค่าของผู้ดูแลเหมือนเดิม",
++              spy.kwargs.get("connector") is None, str(spy.kwargs))
++    finally:
++        web_compat.stream_answer, web_compat.connector_for = real_stream, real_conn
++        web_compat.shared_user = real_user
++        app.dependency_overrides.clear()
++
++
++def main() -> int:
++    for fn in (test_options_list, test_choice_resolution, test_route_passes_the_choice):
++        fn()
++    print(f"\nตรวจ {CHECKS} ข้อ · ตก {len(FAILURES)} ข้อ")
++    for f in FAILURES:
++        print(f"  - {f}")
++    if not FAILURES:
++        print("ผ่านทั้งหมด")
++    return 1 if FAILURES else 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())

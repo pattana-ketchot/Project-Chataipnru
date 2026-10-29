@@ -1,0 +1,134 @@
+commit bf69f389417b099505bc54ad6db606953f8fe04a
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Thu Oct 29 07:26:13 2026 +0700
+
+    feat(chat): ให้ผู้ใช้เลือกโมเดลที่จะตอบได้ที่หน้าแชท
+    
+    ดึงรายการตัวเลือกจาก /api/ai-options แทนการเขียนรายชื่อรุ่นไว้ที่หน้าเว็บ เพราะ
+    รายการขึ้นกับว่าเซิร์ฟเวอร์ตั้งคีย์อะไรไว้ และเปลี่ยนได้โดยไม่ต้อง build ใหม่
+    
+    ถามรายการไม่ได้ (หลังบ้านรุ่นเก่าไม่มีเส้นทางนี้) = ไม่แสดงปุ่มเลย หน้าเว็บทำงาน
+    เหมือนเดิมทุกอย่าง ไม่ขึ้นข้อผิดพลาดใส่ผู้ใช้
+    
+    ส่งเป็น id ของตัวเลือก ไม่ใช่ชื่อรุ่น — หลังบ้านปฏิเสธ id ที่ไม่รู้จักแล้วถอยไปใช้
+    ค่าที่ผู้ดูแลตั้งไว้
+    
+    ข้อความระหว่างรอมีสองชุด ตัวเลือกที่ช้าเป็นหลักนาทีใช้ชุดของตัวเอง เพราะชุดเดิม
+    ขึ้นว่า 'รอไม่ไหวลองถามใหม่' ตั้งแต่วินาทีที่ 45 ซึ่งจะบอกให้ผู้ใช้ยอมแพ้ทั้งที่
+    ระบบยังทำงานตามปกติและต้องใช้เวลาอีกหลายนาที
+    
+    ทดสอบใน local: เลือกประมวลผลในเครื่องแล้วถามจริงผ่านหน้าเว็บ หลังบ้านขึ้น
+    'ใช้โมเดลเขียนคำตอบ: ollama / qwen2.5:3b (ที่มา: user)' และได้คำตอบพร้อมที่มา
+
+diff --git a/src/pages/ChatAdvisor.jsx b/src/pages/ChatAdvisor.jsx
+index dcdc0c9..920c68a 100644
+--- a/src/pages/ChatAdvisor.jsx
++++ b/src/pages/ChatAdvisor.jsx
+@@ -26,15 +26,31 @@ const WAIT_STAGES = [
+   { after: 45, text: 'ยังรออยู่ ระบบ AI ใช้เวลานานกว่าปกติมาก หากรอไม่ไหวลองถามใหม่อีกครั้งได้' },
+ ]
+ 
+-const stageFor = (seconds) => {
+-  let msg = WAIT_STAGES[0].text
+-  for (const s of WAIT_STAGES) if (seconds >= s.after) msg = s.text
++// ชุดข้อความสำหรับตัวเลือกที่ช้าเป็นหลักนาที (โมเดลที่ประมวลผลในเครื่อง)
++//
++// ใช้ชุดเดียวกับของเร็วไม่ได้ เพราะชุดนั้นขึ้นว่า "รอไม่ไหวลองถามใหม่" ตั้งแต่วินาทีที่ 45
++// ซึ่งจะบอกให้ผู้ใช้ยอมแพ้ทั้งที่ระบบยังทำงานตามปกติและต้องใช้เวลาอีกหลายนาที
++const SLOW_WAIT_STAGES = [
++  { after: 0, text: 'กำลังอ่านคำถาม' },
++  { after: 5, text: 'กำลังค้นข้อมูลจากเอกสารหลักสูตร' },
++  { after: 15, text: 'โมเดลในเครื่องกำลังอ่านเอกสาร ขั้นนี้ใช้เวลาหลายนาที' },
++  { after: 120, text: 'ยังทำงานอยู่ โมเดลในเครื่องช้ากว่าแบบคลาวด์มาก รอต่ออีกสักครู่' },
++  { after: 240, text: 'ใช้เวลานานเกินที่ตั้งไว้ ถ้าไม่ได้คำตอบ ลองสลับกลับเป็นตัวเลือกที่ตอบเร็ว' },
++]
++
++const stageFor = (seconds, stages = WAIT_STAGES) => {
++  let msg = stages[0].text
++  for (const s of stages) if (seconds >= s.after) msg = s.text
+   return msg
+ }
+ 
+ const ChatAdvisor = () => {
+   const [messages, setMessages] = useState([])
+   const [inputText, setInputText] = useState('')
++  // ตัวเลือกโมเดลที่หลังบ้านอนุญาต — ว่างไว้ก่อน ถ้าถามไม่ได้ก็ไม่แสดงปุ่มเลย
++  // (หลังบ้านรุ่นเก่าไม่มีเส้นทางนี้ หน้าเว็บต้องยังใช้งานได้เหมือนเดิม)
++  const [modelOptions, setModelOptions] = useState([])
++  const [modelChoice, setModelChoice] = useState('')
+   const [isLoading, setIsLoading] = useState(false)
+   const [waitSeconds, setWaitSeconds] = useState(0)
+   const messagesContainerRef = useRef(null)
+@@ -65,6 +81,23 @@ const ChatAdvisor = () => {
+     scrollToBottom()
+   }, [messages])
+ 
++  // ถามหลังบ้านว่ามีตัวเลือกอะไรให้เลือกบ้าง ไม่ hardcode ไว้ที่หน้าเว็บ
++  // เพราะรายการขึ้นกับว่าเซิร์ฟเวอร์ตั้งคีย์อะไรไว้ และเปลี่ยนได้โดยไม่ต้อง build ใหม่
++  useEffect(() => {
++    let cancelled = false
++    fetch('/api/ai-options')
++      .then((r) => (r.ok ? r.json() : null))
++      .then((data) => {
++        if (cancelled || !data?.options?.length) return
++        setModelOptions(data.options)
++        setModelChoice(data.options.find((o) => o.default)?.id || data.options[0].id)
++      })
++      .catch(() => {})   // ถามไม่ได้ = ไม่แสดงปุ่ม ไม่ใช่แสดงข้อผิดพลาดใส่ผู้ใช้
++    return () => { cancelled = true }
++  }, [])
++
++  const chosenOption = modelOptions.find((o) => o.id === modelChoice)
++
+   const sendMessage = async (text) => {
+     if (!text.trim() || isLoading) return
+ 
+@@ -86,7 +119,10 @@ const ChatAdvisor = () => {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+-          messages: history.map(({ role, content }) => ({ role, content }))
++          messages: history.map(({ role, content }) => ({ role, content })),
++          // ส่งเป็น id ของตัวเลือก ไม่ใช่ชื่อรุ่น · หลังบ้านปฏิเสธ id ที่ไม่รู้จักแล้ว
++          // ถอยไปใช้ค่าที่ผู้ดูแลตั้งไว้ จึงส่งไปได้แม้หลังบ้านยังไม่รองรับ
++          ...(modelChoice ? { model_choice: modelChoice } : {})
+         })
+       })
+ 
+@@ -288,7 +324,7 @@ const ChatAdvisor = () => {
+                               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                             </div>
+                             <span className="text-sm text-gray-600 break-words">
+-                              {stageFor(waitSeconds)}
++                              {stageFor(waitSeconds, (chosenOption?.wait_s || 0) >= 120 ? SLOW_WAIT_STAGES : WAIT_STAGES)}
+                             </span>
+                           </div>
+                           {waitSeconds >= 3 && (
+@@ -304,6 +340,27 @@ const ChatAdvisor = () => {
+ 
+             {/* Chat Composer */}
+             <div className="p-2.5 sm:p-4 border-t border-gray-200 bg-white">
++              {/* เลือกโมเดลที่จะตอบ — แสดงเฉพาะเมื่อหลังบ้านเปิดให้เลือกมากกว่าหนึ่งตัว
++                  คำอธิบายของแต่ละตัวมาจากหลังบ้าน ไม่ได้เขียนทับไว้ที่นี่ */}
++              {modelOptions.length > 1 && (
++                <div className="flex items-center gap-2 mb-2 text-xs text-gray-600">
++                  <label htmlFor="model-choice" className="flex-shrink-0">ตอบด้วย</label>
++                  <select
++                    id="model-choice"
++                    value={modelChoice}
++                    onChange={(e) => setModelChoice(e.target.value)}
++                    disabled={isLoading}
++                    className="border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-pnru disabled:opacity-60"
++                  >
++                    {modelOptions.map((o) => (
++                      <option key={o.id} value={o.id}>{o.label}</option>
++                    ))}
++                  </select>
++                  {chosenOption?.hint && (
++                    <span className="truncate" title={chosenOption.hint}>{chosenOption.hint}</span>
++                  )}
++                </div>
++              )}
+               <div className="flex items-center gap-1.5 sm:gap-2">
+                 {/* แนบไฟล์/อัดเสียง ยังเป็นปุ่มเปล่ารอฟีเจอร์ — ซ่อนบนมือถือเพื่อคืนความกว้างให้ช่องพิมพ์
+                     ถ้าโชว์ทั้งสองปุ่มที่ขนาดนิ้ว 44px ช่องพิมพ์บนจอ 360px จะเหลือแค่ ~162px */}
