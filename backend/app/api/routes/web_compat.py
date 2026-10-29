@@ -500,6 +500,11 @@ def career_lists_web(db: Session = Depends(get_db)) -> dict:
 SCORING_EMBEDDING_RULES = "embedding_and_rules"
 
 
+def _user_message(exc: Exception) -> str:
+    """ข้อความที่ส่งให้ผู้ใช้อ่านเมื่อเรียกโมเดลไม่สำเร็จ — ไม่ใช่ข้อความวินิจฉัยภายใน"""
+    return (getattr(exc, "user_text", None) or "").strip() or BUSY
+
+
 def _engine(explained: bool, scoring: str | None = None) -> dict:
     return {"explanation": chat_model_used() if explained else None, "scoring": scoring}
 
@@ -553,7 +558,11 @@ def _compare_courses(payload: WebCompareRequest, db: Session) -> dict:
     try:
         result = compare_programs(db, [c.id for _, c in matched])
     except LLMConnectionError as e:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e) or BUSY) from e
+        # ส่งข้อความที่เขียนไว้ให้ผู้ใช้อ่าน ไม่ใช่ str(exc) ซึ่งมีรายละเอียดวินิจฉัย
+        # ต่อท้ายและอาจพาเนื้อหาจากปลายทางออกมา (ดู LLMConnectionError.user_text)
+        # — เส้นทางแชทใช้แบบนี้อยู่แล้ว ตรงนี้เพิ่งมามีผลเพราะหน้าเว็บเริ่มแสดง detail
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            _user_message(e)) from e
 
     rows = [r if isinstance(r, dict) else r.model_dump() for r in result["rows"]]
     courses = []
@@ -621,7 +630,8 @@ def _recommend_major(payload: WebRecommendRequest, db: Session) -> dict:
     try:
         matches = match_programs(db, answers, limit=_MATCH_LIMIT)
     except LLMConnectionError as e:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e) or BUSY) from e
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            _user_message(e)) from e
 
     matched, _ = match_by_title(db, [c.model_dump() for c in payload.courses])
     # เทียบกลับด้วยชื่อ ไม่ใช่รหัสของหลักสูตร เพราะการจัดอันดับมองเอกสารทุกฉบับรวม
