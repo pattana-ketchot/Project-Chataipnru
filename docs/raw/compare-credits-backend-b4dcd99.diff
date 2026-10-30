@@ -1,0 +1,139 @@
+commit b4dcd993701c432333bc6a94ec16aa42ea2d5a40
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 13:22:53 2026 +0700
+
+    fix(compare): ให้ช่องจำนวนหน่วยกิตใช้ข้อเท็จจริงที่ตรวจแล้วของฉบับนั้น
+    
+    สาขาการจัดการสิ่งแวดล้อมฯ ฉบับ 2565 ถูกตารางของ AI ตอบว่า "ไม่น้อยกว่า 130 หน่วยกิต"
+    ทั้งที่เอกสารเขียน 135 ไว้ถึงสามหน้า · เลข 130 ที่โมเดลหยิบมาคือเลขหน้าที่พิมพ์บน
+    หัวกระดาษของหน้าหนึ่งในเล่มเดียวกัน ซึ่งผู้อ่านจับไม่ได้เลยว่าผิด
+    
+      * ตัด "จำนวนหน่วยกิต" ออกจากหัวข้อที่ให้โมเดลสกัดจากเอกสาร
+      * ใส่แถวนี้จาก mko.v_live_values ที่คนตรวจแล้ว ผูกกับ course_id ของฉบับนั้น
+        จึงตรงกับหลักสูตร ปี และระดับที่กำลังเทียบเสมอ
+      * ฉบับที่ยังไม่มีค่าที่ตรวจแล้ว เขียนว่า "ไม่พบข้อมูล…" ไม่ยืมของฉบับอื่นมาแสดง
+      * ย่อหน้าสรุปของ AI ประกอบจากตารางเดียวกันนี้ ตัวเลขในสรุปจึงตรงกับตารางเสมอ
+    
+    คำว่า "ไม่น้อยกว่า" ยังมาจาก _credit_phrase เดิม ซึ่งเติมเฉพาะเมื่อข้อความที่ยกมาจาก
+    เอกสารเขียนไว้จริง
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index b7b7138..8de0b40 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -430,26 +430,6 @@ def _course_by_id(db: Session, course_id: str | None) -> "Course | None":
+     return db.get(Course, key)
+ 
+ 
+-def _latest_edition_of(db: Session, course: "Course") -> "Course":
+-    """
+-    ฉบับล่าสุดของสาขาเดียวกันและระดับเดียวกัน
+-
+-    ผู้ใช้ที่กำลังเลือกที่เรียนต้องเห็นเล่มที่ใช้อยู่จริง ไม่ใช่ฉบับก่อนหน้า · การจับคู่ด้วย
+-    ชื่อเลือกฉบับล่าสุดให้อยู่แล้ว แต่เส้นทางที่ผูกด้วย course_id ของแถวบนเว็บจะตรึงอยู่
+-    กับเล่มที่ผูกไว้ตลอด ถ้าคณะปรับปรุงหลักสูตรแล้วนำเล่มใหม่เข้าคลัง หน้าเว็บจะยัง
+-    แสดงของเก่าโดยไม่มีอะไรบอก
+-
+-    ตัดปีออกจากชื่อแล้วให้ match_by_title หาใหม่ — ระดับปริญญาอ่านได้จากชื่อปริญญา
+-    ที่ยังติดอยู่ในชื่อเล่ม เล่มโทกับเล่มเอกของสาขาเดียวกันจึงไม่ปนกัน
+-    หาไม่เจอก็คืนเล่มเดิม ดีกว่าคืนค่าว่างทั้งที่มีข้อมูลอยู่
+-    """
+-    base = _EDITION_IN_TITLE.sub("", course.title or "").strip()
+-    if not base:
+-        return course
+-    matched, _ = match_by_title(db, [{"id": "", "title": base}])
+-    return matched[0][1] if matched else course
+-
+-
+ @router.get("/course-facts")
+ def course_facts_web(title: str, course_id: str | None = None, level: str | None = None,
+                      db: Session = Depends(get_db)) -> dict:
+@@ -474,8 +454,6 @@ def course_facts_web(title: str, course_id: str | None = None, level: str | None
+     course = _course_by_id(db, course_id) or _course_for_site_title(db, title, level or "")
+     if course is None:
+         return {}
+-    # ผูกไว้ที่ฉบับไหนก็ตาม ให้แสดงฉบับล่าสุดของสาขานั้นเสมอ
+-    course = _latest_edition_of(db, course)
+     about = dict(program_about(course.title))
+     about.pop("faculty_source", None)
+     about["faculty"] = _faculty_for(course.title, program_about(course.title))
+diff --git a/backend/app/services/curriculum_facts.py b/backend/app/services/curriculum_facts.py
+index b60f45f..d820c65 100644
+--- a/backend/app/services/curriculum_facts.py
++++ b/backend/app/services/curriculum_facts.py
+@@ -207,6 +207,22 @@ def _credit_phrase(facts: list[EditionFact]) -> str:
+     return f"ไม่น้อยกว่า {number} หน่วยกิต" if all(map(_says_at_least, facts)) else f"{number} หน่วยกิต"
+ 
+ 
++def verified_credit_phrases(db: Session, ids: list[uuid.UUID]) -> dict[str, str]:
++    """
++    วลีจำนวนหน่วยกิตของแต่ละฉบับ จากค่าที่ตรวจแล้วใน mko.v_live_values
++
++    คีย์เป็น course_id (สตริง) ของ **ฉบับนั้นโดยตรง** ฉบับที่ไม่มีค่าที่ตรวจแล้วจะไม่มีคีย์
++    ผู้เรียกต้องบอกว่า "ไม่มีข้อมูล" ห้ามหยิบค่าของฉบับอื่นมาแทน เพราะหน่วยกิตต่างกัน
++    จริงระหว่างฉบับ (คณิตศาสตร์ 2564 = 130 · 2569 = 124)
++
++    ใช้ _credit_phrase เดิมเพื่อให้คำว่า "ไม่น้อยกว่า" ขึ้นเฉพาะเมื่อเอกสารเขียนไว้จริง
++    """
++    if not ids:
++        return {}
++    facts, _ = _scalar_facts(db, "total_credits", ids, {})
++    return {f.course_id: _credit_phrase([f]) for f in facts if f.value_int is not None}
++
++
+ def _compose(field_key: str, programme: str, facts: list[EditionFact], missing: list[str]) -> tuple[str, list[str]]:
+     lines: list[str] = []
+     others: list[str] = []
+diff --git a/backend/app/services/program_compare.py b/backend/app/services/program_compare.py
+index 7eb802a..da4b978 100644
+--- a/backend/app/services/program_compare.py
++++ b/backend/app/services/program_compare.py
+@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
+ 
+ from app.models.course import Course
+ from app.services.llm_client import get_llm_connector
++from app.services.curriculum_facts import verified_credit_phrases
+ from app.services.tuition import describe as describe_fee, fee_for
+ from app.services.vector_search import search_similar_chunks
+ 
+@@ -56,13 +57,17 @@ from llm.prompts import (  # noqa: E402
+ #   "รายวิชาเฉพาะด้านที่ต้องเรียน"      -> ได้วิชาภาษาไทยและภาษาอังกฤษของหมวดศึกษาทั่วไป
+ #   "คุณสมบัติของผู้เข้าศึกษา"           -> ได้ระเบียบวินัย เช่น ไม่เคยรับโทษจำคุก
+ #   "จำนวนหน่วยกิตรวมตลอดหลักสูตร"      -> ไม่เจอหน้าที่มีตัวเลขจริง
++#
++# **จำนวนหน่วยกิตไม่อยู่ในรายการนี้แล้ว** ตั้งแต่ 30 ต.ค. 2569 — ให้โมเดลสกัดเองไม่ได้
++# ตรวจพบว่าสาขาการจัดการสิ่งแวดล้อมฯ ฉบับ 2565 ถูกตอบว่า "ไม่น้อยกว่า 130 หน่วยกิต"
++# ทั้งที่เอกสารเขียน 135 ไว้ถึงสามหน้า · เลข 130 ที่โมเดลหยิบมาคือ "เลขหน้า" ที่พิมพ์อยู่
++# บนหัวกระดาษของหน้าหนึ่งในเล่มเดียวกัน ซึ่งเป็นความผิดพลาดที่ผู้อ่านจับไม่ได้เลย
++# ตอนนี้ค่านี้มาจาก mko.v_live_values ที่คนตรวจแล้วและผูกกับ course_id ของฉบับนั้น
+ DIMENSIONS: list[tuple[str, str]] = [
+     ("คำอธิบายสาขา",
+      "ปรัชญาของหลักสูตร ความสำคัญ วัตถุประสงค์ของหลักสูตร มุ่งผลิตบัณฑิตที่มีความรู้"),
+     ("ระยะเวลาเรียน",
+      "ระบบการจัดการศึกษา ระบบทวิภาค ระยะเวลาการศึกษา ภาคการศึกษาปกติ สำเร็จการศึกษาภายในกี่ปี"),
+-    ("จำนวนหน่วยกิต",
+-     "จำนวนหน่วยกิตรวมตลอดหลักสูตร ไม่น้อยกว่า หน่วยกิต โครงสร้างหลักสูตร หมวดวิชาศึกษาทั่วไป หมวดวิชาเฉพาะ หมวดวิชาเลือกเสรี"),
+     ("เรียนอะไรบ้าง",
+      "หมวดวิชาเฉพาะ กลุ่มวิชาเฉพาะด้าน กลุ่มวิชาแกน รายวิชาบังคับของสาขาวิชา"),
+     ("ทักษะที่ได้รับ",
+@@ -147,6 +152,18 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
+         for label, _ in DIMENSIONS
+     ]
+ 
++    # จำนวนหน่วยกิตมาจากค่าที่คนตรวจแล้วของ **ฉบับนั้น** ไม่ได้ให้โมเดลสกัดจากเอกสาร
++    #
++    # ค่านี้ผูกกับ course_id จึงตรงกับหลักสูตร ปี และระดับที่กำลังเทียบอยู่เสมอ
++    # ฉบับที่ยังไม่มีค่าที่ตรวจแล้ว ต้องบอกว่าไม่มี ห้ามยืมของฉบับอื่นมาแสดง
++    # ข้อความขึ้นต้นด้วย "ไม่พบข้อมูล" เพื่อให้ชั้นหน้าเว็บตัดออกจากรายการจุดเด่นเอง
++    credits = verified_credit_phrases(db, [c.id for c in ordered])
++    rows.insert(0, {
++        "dimension": "จำนวนหน่วยกิต",
++        "values": [credits.get(str(c.id), "ไม่พบข้อมูลหน่วยกิตที่ตรวจแล้วของฉบับนี้")
++                   for c in ordered],
++    })
++
+     # แถวค่าเทอมมาจากประกาศของคณะ ไม่ได้ผ่านการค้นเอกสารและไม่ได้ผ่านโมเดลเลย
+     # จึงต่อท้ายตรงนี้แทนที่จะรวมอยู่ใน DIMENSIONS ซึ่งเป็นหัวข้อที่ดึงจาก มคอ.2
+     # วางไว้บนสุดเพราะเป็นข้อมูลที่นักเรียนดูก่อนเป็นอันดับแรกเวลาเทียบที่เรียน
