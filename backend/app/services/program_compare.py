@@ -164,9 +164,8 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
     # ข้อความขึ้นต้นด้วย "ไม่พบข้อมูล" เพื่อให้ชั้นหน้าเว็บตัดออกจากรายการจุดเด่นเอง
     credits = verified_credit_phrases(db, [c.id for c in ordered])
     rows.insert(0, {
-        "dimension": "จำนวนหน่วยกิต",
-        "values": [credits.get(str(c.id), "ไม่พบข้อมูลหน่วยกิตที่ตรวจแล้วของฉบับนี้")
-                   for c in ordered],
+        "dimension": CREDITS_ROW,
+        "values": [credits.get(str(c.id), NO_VERIFIED_CREDITS) for c in ordered],
     })
 
     # แถวค่าเทอมมาจากประกาศของคณะ ไม่ได้ผ่านการค้นเอกสารและไม่ได้ผ่านโมเดลเลย
@@ -185,7 +184,12 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
         "rows": rows,
         # สรุปความต่างจาก "ตารางที่สรุปเสร็จแล้ว" ไม่ใช่จากเนื้อหาดิบ พรอมต์จึงสั้นมาก
         # และโมเดลพูดถึงได้เฉพาะสิ่งที่ปรากฏในตารางซึ่งผู้ใช้เห็นอยู่ตรงหน้าเท่านั้น
-        "summary": _summarise(connector, [c.title for c in ordered], rows),
+        # ประโยคหน่วยกิตที่ระบบเขียนเองมาก่อนเสมอ แล้วต่อด้วยย่อหน้าของโมเดลถ้าผ่านด่าน
+        # ผู้ใช้จึงได้ตัวเลขที่ตรวจแล้วพร้อมชื่อและปีของหลักสูตรแน่นอน แม้ย่อหน้าจะถูกทิ้ง
+        "summary": " ".join(filter(None, [
+            _credits_sentence(ordered, credits),
+            _summarise(connector, [c.title for c in ordered], rows),
+        ])),
     }
 
 
@@ -227,32 +231,46 @@ def _credit_numbers(text_: str) -> set[str]:
     return {m.group(1) for m in _CREDIT_NUMBER.finditer(text_ or "")}
 
 
-def _invents_credits(summary: str, rows: list[dict]) -> set[str]:
-    """
-    ตัวเลขหน่วยกิตที่สรุปพูดถึงแต่ไม่มีอยู่ในตารางเลย
+CREDITS_ROW = "จำนวนหน่วยกิต"
+NO_VERIFIED_CREDITS = "ไม่พบข้อมูลหน่วยกิตที่ตรวจแล้วของฉบับนี้"
 
-    ตารางคือข้อมูลทั้งหมดที่โมเดลได้เห็น (ดู _summarise) ตัวเลขที่ไม่ได้อยู่ในนั้นจึง
-    เป็นของที่มันแต่งขึ้นเองหรือจำมาจากที่อื่น · ด่านนี้จับ "ตัวเลขที่ไม่มีในตาราง"
-    ไม่ได้จับการสลับเลขระหว่างคอลัมน์ ซึ่งยังเป็นข้อจำกัดที่เหลืออยู่
+
+def _credits_sentence(programmes: list, credits: dict[str, str]) -> str:
     """
-    return _credit_numbers(summary) - {
-        n for row in rows for value in row["values"] for n in _credit_numbers(value)
-    }
+    ข้อความหน่วยกิตที่ระบบเขียนเอง — ผูกตัวเลขกับชื่อหลักสูตรและปีของฉบับนั้นตรง ๆ
+
+    เขียนเองทั้งประโยคเพราะการให้โมเดลเขียนแล้วค่อยตรวจย้อนหลังทำไม่ได้จริง: การตรวจ
+    ต้องรู้ว่า "เลขนี้เป็นของหลักสูตรไหน" ซึ่งต้องอ่านภาษาธรรมชาติอีกชั้น ด่านที่ดูแค่ว่า
+    ตัวเลขมีอยู่ในตารางหรือไม่ ปล่อยให้สลับเลขข้ามคอลัมน์ผ่านได้ (สิ่งแวดล้อมฯ 135 ถูก
+    สรุปเป็น 130 ซึ่งเป็นของวิทยาการคอมพิวเตอร์ที่เทียบอยู่ข้างกัน)
+
+    ฉบับที่ไม่มีค่าที่ตรวจแล้ว เขียนตามตรงว่าไม่มี ไม่เติมและไม่ยืมของฉบับอื่น
+    """
+    parts = []
+    for c in programmes:
+        phrase = credits.get(str(c.id))
+        parts.append(f"{c.title} {phrase}" if phrase
+                     else f"{c.title} ยังไม่มีค่าหน่วยกิตที่ตรวจแล้วในระบบ")
+    return "จำนวนหน่วยกิตรวมตลอดหลักสูตรจากเอกสารที่ตรวจแล้ว: " + " · ".join(parts)
 
 
 def _summarise(connector, titles: list[str], rows: list[dict]) -> str:
     """
     เขียนสรุปความต่างจากตารางที่สรุปเสร็จแล้ว คืนสตริงว่างถ้าล้มหรือไม่ผ่านด่าน
 
-    **ด่านตรวจตัวเลขหน่วยกิต** — ช่องหน่วยกิตในตารางมาจากค่าที่คนตรวจแล้ว แต่ย่อหน้า
-    สรุปเป็นข้อความที่โมเดลเขียนเอง มันจึงยังพิมพ์ตัวเลขผิดได้ ถ้าสรุปอ้างตัวเลขหน่วยกิต
-    ที่ไม่มีอยู่ในตาราง ให้ทิ้งทั้งย่อหน้า ไม่ใช่แสดงข้ออ้างที่รู้อยู่แล้วว่าไม่มีที่มา
+    **หน่วยกิตไม่ใช่เรื่องของโมเดล** — แถวหน่วยกิตไม่ถูกส่งเข้าไปในพรอมต์ และพรอมต์สั่ง
+    ห้ามพูดถึงหน่วยกิตไว้ด้วย · ถ้าข้อความที่ได้ยังมีคำว่าหน่วยกิตพร้อมตัวเลข แปลว่าเป็น
+    ข้ออ้างที่ผูกกับหลักสูตรไม่ได้และตรวจย้อนไม่ได้ ให้ทิ้งทั้งย่อหน้า ไม่ใช่แสดงออกไป
     (เหตุผลเดียวกับด่านตรวจข้อความอ้างอิงของขั้นเขียนเหตุผลในหน้าแนะนำสาขา)
 
+    ส่วนข้อความหน่วยกิตที่ผู้ใช้เห็น ระบบเขียนเองจากค่าที่ตรวจแล้ว (ดู _credits_sentence)
     หน้าเว็บไม่แสดงย่อหน้าสรุปเมื่อค่าว่าง ตารางซึ่งเป็นข้อมูลที่ตรวจแล้วยังอยู่ครบ
     """
     lines = []
     for row in rows:
+        # แถวหน่วยกิตไม่ส่งให้โมเดลเห็น เพื่อไม่ให้มันเอาไปเขียนต่อแล้วสลับเลขกัน
+        if row["dimension"] == CREDITS_ROW:
+            continue
         for title, value in zip(titles, row["values"]):
             lines.append(f"{title} | {row['dimension']}: {value}")
     try:
@@ -267,8 +285,8 @@ def _summarise(connector, titles: list[str], rows: list[dict]) -> str:
     except LLMConnectionError:
         return ""
 
-    if (invented := _invents_credits(summary, rows)):
-        logger.warning("ทิ้งย่อหน้าสรุป: อ้างหน่วยกิต %s ซึ่งไม่มีในตาราง — %r",
-                       ", ".join(sorted(invented)), summary[:200])
+    if (said := _credit_numbers(summary)):
+        logger.warning("ทิ้งย่อหน้าสรุป: พูดถึงหน่วยกิต %s ทั้งที่ห้ามไว้ — %r",
+                       ", ".join(sorted(said)), summary[:200])
         return ""
     return summary
