@@ -1,0 +1,145 @@
+commit 4652d6bdff86d8876d07299361b5831f8e2d289e
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 12:08:58 2026 +0700
+
+    fix(web): ให้ /course-facts จับคู่หลักสูตรด้วยตัวระบุ ไม่ใช่ชื่ออย่างเดียว
+    
+    ชื่อสาขาอย่างเดียวแยกระดับปริญญาไม่ได้ คณะมีสาขาที่ชื่อเหมือนกันทุกตัวอักษรและปี
+    เดียวกันแต่เป็นคนละระดับ (การจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน
+    พ.ศ. 2568 มีทั้งโทและเอก) และแถวบนเว็บของสองสาขานี้ยังไม่มี course_id ด้วย
+    
+      * รับ course_id (ถ้าผู้เรียกรู้) แล้วใช้ตรง ๆ — /site/courses ส่งค่านี้ไปให้อยู่แล้ว
+      * รับ level แล้วส่งต่อให้ match_by_title ซึ่งแยกระดับได้อยู่แล้ว และถือว่า
+        "จับคู่ไม่ได้" เมื่อชื่อนั้นมีหลายระดับแต่ไม่มีใครบอกระดับ แทนการเดาให้
+      * แถวบนเว็บที่ชื่อซ้ำกันหลายแถวไม่ใช้แล้ว (เดิมหยิบแถวแรก) ถอยไปใช้ตัวจับคู่แทน
+    
+    และ /course-facts บอกชัดว่าเอกสารเล่มไหนเป็นฉบับย่อ ด้วยธง brief ที่ดูจากชื่อไฟล์จริง
+    (คำว่า brief ที่ใดก็ได้ในชื่อ ไม่ใช่เฉพาะที่ลงท้าย _brief.pdf) ผู้เรียกจะได้ไม่ต้องไป
+    แกะคำว่า "ฉบับย่อ" จากข้อความที่แสดง ซึ่งพังทันทีที่ถ้อยคำเปลี่ยน
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index 3361fbb..8de0b40 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -21,6 +21,7 @@ import base64
+ import json
+ import logging
+ import re
++import uuid
+ from typing import Any
+ 
+ from fastapi import APIRouter, Depends, HTTPException, status
+@@ -310,7 +311,7 @@ def chat_web(payload: WebChatRequest, db: Session = Depends(get_db)) -> Streamin
+ _EDITION_IN_TITLE = re.compile(r"\(\s*พ\s*\.?\s*ศ\s*\.?\s*(25\d\d)\s*\)")
+ 
+ 
+-def _course_for_site_title(db: Session, title: str) -> "Course | None":
++def _course_for_site_title(db: Session, title: str, level: str = "") -> "Course | None":
+     """
+     หาหลักสูตรในคลังเอกสารของสาขาที่หน้าเว็บถามถึง — **ยึด course_id ของแถวบนเว็บก่อน**
+ 
+@@ -320,19 +321,26 @@ def _course_for_site_title(db: Session, title: str) -> "Course | None":
+     "หลักสูตร…สาขาวิชาการจัดการเทคโนโลยีการเกษตรสมัยใหม่ (พ.ศ. 2564)" ในคลัง
+     การเทียบด้วยชื่ออย่างเดียวจึงไม่เจอ และหน้านั้นได้ {} กลับไปทั้งที่มีเอกสารอยู่
+ 
+-    ถ้าหาแถวบนเว็บไม่เจอ (ผู้เรียกอื่นที่ไม่ใช่หน้ารายละเอียด) จึงค่อยถอยไปเทียบชื่อ
++    **ชื่อซ้ำกันหลายแถวถือว่าใช้ไม่ได้** ไม่ใช่หยิบแถวแรก เพราะสองแถวนั้นอาจเป็นคนละ
++    หลักสูตร แล้วค่าที่ได้จะเป็นของอีกตัวโดยไม่มีอะไรบอก · กรณีนั้นถอยไปใช้ตัวจับคู่
++    ที่แยกระดับปริญญาได้แทน
++
++    ถ้าหาแถวบนเว็บไม่เจอ (ผู้เรียกอื่นที่ไม่ใช่หน้ารายละเอียด) ก็ถอยไปเทียบชื่อเช่นกัน
++    โดยส่งระดับปริญญาที่ผู้เรียกบอกมาต่อไปด้วย — match_by_title() ใช้มันแยกเล่มโท
++    ออกจากเล่มเอกของสาขาที่ชื่อเหมือนกันทุกตัวอักษร และถ้าไม่มีใครบอกระดับมาเลย
++    มันจะถือว่าจับคู่ไม่ได้แทนการเดาให้ (ดูหมายเหตุในฟังก์ชันนั้น)
+     """
+     from app.models.course import Course
+ 
+-    row = db.execute(
++    rows = db.execute(
+         text("select course_id from web.site_courses where title = :t and course_id is not null"),
+         {"t": title},
+-    ).mappings().first()
+-    if row:
+-        course = db.get(Course, row["course_id"])
++    ).mappings().all()
++    if len(rows) == 1:
++        course = db.get(Course, rows[0]["course_id"])
+         if course is not None:
+             return course
+-    matched, _ = match_by_title(db, [{"id": "", "title": title}])
++    matched, _ = match_by_title(db, [{"id": "", "title": title, "level": level}])
+     return matched[0][1] if matched else None
+ 
+ 
+@@ -362,9 +370,12 @@ def _course_documents(db: Session, course_id) -> list[dict]:
+         # จึงไม่แสดงเป็นเอกสารให้กด เพราะลิงก์จะพาไปหน้า 404
+         if not r["file"].lower().endswith(".pdf"):
+             continue
+-        name = r["course_title"]
+-        if r["file"].lower().endswith("_brief.pdf"):
+-            name += " (ฉบับย่อ)"
++        # ฉบับย่อดูจาก "brief" ที่ใดก็ได้ในชื่อไฟล์ ไม่ใช่เฉพาะที่ลงท้าย _brief.pdf
++        #
++        # ส่งออกเป็นธงของตัวเอง ไม่ให้ผู้เรียกไปแกะคำว่า "ฉบับย่อ" จากข้อความที่แสดง
++        # ซึ่งเป็นการเดาจากถ้อยคำ และพังทันทีที่ถ้อยคำเปลี่ยน
++        brief = "brief" in r["file"].lower()
++        name = r["course_title"] + (" (ฉบับย่อ)" if brief else "")
+         bits = [f"ไฟล์ {r['file']}"]
+         if r["page_count"]:
+             bits.append(f"{r['page_count']} หน้า")
+@@ -373,6 +384,7 @@ def _course_documents(db: Session, course_id) -> list[dict]:
+             "type": bits[0],
+             "size": bits[1] if len(bits) > 1 else "",
+             "url": f"/api/documents/{r['id']}/pdf",
++            "brief": brief,
+         })
+     return out
+ 
+@@ -405,20 +417,41 @@ def _faculty_for(course_title: str, about: dict) -> list[dict]:
+     return out
+ 
+ 
++def _course_by_id(db: Session, course_id: str | None) -> "Course | None":
++    """หลักสูตรในคลังตามรหัสที่หน้าเว็บส่งมา — คืน None เมื่อรหัสไม่ถูกรูปหรือไม่มีแถวนั้น"""
++    from app.models.course import Course
++
++    if not course_id:
++        return None
++    try:
++        key = uuid.UUID(course_id)
++    except ValueError:
++        return None
++    return db.get(Course, key)
++
++
+ @router.get("/course-facts")
+-def course_facts_web(title: str, db: Session = Depends(get_db)) -> dict:
++def course_facts_web(title: str, course_id: str | None = None, level: str | None = None,
++                     db: Session = Depends(get_db)) -> dict:
+     """
+     ข้อมูลสรุปของหลักสูตรหนึ่ง สำหรับเติมช่องที่ว่างในหน้ารายละเอียดของหน้าเว็บ
+ 
+     หน้าเว็บดึงข้อมูลชุดนี้จากฐานข้อมูลของตัวเองซึ่งยังไม่มีใครกรอก จึงขึ้นว่า
+     "ไม่ระบุ" ทุกช่อง ทั้งที่เอกสาร มคอ.2 ระบุไว้ครบ
+ 
+-    รับชื่อสาขาเป็นข้อความ เพราะหน้าเว็บส่งมาเท่านี้ แต่ภายในแปลงเป็น course_id
+-    ของแถวบนเว็บก่อนเสมอ (ดู _course_for_site_title)
++    **ถ้าผู้เรียกรู้รหัสหลักสูตรให้ส่ง course_id มาด้วย** — คือค่าในคอลัมน์ course_id
++    ของแถวบนเว็บ ซึ่ง /site/courses ส่งไปให้อยู่แล้ว · ชื่อสาขาอย่างเดียวแยกระดับ
++    ปริญญาไม่ได้ คณะมีสาขาที่ชื่อเหมือนกันทุกตัวอักษรแต่เป็นคนละระดับ (โท/เอก)
++    การเทียบด้วยชื่อจะหยิบแถวไหนก็ได้ในสองแถวนั้น แล้วปี หน่วยกิต และเอกสารจะเป็น
++    ของอีกหลักสูตรโดยไม่มีอะไรบอก
++
++    title ยังต้องส่งมาเสมอ เพราะใช้เป็นทางถอยเมื่อรหัสไม่ตรงกับแถวใดในคลัง · ทางถอยนั้น
++    ใช้ level ที่ส่งมาด้วย (เช่น "ปริญญาโท") ซึ่งจำเป็นจริงกับสองสาขาที่แถวบนเว็บยังไม่มี
++    course_id คือหลักสูตรโทกับเอกของการจัดการเทคโนโลยีการเกษตรและบริหารทรัพยากรชุมชน
+ 
+     คืน {} เมื่อไม่มีเอกสารของสาขานั้น ผู้เรียกต้องคงค่าเดิมของตัวเองไว้
+     """
+-    course = _course_for_site_title(db, title)
++    course = _course_by_id(db, course_id) or _course_for_site_title(db, title, level or "")
+     if course is None:
+         return {}
+     about = dict(program_about(course.title))
