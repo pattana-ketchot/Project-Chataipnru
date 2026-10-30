@@ -1,0 +1,253 @@
+commit 3f0e5918c0a4ea9ccff1edee8703e883e9d3c75e
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 11:49:34 2026 +0700
+
+    feat(compare): เพิ่มปีหลักสูตร ระยะเวลาเรียน ปุ่มลัด และย่อรายการอาชีพ
+    
+    ตารางเปรียบเทียบบอกได้แค่รายละเอียดกับอาชีพ ผู้ใช้จึงไม่รู้ว่ากำลังเทียบหลักสูตร
+    ฉบับปีไหน เรียนกี่ปี และจะไปดูเอกสารจริงต่อได้ที่ไหน
+    
+      * แถว "ปีหลักสูตรและแหล่งอ้างอิง" — ฉบับ พ.ศ. ชื่อเล่ม และไฟล์ที่อ้างอิง
+      * แถว "ระยะเวลาเรียน" — ระยะเวลาและหน่วยกิตจากเอกสาร
+      * แถว "ดูเพิ่มเติม" — ปุ่มดูเอกสาร (เปิด PDF ของเล่มเต็ม) รายละเอียดสาขา และสมัครเรียน
+      * รายการอาชีพย่อเหลือห้ารายการพร้อมปุ่ม "ดูทั้งหมด (n)" เพราะบางสาขามีสิบกว่า
+        รายการจนดันแถวอื่นหายไปจากจอ
+      * หัวตาราง (ชื่อสาขา) ตรึงไว้ตอนเลื่อน โดยให้กล่องตารางเลื่อนทั้งสองแกนในตัวเอง
+        และเปลี่ยนพื้นหลังหัวคอลัมน์ซ้ายเป็นสีทึบ ไม่งั้นแถวที่เลื่อนผ่านจะโผล่ทะลุขึ้นมา
+    
+    ข้อมูลใหม่ดึงจาก /api/course-facts เส้นทางเดียวกับหน้ารายละเอียดหลักสูตร ซึ่งอ่าน
+    จากฐานและไฟล์ที่ตรวจแล้ว ไม่ได้เรียกโมเดล · ล้มเมื่อไรตารางยังแสดงได้ตามเดิม และ
+    ช่องที่ไม่มีข้อมูลเขียนว่าไม่มีตามจริง ไม่ปล่อยว่าง
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/src/pages/CompareResult.jsx b/src/pages/CompareResult.jsx
+index 3ae819c..c325c9a 100644
+--- a/src/pages/CompareResult.jsx
++++ b/src/pages/CompareResult.jsx
+@@ -1,14 +1,24 @@
+ import { useState, useEffect } from 'react'
+ import { useNavigate, useSearchParams } from 'react-router-dom'
+-import { Plus, Trash2, X, Check, GraduationCap, Sparkles, Loader2, AlertTriangle } from 'lucide-react'
++import {
++  Plus, Trash2, X, Check, GraduationCap, Sparkles, Loader2, AlertTriangle,
++  FileText, ArrowRight, ExternalLink, ChevronDown
++} from 'lucide-react'
+ import { fetchSiteCoursesByIds } from '../lib/siteCourses'
+ import { levelOf } from '../lib/courseLevels'
++import { applyUrlFor } from '../lib/applyUrl'
+ import EngineNote from '../components/EngineNote'
+ import { postJsonWithTimeout } from '../lib/apiRequest'
+ 
+ // เหตุผลเดียวกับหน้าแนะนำสาขา — ยาวกว่าเพดานของหลังบ้านเล็กน้อย
+ const REQUEST_TIMEOUT_MS = 100000
+ 
++// จำนวนอาชีพที่แสดงก่อนกด "ดูทั้งหมด"
++//
++// บางสาขามีอาชีพสิบกว่ารายการ ช่องของมันจึงยาวจนแถวอื่นถูกดันหายไปจากจอ และการ
++// เทียบสาขาต่อสาขาต้องเลื่อนขึ้นลงตลอด · ห้ารายการพอให้เห็นแนวทางของสาขา
++const CAREERS_PREVIEW = 5
++
+ const CompareResult = () => {
+   const navigate = useNavigate()
+   const [searchParams, setSearchParams] = useSearchParams()
+@@ -18,6 +28,9 @@ const CompareResult = () => {
+   const [aiResult, setAiResult] = useState(null)
+   const [aiLoading, setAiLoading] = useState(false)
+   const [aiError, setAiError] = useState('')
++  // ข้อมูลจากเอกสารหลักสูตร (ปีฉบับ ระยะเวลา ไฟล์เอกสาร) แยกตามรหัสสาขา
++  const [facts, setFacts] = useState({})
++  const [expandedCareers, setExpandedCareers] = useState({})
+ 
+   useEffect(() => {
+     const fetchCourses = async () => {
+@@ -48,6 +61,36 @@ const CompareResult = () => {
+     fetchCourses()
+   }, [searchParams])
+ 
++  // ข้อมูลเสริมจากเอกสาร มคอ.2 ของแต่ละสาขา — ฐานข้อมูลของหน้าเว็บไม่มีช่องเหล่านี้
++  //
++  // ใช้เส้นทางเดียวกับหน้ารายละเอียดหลักสูตร (/api/course-facts) ซึ่งอ่านจากฐานและไฟล์
++  // ที่ตรวจแล้ว ไม่ได้เรียกโมเดล · ล้มเมื่อไรก็แค่ไม่มีข้อมูลเสริม ตารางยังแสดงได้ตามปกติ
++  useEffect(() => {
++    let cancelled = false
++    const load = async () => {
++      const pairs = await Promise.all(selectedCourses.map(async (course) => {
++        try {
++          const res = await fetch('/api/course-facts?title=' + encodeURIComponent(course.title))
++          return res.ok ? [course.id, await res.json()] : null
++        } catch {
++          return null
++        }
++      }))
++      if (!cancelled) setFacts(Object.fromEntries(pairs.filter(Boolean)))
++    }
++    if (selectedCourses.length > 0) load()
++    return () => { cancelled = true }
++  }, [selectedCourses])
++
++  const toggleCareers = (courseId) =>
++    setExpandedCareers((prev) => ({ ...prev, [courseId]: !prev[courseId] }))
++
++  // เอกสารฉบับเต็มของสาขานั้น — ฉบับย่อไม่เอามาเป็นปุ่มหลัก เพราะคนกดอยากได้เล่มจริง
++  const mainDocumentOf = (courseId) => {
++    const docs = facts[courseId]?.documents || []
++    return docs.find((d) => !d.name.includes('ฉบับย่อ')) || docs[0] || null
++  }
++
+   const runAiCompare = async () => {
+     if (selectedCourses.length < 2) return
+ 
+@@ -107,6 +150,43 @@ const CompareResult = () => {
+   // หัวข้อที่เอามาเทียบ ใช้ชุดเดียวกันทั้งตาราง (md ขึ้นไป) และการ์ดเรียงลงมา (ต่ำกว่า md)
+   // เพื่อให้สองมุมมองแสดงข้อมูลชุดเดียวกันเสมอ
+   const comparisonRows = [
++    {
++      key: 'edition',
++      label: 'ปีหลักสูตรและแหล่งอ้างอิง',
++      render: (course) => {
++        const f = facts[course.id] || {}
++        const doc = mainDocumentOf(course.id)
++        // ไม่มีข้อมูลต้องบอกว่าไม่มี ไม่ใช่เว้นว่างให้เข้าใจเอาเองว่าสาขานี้ไม่มีเอกสาร
++        if (!f.edition_year && !f.edition_title && !doc) {
++          return <p className="text-sm text-gray-500">ยังไม่มีข้อมูลฉบับหลักสูตรในระบบ</p>
++        }
++        return (
++          <div className="text-sm text-gray-600 space-y-1">
++            {f.edition_year && (
++              <p className="font-semibold text-gray-800">ฉบับ พ.ศ. {f.edition_year}</p>
++            )}
++            {f.edition_title && <p className="text-xs text-gray-500">{f.edition_title}</p>}
++            {doc && (
++              <p className="text-xs text-gray-500">อ้างอิงจาก {doc.type.replace('ไฟล์ ', '')}</p>
++            )}
++          </div>
++        )
++      }
++    },
++    {
++      key: 'duration',
++      label: 'ระยะเวลาเรียน',
++      render: (course) => {
++        const f = facts[course.id] || {}
++        if (!f.duration) return <p className="text-sm text-gray-500">ยังไม่มีข้อมูลในระบบ</p>
++        return (
++          <div className="text-sm text-gray-600 space-y-1">
++            <p className="font-semibold text-gray-800">{f.duration}</p>
++            {f.credits && <p className="text-xs text-gray-500">{f.credits}</p>}
++          </div>
++        )
++      }
++    },
+     {
+       key: 'description',
+       label: 'รายละเอียดหลักสูตร',
+@@ -117,16 +197,75 @@ const CompareResult = () => {
+     {
+       key: 'careers',
+       label: 'อาชีพที่สามารถทำได้',
+-      render: (course) => (
+-        <ul className="space-y-1">
+-          {course.careers.map((career, idx) => (
+-            <li key={idx} className="text-sm text-gray-600 flex items-start gap-2">
+-              <Check className="w-4 h-4 text-pnru mt-0.5 flex-shrink-0" />
+-              <span>{career}</span>
+-            </li>
+-          ))}
+-        </ul>
+-      )
++      render: (course) => {
++        const open = Boolean(expandedCareers[course.id])
++        const all = course.careers || []
++        const shown = open ? all : all.slice(0, CAREERS_PREVIEW)
++        return (
++          <div>
++            <ul className="space-y-1">
++              {shown.map((career, idx) => (
++                <li key={idx} className="text-sm text-gray-600 flex items-start gap-2">
++                  <Check className="w-4 h-4 text-pnru mt-0.5 flex-shrink-0" />
++                  <span>{career}</span>
++                </li>
++              ))}
++            </ul>
++            {all.length > CAREERS_PREVIEW && (
++              <button
++                type="button"
++                onClick={() => toggleCareers(course.id)}
++                aria-expanded={open}
++                className="mt-2 inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-pnru hover:underline"
++              >
++                {open ? 'ย่อรายการ' : 'ดูทั้งหมด (' + all.length + ')'}
++                <ChevronDown className={'w-4 h-4 transition-transform ' + (open ? 'rotate-180' : '')} />
++              </button>
++            )}
++          </div>
++        )
++      }
++    },
++    {
++      key: 'actions',
++      label: 'ดูเพิ่มเติม',
++      render: (course) => {
++        const doc = mainDocumentOf(course.id)
++        return (
++          <div className="flex flex-col gap-2">
++            {doc ? (
++              <a
++                href={doc.url}
++                target="_blank"
++                rel="noreferrer"
++                className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border-2 border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
++              >
++                <FileText className="w-4 h-4" />
++                ดูเอกสาร
++              </a>
++            ) : (
++              <span className="text-xs text-gray-400">ยังไม่มีเอกสารให้เปิด</span>
++            )}
++            <button
++              type="button"
++              onClick={() => navigate('/courses/' + course.id)}
++              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border-2 border-pnru px-3 py-2 text-sm font-medium text-pnru hover:bg-[#E8F5F1]"
++            >
++              รายละเอียดสาขา
++              <ArrowRight className="w-4 h-4" />
++            </button>
++            <a
++              href={applyUrlFor(course.detail)}
++              target="_blank"
++              rel="noreferrer"
++              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-pnru px-3 py-2 text-sm font-medium text-white hover:bg-opacity-90"
++            >
++              สมัครเรียน
++              <ExternalLink className="w-4 h-4" />
++            </a>
++          </div>
++        )
++      }
+     }
+   ]
+ 
+@@ -341,15 +480,18 @@ const CompareResult = () => {
+ 
+             {/* แท็บเล็ตขึ้นไป — ตารางเดิม ลดความกว้างขั้นต่ำของคอลัมน์ลงเพื่อไม่ให้ขอบขวาโดนตัดที่ 768px */}
+             <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+-              <div className="overflow-x-auto">
++              {/* เลื่อนทั้งสองแกนในกล่องนี้ ไม่ใช่เลื่อนทั้งหน้า
++                  หัวตารางถึงจะตรึงได้จริง — sticky ยึดกับกล่องที่เลื่อน ถ้ากล่องนี้เลื่อน
++                  เฉพาะแนวนอน (overflow-x) หัวจะไม่ตรึงเวลาผู้ใช้เลื่อนหน้าลงไปดูแถวล่าง */}
++              <div className="max-h-[78vh] overflow-auto">
+                 <table className="min-w-full">
+                   <thead>
+-                    <tr className="border-b-2 border-gray-200">
+-                      <th className="bg-pnru/10 px-4 py-4 text-left text-sm font-bold text-pnru border-r border-gray-200 sticky left-0 z-20 min-w-[160px] lg:min-w-[200px]">
++                    <tr>
++                      <th className="bg-[#E8F5F1] px-4 py-4 text-left text-sm font-bold text-pnru border-r border-b-2 border-gray-200 sticky left-0 -top-px z-30 min-w-[160px] lg:min-w-[200px]">
+                         หัวข้อเปรียบเทียบ
+                       </th>
+                       {selectedCourses.map(course => (
+-                        <th key={course.id} className="bg-white px-4 py-4 min-w-[220px] lg:min-w-[280px]">
++                        <th key={course.id} className="bg-white px-4 py-4 min-w-[220px] lg:min-w-[280px] border-b-2 border-gray-200 sticky -top-px z-20">
+                           <div className="flex flex-col items-center gap-3">
+                             {/* Logo */}
+                             <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">

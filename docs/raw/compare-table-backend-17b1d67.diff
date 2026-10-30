@@ -1,0 +1,34 @@
+commit 17b1d679709db57e82dcf6c5c6f70b91130a5965
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 11:49:33 2026 +0700
+
+    feat(web): ส่งปีฉบับและชื่อเล่มของหลักสูตรไปกับ /course-facts
+    
+    หน้าเปรียบเทียบต้องบอกว่าข้อมูลของแต่ละสาขามาจากหลักสูตรฉบับปีไหน ซึ่งเดิมมีแต่
+    ในชื่อเล่มที่ซ่อนอยู่ในรายการเอกสาร หน้าเว็บจะต้องไปแกะปีออกจากชื่อเองกลายเป็น
+    กฎการแกะชื่อที่กระจายอยู่สองที่
+    
+    เพิ่มสองช่องจากค่าที่มีอยู่แล้วในคลัง ไม่ได้คำนวณใหม่และไม่เรียกโมเดล
+      edition_title  ชื่อเล่มเต็มตาม courses.title (ใช้เป็นแหล่งอ้างอิงที่ตรวจต่อได้)
+      edition_year   ปี พ.ศ. ที่แกะด้วย _EDITION_IN_TITLE ตัวเดิมที่ใช้คัดรายชื่ออาจารย์
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index 071c57c..3361fbb 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -429,6 +429,13 @@ def course_facts_web(title: str, db: Session = Depends(get_db)) -> dict:
+     out = {**program_facts(course.title), **about}
+     if (docs := _course_documents(db, course.id)):
+         out["documents"] = docs
++    # ฉบับของหลักสูตรที่ข้อมูลชุดนี้มาจาก — ส่งแยกเป็นช่องของตัวเอง ไม่ให้หน้าเว็บ
++    # ต้องไปแกะปีออกจากชื่อเล่มเอง (ซึ่งจะกลายเป็นกฎการแกะชื่อที่กระจายอยู่สองที่)
++    #
++    # edition_title คือชื่อเล่มเต็มตามคลังเอกสาร ใช้เป็น "แหล่งอ้างอิง" ที่ผู้ใช้ตรวจต่อได้
++    out["edition_title"] = course.title
++    if (year := _EDITION_IN_TITLE.search(course.title or "")):
++        out["edition_year"] = year.group(1)
+     return out
+ 
+ 
