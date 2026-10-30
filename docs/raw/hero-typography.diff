@@ -1,0 +1,78 @@
+commit 323c6cd5a3d9ee157bc5f6a5d115c44bc0785deb
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 14:40:59 2026 +0700
+
+    style(hero): ลดน้ำหนักหัวข้อ คุมระยะบรรทัดไทย และทำให้แผ่นรองข้อความทำงานจริง
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/src/components/Hero.jsx b/src/components/Hero.jsx
+index 08d42a9..24d85c3 100644
+--- a/src/components/Hero.jsx
++++ b/src/components/Hero.jsx
+@@ -48,34 +48,37 @@ const Hero = () => {
+       {/* Content Layer - Text and Buttons */}
+       <div className="hero-content relative mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-10 sm:pt-12 md:pt-16 lg:pt-20 max-w-[1920px]">
+         <div className="hero-content-inner max-w-2xl relative">
+-          {/* Backdrop panel behind the text so it reads clearly instead of looking layered on top of the photo */}
++          {/* แผ่นรองหลังข้อความ ให้ตัวหนังสืออ่านออกแม้ทับลายภาพ
++              เดิมแผ่นนี้เป็น -z-10 ซึ่งดันมันไปอยู่หลังรูป Hero (รูปเป็น absolute z auto)
++              จึงมองไม่เห็นและไม่ช่วยอะไรเลย — เอา -z-10 ออก แล้วให้กล่องข้อความเป็น relative
++              เพื่อให้ข้อความทับแผ่นนี้ตามลำดับใน DOM */}
+           <div
+-            className="absolute inset-0 -z-10 bg-cream/80 backdrop-blur-lg rounded-3xl"
++            className="absolute inset-0 bg-cream/75 backdrop-blur-md rounded-3xl"
+             style={{
+-              maskImage: 'radial-gradient(ellipse at center, black 55%, transparent 100%)',
+-              WebkitMaskImage: 'radial-gradient(ellipse at center, black 55%, transparent 100%)',
++              maskImage: 'radial-gradient(ellipse at center, black 60%, transparent 100%)',
++              WebkitMaskImage: 'radial-gradient(ellipse at center, black 60%, transparent 100%)',
+             }}
+           />
+ 
+-          <div className="p-4 sm:p-6 md:p-8 lg:p-10">
++          <div className="relative p-4 sm:p-6 md:p-8 lg:p-10">
+             {/* Subtitle */}
+-            <p className="hero-subtitle hero-anim-subtitle text-primary font-medium text-sm sm:text-base md:text-lg lg:text-xl mb-3 sm:mb-4 lg:mb-6">
++            <p className="hero-subtitle hero-anim-subtitle text-primary font-medium tracking-wide text-sm sm:text-base md:text-lg mb-3 sm:mb-4 lg:mb-5">
+               Phranakhon Rajabhat University
+             </p>
+ 
+             {/* Main Heading */}
+             <div className="hero-heading hero-anim-heading mb-4 sm:mb-5 lg:mb-6">
+-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-pnru leading-tight mb-2">
++              <h1 className="text-3xl sm:text-4xl md:text-[2.75rem] lg:text-[3.25rem] font-semibold text-pnru mb-1">
+                 ค้นหาสาขาที่ใช่
+               </h1>
+-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-black leading-tight">
++              <h1 className="text-3xl sm:text-4xl md:text-[2.75rem] lg:text-[3.25rem] font-semibold text-black">
+                 ในคณะวิทย์ PNRU
+               </h1>
+             </div>
+ 
+             {/* Description */}
+-            <p className="hero-description hero-anim-description text-gray-800 text-sm sm:text-base md:text-lg lg:text-xl mb-6 sm:mb-8 lg:mb-10 leading-relaxed">
+-              ตอบแบบสอบถามสั้น ๆ เพื่อค้นหาสาขาที่เหมาะกับความถนัด<br />
++            <p className="hero-description hero-anim-description text-gray-800 text-[15px] sm:text-base md:text-lg mb-6 sm:mb-8 lg:mb-10 leading-relaxed">
++              ตอบแบบสอบถามสั้น ๆ เพื่อค้นหาสาขาที่เหมาะกับความถนัด<br className="hidden md:inline" />
+               และความสนใจของคุณ
+             </p>
+ 
+diff --git a/src/index.css b/src/index.css
+index 5789233..f2eccae 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -98,6 +98,13 @@ body.nav-open {
+   border-radius: 9999px;
+ }
+ 
++/* ตัวอักษรหัวข้อ Hero — utility ขนาดตัวอักษรของ Tailwind ตั้ง line-height มาเท่าขนาดตัวอักษร
++   (lg:text-[3.25rem] ให้ 1 เท่า) และเพราะมันอยู่ใน media query จึงชนะ leading-* ที่ไม่มี breakpoint
++   ภาษาไทยมีสระบนซ้อนวรรณยุกต์ ("ที่" "ใช่") ระยะเท่านี้ทำให้บรรทัดดูชนกัน จึงคุมไว้ตรงนี้จุดเดียว */
++.hero-section .hero-heading h1 {
++  line-height: 1.24;
++}
++
+ /* Hero Section entrance animation — scoped to .hero-section only */
+ .hero-section {
+   --hero-anim-distance: 20px;
