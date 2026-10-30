@@ -1,0 +1,45 @@
+diff --git a/src/pages/CompareResult.jsx b/src/pages/CompareResult.jsx
+index 4c8245a..3e6a041 100644
+--- a/src/pages/CompareResult.jsx
++++ b/src/pages/CompareResult.jsx
+@@ -204,6 +204,40 @@ const CompareResult = () => {
+         )
+       }
+     },
++    {
++      key: 'tuition',
++      label: 'ค่าเทอม',
++      render: (course) => {
++        const f = facts[course.id] || {}
++        // ไม่มีข้อมูลต้องบอกว่าไม่มี · ห้ามคำนวณหรือเดาราคาแทน
++        if (!f.tuition_per_semester) {
++          return <p className="text-sm text-gray-500">ยังไม่มีข้อมูลค่าเทอมในระบบ</p>
++        }
++        // หลังบ้านส่งอัตราของสองภาคมาในข้อความเดียว คั่นด้วย " · " — แยกบรรทัดให้อ่านง่าย
++        // ถ้าวันหนึ่งรูปแบบเปลี่ยน จะได้ข้อความเดิมทั้งก้อน ไม่ใช่ข้อความที่ถูกตัดผิดที่
++        const rates = (f.study_format || '').split(' · ').filter(Boolean)
++        return (
++          <div className="text-sm text-gray-600 space-y-1">
++            <p className="font-semibold text-gray-800">
++              {f.tuition_per_semester} ต่อภาคการศึกษา
++            </p>
++            {rates.length > 0 && (
++              <ul className="text-xs text-gray-600 space-y-0.5">
++                {rates.map((rate, index) => <li key={index}>{rate}</li>)}
++              </ul>
++            )}
++            {/* ตารางค่าเทอมให้อัตราของภาค กศ.พบ ไว้ทุกสาขา แต่ไม่ได้บอกว่าสาขาไหนเปิดรับจริง
++                การเห็นอัตราแล้วเข้าใจว่าสาขานี้เปิดเสาร์-อาทิตย์ จึงเป็นการสรุปเกินหลักฐาน */}
++            {(f.study_format || '').includes('กศ.พบ') && (
++              <p className="text-xs text-gray-500">
++                อัตราภาค กศ.พบ มีอยู่ในตารางของทุกสาขา ไม่ได้แปลว่าสาขานี้เปิดรับภาคนั้น
++              </p>
++            )}
++            <p className="text-xs text-gray-500">ที่มา: ประกาศค่าเทอมของคณะ</p>
++          </div>
++        )
++      }
++    },
+     {
+       key: 'description',
+       label: 'รายละเอียดหลักสูตร',
