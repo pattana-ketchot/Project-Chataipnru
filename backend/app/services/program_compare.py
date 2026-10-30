@@ -27,6 +27,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -87,6 +89,9 @@ MIN_PROGRAMS, MAX_PROGRAMS = 2, 4
 # มากกว่านี้ไม่คุ้มเพราะ 4 หลักสูตร x 4 หัวข้อ คูณกันเร็วมากจนพรอมต์ยาวเกินจำเป็น
 CHUNKS_PER_DIMENSION = 4
 CHUNK_CHARS = 700
+
+# ชื่อเดียวกับที่ชั้นอื่นใช้ เพื่อให้ตั้งค่าระดับ log ที่เดียวแล้วมีผลทั้งระบบ
+logger = logging.getLogger("course_advisor")
 
 
 @dataclass
@@ -213,14 +218,45 @@ def _extract_one(connector, item: dict) -> dict:
     return {}
 
 
+# ตัวเลขที่ตามด้วยคำว่า "หน่วยกิต" — ยอมให้มีช่องว่างหรือขึ้นบรรทัดคั่น เพราะข้อความ
+# ที่โมเดลเขียนและข้อความที่ยกมาจาก PDF ตัดบรรทัดกลางวลีได้
+_CREDIT_NUMBER = re.compile(r"(\d+)\s*หน่วยกิต")
+
+
+def _credit_numbers(text_: str) -> set[str]:
+    return {m.group(1) for m in _CREDIT_NUMBER.finditer(text_ or "")}
+
+
+def _invents_credits(summary: str, rows: list[dict]) -> set[str]:
+    """
+    ตัวเลขหน่วยกิตที่สรุปพูดถึงแต่ไม่มีอยู่ในตารางเลย
+
+    ตารางคือข้อมูลทั้งหมดที่โมเดลได้เห็น (ดู _summarise) ตัวเลขที่ไม่ได้อยู่ในนั้นจึง
+    เป็นของที่มันแต่งขึ้นเองหรือจำมาจากที่อื่น · ด่านนี้จับ "ตัวเลขที่ไม่มีในตาราง"
+    ไม่ได้จับการสลับเลขระหว่างคอลัมน์ ซึ่งยังเป็นข้อจำกัดที่เหลืออยู่
+    """
+    return _credit_numbers(summary) - {
+        n for row in rows for value in row["values"] for n in _credit_numbers(value)
+    }
+
+
 def _summarise(connector, titles: list[str], rows: list[dict]) -> str:
-    """เขียนสรุปความต่างจากตารางที่สรุปเสร็จแล้ว คืนสตริงว่างถ้าล้ม"""
+    """
+    เขียนสรุปความต่างจากตารางที่สรุปเสร็จแล้ว คืนสตริงว่างถ้าล้มหรือไม่ผ่านด่าน
+
+    **ด่านตรวจตัวเลขหน่วยกิต** — ช่องหน่วยกิตในตารางมาจากค่าที่คนตรวจแล้ว แต่ย่อหน้า
+    สรุปเป็นข้อความที่โมเดลเขียนเอง มันจึงยังพิมพ์ตัวเลขผิดได้ ถ้าสรุปอ้างตัวเลขหน่วยกิต
+    ที่ไม่มีอยู่ในตาราง ให้ทิ้งทั้งย่อหน้า ไม่ใช่แสดงข้ออ้างที่รู้อยู่แล้วว่าไม่มีที่มา
+    (เหตุผลเดียวกับด่านตรวจข้อความอ้างอิงของขั้นเขียนเหตุผลในหน้าแนะนำสาขา)
+
+    หน้าเว็บไม่แสดงย่อหน้าสรุปเมื่อค่าว่าง ตารางซึ่งเป็นข้อมูลที่ตรวจแล้วยังอยู่ครบ
+    """
     lines = []
     for row in rows:
         for title, value in zip(titles, row["values"]):
             lines.append(f"{title} | {row['dimension']}: {value}")
     try:
-        return connector.chat(
+        summary = connector.chat(
             [
                 LLMMessage(role="system", content=COMPARE_SUMMARY_SYSTEM_PROMPT),
                 LLMMessage(role="user", content="ตารางเปรียบเทียบ:\n" + "\n".join(lines)),
@@ -230,3 +266,9 @@ def _summarise(connector, titles: list[str], rows: list[dict]) -> str:
         ).strip()
     except LLMConnectionError:
         return ""
+
+    if (invented := _invents_credits(summary, rows)):
+        logger.warning("ทิ้งย่อหน้าสรุป: อ้างหน่วยกิต %s ซึ่งไม่มีในตาราง — %r",
+                       ", ".join(sorted(invented)), summary[:200])
+        return ""
+    return summary
