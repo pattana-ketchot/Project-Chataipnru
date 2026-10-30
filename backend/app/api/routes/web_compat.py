@@ -33,8 +33,8 @@ from app.api.deps import web_rate_limiter
 from app.db.session import get_db
 from app.services.chat import PriorTurn, stream_answer
 from app.services import ai_settings
-from app.services.llm_client import (chat_model_used, connector_for, embed_model_used,
-                                     reset_chat_model)
+from app.services.llm_client import (chat_model_used, chat_models_used, connector_for,
+                                     embed_model_used, reset_chat_model)
 from app.services.curriculum_facts import LIST_FIELDS
 from app.services.program_compare import compare_programs
 from app.services.program_match import (CHUNKS_PER_COURSE, build_match_query, build_profile_text,
@@ -501,6 +501,12 @@ def career_lists_web(db: Session = Depends(get_db)) -> dict:
 # หน้าเว็บจะได้ไม่ติดป้ายชื่อรุ่นให้ผลที่ไม่ได้มาจากโมเดล
 SCORING_EMBEDDING_RULES = "embedding_and_rules"
 
+# หน้าเปรียบเทียบไม่มีคะแนน แต่ก็ไม่ใช่ข้อมูลดิบจากฐานล้วน ๆ เหมือนกัน — ช่องในตาราง
+# ถูก "สกัด" จากเอกสาร มคอ.2 ด้วยโมเดลทีละหลักสูตร ส่วนค่าเทอมมาจากประกาศของคณะ
+# ซึ่งไม่ผ่านโมเดลเลย · ผู้ใช้ควรรู้ว่าตารางที่เขาอ่านผ่านมือโมเดลมาแล้ว ไม่ใช่ตารางที่
+# พิมพ์อยู่ในเอกสารตรง ๆ
+SCORING_DOCUMENT_EXTRACTION = "document_extraction"
+
 
 def _user_message(exc: Exception) -> str:
     """ข้อความที่ส่งให้ผู้ใช้อ่านเมื่อเรียกโมเดลไม่สำเร็จ — ไม่ใช่ข้อความวินิจฉัยภายใน"""
@@ -510,6 +516,9 @@ def _user_message(exc: Exception) -> str:
 def _engine(explained: bool, scoring: str | None = None, embedded: bool = False) -> dict:
     return {
         "explanation": chat_model_used() if explained else None,
+        # ทุกรุ่นที่เขียนข้อความให้ผลชุดนี้ ไม่ใช่แค่ตัวสุดท้าย — หนึ่งหน้าอาจมาจากหลายรุ่น
+        # เมื่อเจ้าหลักล้มกลางทางแล้วตัวสำรองรับช่วงต่อ
+        "writers": chat_models_used() if explained else [],
         "scoring": scoring,
         # รุ่นที่เทียบความคล้ายให้ผลชุดนี้จริง — ส่งเฉพาะผลที่คะแนนมาจากเวกเตอร์
         # ผลที่ไม่ได้ใช้เวกเตอร์ต้องไม่ได้ป้ายนี้ติดไป
@@ -624,8 +633,9 @@ def _compare_courses(payload: WebCompareRequest, db: Session) -> dict:
         "summary": (result.get("summary") or "") + note,
         "courses": courses,
         "verdict": "ข้อมูลทั้งหมดสรุปจากเอกสารหลักสูตร (มคอ.2) ของแต่ละสาขา ยกเว้นค่าเทอมที่มาจากประกาศของคณะ",
-        # หน้านี้ไม่มีคะแนน มีแต่ข้อความที่โมเดลสรุปจากเอกสาร จึงไม่ส่ง scoring
-        "engine": _engine(explained=True),
+        # หน้านี้ไม่มีคะแนน แต่มีทั้งขั้นค้นเนื้อหาด้วยเวกเตอร์และขั้นสกัดตารางด้วยโมเดล
+        # จึงบอกให้ครบว่าแต่ละขั้นใช้รุ่นไหน (ดู SCORING_DOCUMENT_EXTRACTION)
+        "engine": _engine(explained=True, scoring=SCORING_DOCUMENT_EXTRACTION, embedded=True),
     }
 
 

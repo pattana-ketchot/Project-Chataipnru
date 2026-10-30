@@ -431,10 +431,22 @@ def connector_for(choice: ai_settings.Choice):
 _chat_model_used: ContextVar[tuple[str, str] | None] = ContextVar(
     "chat_model_used", default=None)
 
+# ทุกรุ่นที่ตอบสำเร็จในคำขอนี้ เรียงตามลำดับที่ถูกใช้ครั้งแรก
+#
+# หนึ่งคำขอเรียกโมเดลได้หลายครั้ง — หน้าเปรียบเทียบสกัดตารางทีละหลักสูตรแล้วค่อยสรุป
+# ถ้าเจ้าหลักล้มกลางทาง บางส่วนของหน้าจะมาจากคนละรุ่นกับส่วนที่เหลือ การรายงานแค่
+# ตัวสุดท้ายจึงบอกผู้ใช้ไม่ครบว่าข้อความที่เขาอ่านอยู่มาจากใครบ้าง
+_chat_models_used: ContextVar[tuple[tuple[str, str], ...]] = ContextVar(
+    "chat_models_used", default=())
+
 
 def record_chat_model(provider: str, model: str) -> None:
     """บันทึกว่าใครเพิ่งเขียนข้อความสำเร็จให้คำขอนี้ — เรียกหลังได้ผลลัพธ์เท่านั้น"""
-    _chat_model_used.set((provider or "unknown", model or "?"))
+    pair = (provider or "unknown", model or "?")
+    _chat_model_used.set(pair)
+    seen = _chat_models_used.get()
+    if pair not in seen:
+        _chat_models_used.set(seen + (pair,))
 
 
 def reset_chat_model() -> None:
@@ -444,6 +456,7 @@ def reset_chat_model() -> None:
     ล้างรุ่นที่เทียบความคล้ายด้วย เพราะเป็นจุดเริ่มคำขอจุดเดียวกัน
     """
     _chat_model_used.set(None)
+    _chat_models_used.set(())
     _embed_model_used.set(None)
     reset_answered_model()
 
@@ -475,6 +488,11 @@ def embed_model_used() -> dict | None:
     """{'provider', 'model'} ของการเทียบความคล้ายในคำขอนี้ · None = ไม่ได้ใช้เวกเตอร์"""
     pair = _embed_model_used.get()
     return None if pair is None else {"provider": pair[0], "model": pair[1]}
+
+
+def chat_models_used() -> list[dict]:
+    """ทุกรุ่นที่เขียนข้อความให้คำขอนี้ เรียงตามลำดับที่ถูกใช้ครั้งแรก · ไม่ได้เรียกเลย = []"""
+    return [{"provider": p, "model": m} for p, m in _chat_models_used.get()]
 
 
 def answer_model_label(connector) -> str:

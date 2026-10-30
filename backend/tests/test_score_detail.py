@@ -32,7 +32,7 @@ os.environ.setdefault("GEMINI_API_KEY", "คีย์ปลอมสำหรั
 from llm.connector import LLMConnectionError  # noqa: E402
 
 from app.api.routes.web_compat import (_SCORED_FIELDS, _UNSCORED_FIELDS,  # noqa: E402
-                                       _answer_rows, _engine)
+                                       SCORING_DOCUMENT_EXTRACTION, _answer_rows, _engine)
 from app.services import llm_client, program_match  # noqa: E402
 from app.services.program_match import (CHUNKS_PER_COURSE, _EXCERPT_CHARS,  # noqa: E402
                                         _breakdown_of, _evidence_of, _excerpt, _to_percent,
@@ -298,6 +298,65 @@ class EmbeddingLabelTests(_ScoreDetailBase):
         llm_client._SplitConnector(_FakeConnector(), _FakeConnector()).embed("ทดสอบ")
         llm_client.reset_chat_model()
         self.assertIsNone(llm_client.embed_model_used())
+
+
+class WritersTests(_ScoreDetailBase):
+    """หนึ่งคำขอเรียกโมเดลหลายครั้ง (หน้าเปรียบเทียบสกัดตารางทีละสาขาแล้วค่อยสรุป)"""
+
+    def test_รุ่นเดียวตอบทั้งคำขอ_รายงานตัวเดียว(self):
+        split = llm_client._SplitConnector(_FakeConnector(), _FakeConnector())
+        split.chat([])
+        split.chat([])
+        self.assertEqual(llm_client.chat_models_used(),
+                         [{"provider": "gemini", "model": "gemini-3.5-flash-lite"}])
+
+    def test_เจ้าหลักล้มกลางทาง_ต้องรายงานทั้งสองรุ่น(self):
+        """ครึ่งหนึ่งของหน้ามาจากคนละรุ่น การบอกแค่ตัวสุดท้ายคือการบอกไม่ครบ"""
+        gemini = _FakeConnector()
+        local = _FakeConnector()
+        local.chat_model = "qwen2.5:3b"
+        split = llm_client._SplitConnector(local, gemini)
+        split.chat([])                    # เจ้าหลักตอบ
+        gemini.chat_fails = True
+        split.chat([])                    # เจ้าหลักล้ม ตัวสำรองรับช่วง
+        self.assertEqual(llm_client.chat_models_used(), [
+            {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
+            {"provider": "ollama", "model": "qwen2.5:3b"},
+        ])
+        # ช่องเดิมยังบอกตัวล่าสุดเหมือนเดิม ไม่เปลี่ยนความหมาย
+        self.assertEqual(llm_client.chat_model_used(),
+                         {"provider": "ollama", "model": "qwen2.5:3b"})
+
+    def test_ไม่ได้เรียกโมเดลเลย_รายการว่างและไม่ติดป้าย(self):
+        engine = _engine(explained=True, scoring=SCORING_DOCUMENT_EXTRACTION, embedded=True)
+        self.assertEqual(engine["writers"], [])
+        self.assertIsNone(engine["explanation"])
+
+    def test_ผลที่ไม่ได้ใช้ข้อความของโมเดล_ต้องไม่มีรายชื่อผู้เขียน(self):
+        llm_client._SplitConnector(_FakeConnector(), _FakeConnector()).chat([])
+        self.assertEqual(_engine(explained=False)["writers"], [])
+
+    def test_หน้าเปรียบเทียบบอกครบทั้งขั้นค้นและขั้นเขียน(self):
+        split = llm_client._SplitConnector(_FakeConnector(), _FakeConnector())
+        split.embed("หัวข้อที่ใช้ค้น")
+        split.chat([])
+        engine = _engine(explained=True, scoring=SCORING_DOCUMENT_EXTRACTION, embedded=True)
+        self.assertEqual(engine["embedding"], {"provider": "ollama", "model": "bge-m3"})
+        self.assertEqual(engine["scoring"], SCORING_DOCUMENT_EXTRACTION)
+        self.assertEqual(engine["writers"],
+                         [{"provider": "gemini", "model": "gemini-3.5-flash-lite"}])
+        self.assertEqual(set(engine), {"explanation", "writers", "scoring", "embedding"})
+
+    def test_รายชื่อผู้เขียนไม่รั่วข้ามคำขอ(self):
+        from contextvars import copy_context
+
+        def one():
+            llm_client.reset_chat_model()
+            llm_client._SplitConnector(_FakeConnector(), _FakeConnector()).chat([])
+            return llm_client.chat_models_used()
+
+        self.assertEqual(len(copy_context().run(one)), 1)
+        self.assertEqual(llm_client.chat_models_used(), [])
 
 
 if __name__ == "__main__":

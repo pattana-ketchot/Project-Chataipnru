@@ -184,16 +184,19 @@ class ResultModelLabelTests(unittest.TestCase):
 
     def test_ไม่มีคีย์หรือข้อมูลการเชื่อมต่อหลุดไปกับผล(self):
         """
-        เกณฑ์ข้อนี้ถูกแก้เมื่อ 29 ต.ค. 2569 — เพิ่ม "embedding" เข้าไปในชุดคีย์ที่ยอมรับ
+        เกณฑ์ข้อนี้ถูกแก้สองครั้งเมื่อ 29-30 ต.ค. 2569 — เพิ่ม "embedding" แล้วตามด้วย
+        "writers" เข้าไปในชุดคีย์ที่ยอมรับ
 
-        ของใหม่คือป้ายชื่อรุ่นที่เทียบความคล้าย (ดู test_score_detail.py) ซึ่งเป็นชื่อรุ่น
-        เหมือนอีกสองช่อง ไม่ใช่คีย์หรือข้อมูลการเชื่อมต่อ · ข้อตรวจเดิมที่ว่า "ไม่มีช่อง
-        อื่นหลุดออกไป" ยังอยู่ครบ เพราะยังเทียบชุดคีย์แบบตรงตัวทั้งชั้นนอกและชั้นใน
+        ทั้งสองช่องคือชื่อผู้ให้บริการกับชื่อรุ่น เหมือนช่อง explanation ที่มีอยู่เดิม
+        ไม่ใช่คีย์หรือข้อมูลการเชื่อมต่อ (writers คือรายชื่อทุกรุ่นที่เขียนข้อความให้คำขอนี้
+        ซึ่งมีได้มากกว่าหนึ่งเมื่อเจ้าหลักล้มกลางทาง ดู test_score_detail.py) · ข้อตรวจเดิม
+        ที่ว่า "ไม่มีช่องอื่นหลุดออกไป" ยังอยู่ครบ เพราะยังเทียบชุดคีย์แบบตรงตัวทุกชั้น
         """
         llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash")).chat([])
         engine = _engine(explained=True, scoring="embedding_and_rules")
-        self.assertEqual(set(engine), {"explanation", "scoring", "embedding"})
+        self.assertEqual(set(engine), {"explanation", "writers", "scoring", "embedding"})
         self.assertEqual(set(engine["explanation"]), {"provider", "model"})
+        self.assertEqual([set(w) for w in engine["writers"]], [{"provider", "model"}])
 
 
 if __name__ == "__main__":
