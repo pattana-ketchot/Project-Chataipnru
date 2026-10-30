@@ -429,6 +429,13 @@ def course_facts_web(title: str, db: Session = Depends(get_db)) -> dict:
     out = {**program_facts(course.title), **about}
     if (docs := _course_documents(db, course.id)):
         out["documents"] = docs
+    # ฉบับของหลักสูตรที่ข้อมูลชุดนี้มาจาก — ส่งแยกเป็นช่องของตัวเอง ไม่ให้หน้าเว็บ
+    # ต้องไปแกะปีออกจากชื่อเล่มเอง (ซึ่งจะกลายเป็นกฎการแกะชื่อที่กระจายอยู่สองที่)
+    #
+    # edition_title คือชื่อเล่มเต็มตามคลังเอกสาร ใช้เป็น "แหล่งอ้างอิง" ที่ผู้ใช้ตรวจต่อได้
+    out["edition_title"] = course.title
+    if (year := _EDITION_IN_TITLE.search(course.title or "")):
+        out["edition_year"] = year.group(1)
     return out
 
 
