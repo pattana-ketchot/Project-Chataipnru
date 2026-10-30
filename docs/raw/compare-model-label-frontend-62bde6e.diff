@@ -1,0 +1,102 @@
+commit 62bde6ed1d62d38ba60efe7f98eebe50b9b8d23b
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 11:13:14 2026 +0700
+
+    feat(web): แสดงโมเดลที่ใช้ในหน้าเปรียบเทียบให้เห็นชัด
+    
+    ผู้ใช้ถามหาว่าหน้านี้ใช้โมเดลไหนวิเคราะห์ ทั้งที่บรรทัด "คำอธิบายโดย" อยู่บนหน้าแล้ว
+    — มันเป็นตัวอักษรจาง ๆ ใต้ย่อหน้าสรุป และบอกแค่ขั้นเขียนข้อความขั้นเดียว
+    
+      * ย้ายเข้ากล่องมีหัวข้อ "โมเดลที่ใช้ในหน้านี้" แทนบรรทัดลอย
+      * เพิ่มบรรทัดรุ่นที่ใช้ค้นเนื้อหาในเอกสาร และบรรทัดบอกว่าช่องในตารางสกัดด้วย
+        โมเดลภาษา ส่วนค่าเทอมมาจากประกาศของคณะ ไม่ผ่านโมเดล
+      * ชื่อเรียกโมเดลเวกเตอร์เปลี่ยนตามงานที่มันทำจริงในหน้านั้น — หน้าแนะนำสาขา
+        ใช้มันให้คะแนน หน้าเปรียบเทียบใช้มันค้นเนื้อหา
+      * ถ้าหลังบ้านบอกว่ามีหลายรุ่นเขียนข้อความในคำขอเดียว (เจ้าหลักล้มกลางทาง)
+        แสดงให้ครบทุกตัว ไม่ใช่เลือกมาตัวเดียว
+    
+    ชื่อรุ่นยังมาจากหลังบ้านเท่านั้นเหมือนเดิม ไม่มีชื่อรุ่นใดเขียนไว้ในหน้าเว็บ
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/src/components/EngineNote.jsx b/src/components/EngineNote.jsx
+index 3d4d719..a9c887f 100644
+--- a/src/components/EngineNote.jsx
++++ b/src/components/EngineNote.jsx
+@@ -10,9 +10,22 @@ const PROVIDER_LABEL = { gemini: 'Gemini', ollama: 'โมเดลในเค
+ 
+ const SCORING_TEXT = {
+   embedding_and_rules:
+-    'คะแนนคำนวณด้วยสูตรและเกณฑ์ของระบบ จากความใกล้เคียงระหว่างคำตอบของคุณกับเนื้อหาในเอกสารหลักสูตร'
++    'คะแนนคำนวณด้วยสูตรและเกณฑ์ของระบบ จากความใกล้เคียงระหว่างคำตอบของคุณกับเนื้อหาในเอกสารหลักสูตร',
++  document_extraction:
++    'ข้อมูลในตารางสกัดจากเอกสาร มคอ.2 ของแต่ละสาขาด้วยโมเดลภาษา ทีละสาขาแยกกัน ส่วนค่าเทอมมาจากประกาศของคณะ ไม่ผ่านโมเดล'
+ }
+ 
++// โมเดลเวกเตอร์ทำคนละหน้าที่กันในแต่ละหน้า จึงเรียกชื่อให้ตรงกับงานที่มันทำจริง
++// หน้าแนะนำสาขาใช้มัน "ให้คะแนน" ส่วนหน้าเปรียบเทียบใช้มัน "หาเนื้อหาที่เกี่ยวข้อง"
++const EMBED_LABEL = {
++  embedding_and_rules: 'โมเดลเทียบความคล้าย',
++  document_extraction: 'โมเดลค้นหาเนื้อหาในเอกสาร'
++}
++
++const modelName = (used) => (used.model && used.model !== '?' ? used.model : 'ไม่มีข้อมูลรุ่น')
++const providerName = (used) =>
++  PROVIDER_LABEL[used.provider] || used.provider || 'ผู้ให้บริการที่ไม่ทราบชื่อ'
++
+ export const engineLines = (engine) => {
+   if (!engine) return []
+   const lines = []
+@@ -22,18 +35,26 @@ export const engineLines = (engine) => {
+   // รุ่นที่เทียบความคล้าย — คนละตัวกับรุ่นที่เขียนข้อความ และหลังบ้านส่งมาเฉพาะผลที่
+   // คะแนนมาจากเวกเตอร์จริง ผลที่ไม่ได้ใช้เวกเตอร์จะไม่มีบรรทัดนี้
+   if (embedding) {
+-    const provider = PROVIDER_LABEL[embedding.provider] || embedding.provider || 'ผู้ให้บริการที่ไม่ทราบชื่อ'
+-    const model = embedding.model && embedding.model !== '?' ? embedding.model : 'ไม่มีข้อมูลรุ่น'
+-    lines.push(`โมเดลเทียบความคล้าย: ${model} · ${provider}`)
++    const what = EMBED_LABEL[engine.scoring] || 'โมเดลแปลงข้อความเป็นเวกเตอร์'
++    lines.push(`${what}: ${modelName(embedding)} · ${providerName(embedding)}`)
+   }
+ 
+   if (engine.scoring && SCORING_TEXT[engine.scoring]) lines.push(SCORING_TEXT[engine.scoring])
+ 
+   if (used) {
+-    const provider = PROVIDER_LABEL[used.provider] || used.provider || 'ผู้ให้บริการที่ไม่ทราบชื่อ'
+     // รุ่นที่หลังบ้านบอกว่าไม่รู้ ("?" หรือว่าง) ต้องไม่ถูกเติมด้วยค่าตั้งต้นของหน้าเว็บ
+-    const model = used.model && used.model !== '?' ? used.model : 'ไม่มีข้อมูลรุ่น'
+-    lines.push(`คำอธิบายโดย: ${provider} · ${model}`)
++    //
++    // หนึ่งหน้าอาจมาจากหลายรุ่นเมื่อเจ้าหลักล้มกลางทาง — หลังบ้านส่งมาครบใน writers
++    // ถ้ามีมากกว่าหนึ่ง ต้องบอกให้ครบ ไม่ใช่เลือกมาตัวเดียวแล้วให้ดูเหมือนทั้งหน้ามาจากตัวนั้น
++    const writers = Array.isArray(engine.writers) ? engine.writers : []
++    if (writers.length > 1) {
++      lines.push(
++        'ข้อความในหน้านี้เขียนโดย: ' +
++          writers.map((w) => `${providerName(w)} · ${modelName(w)}`).join(' และ ')
++      )
++    } else {
++      lines.push(`คำอธิบายโดย: ${providerName(used)} · ${modelName(used)}`)
++    }
+   } else {
+     // ไม่ได้ใช้ข้อความจากโมเดลเลย — ต้องบอกตามจริง ห้ามติดป้ายชื่อรุ่นแทน
+     lines.push('ไม่ได้ใช้ข้อความจาก AI ในผลชุดนี้ · ประมวลผลจากข้อมูลและเกณฑ์ของระบบ')
+diff --git a/src/pages/CompareResult.jsx b/src/pages/CompareResult.jsx
+index 8766858..3ae819c 100644
+--- a/src/pages/CompareResult.jsx
++++ b/src/pages/CompareResult.jsx
+@@ -204,8 +204,13 @@ const CompareResult = () => {
+                 {aiResult.summary && (
+                   <p className="text-sm lg:text-base text-gray-700 leading-relaxed">{aiResult.summary}</p>
+                 )}
+-                {/* ใครเขียนข้อความเปรียบเทียบชุดนี้ — ค่ามาจากหลังบ้าน ไม่ใช่ค่าที่ตั้งไว้ที่นี่ */}
+-                <EngineNote engine={aiResult.engine} className="-mt-2" />
++                {/* โมเดลที่ทำงานให้หน้านี้จริง — ค่าทั้งหมดมาจากหลังบ้าน ไม่ใช่ค่าที่ตั้งไว้ที่นี่
++                    วางเป็นกล่องมีหัวข้อ ไม่ใช่บรรทัดจาง ๆ ใต้ข้อความ เพราะผู้ใช้ถามหาว่า
++                    "ใช้โมเดลไหนวิเคราะห์" แล้วหาไม่เจอทั้งที่บรรทัดนั้นอยู่บนหน้าแล้ว */}
++                <div className="-mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
++                  <p className="mb-1 text-xs font-semibold text-gray-700">โมเดลที่ใช้ในหน้านี้</p>
++                  <EngineNote engine={aiResult.engine} />
++                </div>
+ 
+                 {Array.isArray(aiResult.courses) && aiResult.courses.length > 0 && (
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

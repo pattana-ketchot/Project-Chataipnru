@@ -1,0 +1,233 @@
+commit cc1120045908efc70e25b5efe8bf21035059876f
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 11:13:02 2026 +0700
+
+    feat(web): บอกให้ครบว่าหน้าเปรียบเทียบใช้โมเดลไหนทำอะไรบ้าง
+    
+    หน้าเปรียบเทียบเคยส่งมาแค่ชื่อรุ่นที่เขียนข้อความสรุป ผู้ใช้จึงยังไม่รู้ว่าตารางที่เขา
+    อ่านอยู่มาจากไหน ทั้งที่มันผ่านมือโมเดลมาแล้วสองขั้น
+    
+      * ขั้นค้น  — แปลงหัวข้อเป็นเวกเตอร์เพื่อหาเนื้อหาที่เกี่ยวข้องในแต่ละเล่ม
+      * ขั้นสกัด — ให้โมเดลภาษาอ่านเนื้อหานั้นแล้วเติมช่องในตาราง ทีละหลักสูตรแยกกัน
+      * ค่าเทอม  — มาจากประกาศของคณะ ไม่ผ่านโมเดลเลย
+    
+    จึงส่ง engine.embedding และ scoring = document_extraction ของหน้านี้ไปด้วย
+    (ค่าเดิมคือไม่ส่งเลย หน้าเว็บจึงไม่มีอะไรให้แสดง)
+    
+    และเพิ่ม engine.writers = ทุกรุ่นที่เขียนข้อความสำเร็จในคำขอนี้ ไม่ใช่แค่ตัวสุดท้าย
+    หนึ่งคำขอของหน้านี้เรียกโมเดลหลายครั้ง ถ้าเจ้าหลักล้มกลางทางแล้วตัวสำรองรับช่วงต่อ
+    ครึ่งหนึ่งของหน้าจะมาจากคนละรุ่น การรายงานแค่ตัวสุดท้ายคือการบอกไม่ครบ
+    เก็บใน ContextVar ต่อคำขอเหมือนช่องเดิม ไม่ได้เก็บบน connector ที่ใช้ร่วมกัน
+    
+    ไม่แตะนโยบายเลือกโมเดล ไม่เพิ่มการเรียกโมเดล และไม่เปลี่ยนเนื้อหาที่แสดง
+    ชุดทดสอบเพิ่มหกข้อใน test_score_detail (24 ข้อ) · ข้อตรวจชุดคีย์ของ engine ใน
+    test_result_model_label ถูกแก้ให้รับ writers เพิ่ม (เหตุผลอยู่ใน docstring)
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index 0d60d42..32b1ea5 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -33,8 +33,8 @@ from app.api.deps import web_rate_limiter
+ from app.db.session import get_db
+ from app.services.chat import PriorTurn, stream_answer
+ from app.services import ai_settings
+-from app.services.llm_client import (chat_model_used, connector_for, embed_model_used,
+-                                     reset_chat_model)
++from app.services.llm_client import (chat_model_used, chat_models_used, connector_for,
++                                     embed_model_used, reset_chat_model)
+ from app.services.curriculum_facts import LIST_FIELDS
+ from app.services.program_compare import compare_programs
+ from app.services.program_match import (CHUNKS_PER_COURSE, build_match_query, build_profile_text,
+@@ -501,6 +501,12 @@ def career_lists_web(db: Session = Depends(get_db)) -> dict:
+ # หน้าเว็บจะได้ไม่ติดป้ายชื่อรุ่นให้ผลที่ไม่ได้มาจากโมเดล
+ SCORING_EMBEDDING_RULES = "embedding_and_rules"
+ 
++# หน้าเปรียบเทียบไม่มีคะแนน แต่ก็ไม่ใช่ข้อมูลดิบจากฐานล้วน ๆ เหมือนกัน — ช่องในตาราง
++# ถูก "สกัด" จากเอกสาร มคอ.2 ด้วยโมเดลทีละหลักสูตร ส่วนค่าเทอมมาจากประกาศของคณะ
++# ซึ่งไม่ผ่านโมเดลเลย · ผู้ใช้ควรรู้ว่าตารางที่เขาอ่านผ่านมือโมเดลมาแล้ว ไม่ใช่ตารางที่
++# พิมพ์อยู่ในเอกสารตรง ๆ
++SCORING_DOCUMENT_EXTRACTION = "document_extraction"
++
+ 
+ def _user_message(exc: Exception) -> str:
+     """ข้อความที่ส่งให้ผู้ใช้อ่านเมื่อเรียกโมเดลไม่สำเร็จ — ไม่ใช่ข้อความวินิจฉัยภายใน"""
+@@ -510,6 +516,9 @@ def _user_message(exc: Exception) -> str:
+ def _engine(explained: bool, scoring: str | None = None, embedded: bool = False) -> dict:
+     return {
+         "explanation": chat_model_used() if explained else None,
++        # ทุกรุ่นที่เขียนข้อความให้ผลชุดนี้ ไม่ใช่แค่ตัวสุดท้าย — หนึ่งหน้าอาจมาจากหลายรุ่น
++        # เมื่อเจ้าหลักล้มกลางทางแล้วตัวสำรองรับช่วงต่อ
++        "writers": chat_models_used() if explained else [],
+         "scoring": scoring,
+         # รุ่นที่เทียบความคล้ายให้ผลชุดนี้จริง — ส่งเฉพาะผลที่คะแนนมาจากเวกเตอร์
+         # ผลที่ไม่ได้ใช้เวกเตอร์ต้องไม่ได้ป้ายนี้ติดไป
+@@ -624,8 +633,9 @@ def _compare_courses(payload: WebCompareRequest, db: Session) -> dict:
+         "summary": (result.get("summary") or "") + note,
+         "courses": courses,
+         "verdict": "ข้อมูลทั้งหมดสรุปจากเอกสารหลักสูตร (มคอ.2) ของแต่ละสาขา ยกเว้นค่าเทอมที่มาจากประกาศของคณะ",
+-        # หน้านี้ไม่มีคะแนน มีแต่ข้อความที่โมเดลสรุปจากเอกสาร จึงไม่ส่ง scoring
+-        "engine": _engine(explained=True),
++        # หน้านี้ไม่มีคะแนน แต่มีทั้งขั้นค้นเนื้อหาด้วยเวกเตอร์และขั้นสกัดตารางด้วยโมเดล
++        # จึงบอกให้ครบว่าแต่ละขั้นใช้รุ่นไหน (ดู SCORING_DOCUMENT_EXTRACTION)
++        "engine": _engine(explained=True, scoring=SCORING_DOCUMENT_EXTRACTION, embedded=True),
+     }
+ 
+ 
+diff --git a/backend/app/services/llm_client.py b/backend/app/services/llm_client.py
+index c1e7da7..b46bb06 100644
+--- a/backend/app/services/llm_client.py
++++ b/backend/app/services/llm_client.py
+@@ -431,10 +431,22 @@ def connector_for(choice: ai_settings.Choice):
+ _chat_model_used: ContextVar[tuple[str, str] | None] = ContextVar(
+     "chat_model_used", default=None)
+ 
++# ทุกรุ่นที่ตอบสำเร็จในคำขอนี้ เรียงตามลำดับที่ถูกใช้ครั้งแรก
++#
++# หนึ่งคำขอเรียกโมเดลได้หลายครั้ง — หน้าเปรียบเทียบสกัดตารางทีละหลักสูตรแล้วค่อยสรุป
++# ถ้าเจ้าหลักล้มกลางทาง บางส่วนของหน้าจะมาจากคนละรุ่นกับส่วนที่เหลือ การรายงานแค่
++# ตัวสุดท้ายจึงบอกผู้ใช้ไม่ครบว่าข้อความที่เขาอ่านอยู่มาจากใครบ้าง
++_chat_models_used: ContextVar[tuple[tuple[str, str], ...]] = ContextVar(
++    "chat_models_used", default=())
++
+ 
+ def record_chat_model(provider: str, model: str) -> None:
+     """บันทึกว่าใครเพิ่งเขียนข้อความสำเร็จให้คำขอนี้ — เรียกหลังได้ผลลัพธ์เท่านั้น"""
+-    _chat_model_used.set((provider or "unknown", model or "?"))
++    pair = (provider or "unknown", model or "?")
++    _chat_model_used.set(pair)
++    seen = _chat_models_used.get()
++    if pair not in seen:
++        _chat_models_used.set(seen + (pair,))
+ 
+ 
+ def reset_chat_model() -> None:
+@@ -444,6 +456,7 @@ def reset_chat_model() -> None:
+     ล้างรุ่นที่เทียบความคล้ายด้วย เพราะเป็นจุดเริ่มคำขอจุดเดียวกัน
+     """
+     _chat_model_used.set(None)
++    _chat_models_used.set(())
+     _embed_model_used.set(None)
+     reset_answered_model()
+ 
+@@ -477,6 +490,11 @@ def embed_model_used() -> dict | None:
+     return None if pair is None else {"provider": pair[0], "model": pair[1]}
+ 
+ 
++def chat_models_used() -> list[dict]:
++    """ทุกรุ่นที่เขียนข้อความให้คำขอนี้ เรียงตามลำดับที่ถูกใช้ครั้งแรก · ไม่ได้เรียกเลย = []"""
++    return [{"provider": p, "model": m} for p, m in _chat_models_used.get()]
++
++
+ def answer_model_label(connector) -> str:
+     """
+     ชื่อผู้ให้บริการและรุ่นที่ถูก "สั่งให้เขียน" คำตอบของคำขอนี้
+diff --git a/backend/tests/test_result_model_label.py b/backend/tests/test_result_model_label.py
+index b0398fa..15d57cb 100644
+--- a/backend/tests/test_result_model_label.py
++++ b/backend/tests/test_result_model_label.py
+@@ -184,16 +184,19 @@ class ResultModelLabelTests(unittest.TestCase):
+ 
+     def test_ไม่มีคีย์หรือข้อมูลการเชื่อมต่อหลุดไปกับผล(self):
+         """
+-        เกณฑ์ข้อนี้ถูกแก้เมื่อ 29 ต.ค. 2569 — เพิ่ม "embedding" เข้าไปในชุดคีย์ที่ยอมรับ
++        เกณฑ์ข้อนี้ถูกแก้สองครั้งเมื่อ 29-30 ต.ค. 2569 — เพิ่ม "embedding" แล้วตามด้วย
++        "writers" เข้าไปในชุดคีย์ที่ยอมรับ
+ 
+-        ของใหม่คือป้ายชื่อรุ่นที่เทียบความคล้าย (ดู test_score_detail.py) ซึ่งเป็นชื่อรุ่น
+-        เหมือนอีกสองช่อง ไม่ใช่คีย์หรือข้อมูลการเชื่อมต่อ · ข้อตรวจเดิมที่ว่า "ไม่มีช่อง
+-        อื่นหลุดออกไป" ยังอยู่ครบ เพราะยังเทียบชุดคีย์แบบตรงตัวทั้งชั้นนอกและชั้นใน
++        ทั้งสองช่องคือชื่อผู้ให้บริการกับชื่อรุ่น เหมือนช่อง explanation ที่มีอยู่เดิม
++        ไม่ใช่คีย์หรือข้อมูลการเชื่อมต่อ (writers คือรายชื่อทุกรุ่นที่เขียนข้อความให้คำขอนี้
++        ซึ่งมีได้มากกว่าหนึ่งเมื่อเจ้าหลักล้มกลางทาง ดู test_score_detail.py) · ข้อตรวจเดิม
++        ที่ว่า "ไม่มีช่องอื่นหลุดออกไป" ยังอยู่ครบ เพราะยังเทียบชุดคีย์แบบตรงตัวทุกชั้น
+         """
+         llm_client._SplitConnector(_Fake("bge-m3"), _Fake("gemini-3.5-flash")).chat([])
+         engine = _engine(explained=True, scoring="embedding_and_rules")
+-        self.assertEqual(set(engine), {"explanation", "scoring", "embedding"})
++        self.assertEqual(set(engine), {"explanation", "writers", "scoring", "embedding"})
+         self.assertEqual(set(engine["explanation"]), {"provider", "model"})
++        self.assertEqual([set(w) for w in engine["writers"]], [{"provider", "model"}])
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/backend/tests/test_score_detail.py b/backend/tests/test_score_detail.py
+index 9f503f2..f781093 100644
+--- a/backend/tests/test_score_detail.py
++++ b/backend/tests/test_score_detail.py
+@@ -32,7 +32,7 @@ os.environ.setdefault("GEMINI_API_KEY", "คีย์ปลอมสำหรั
+ from llm.connector import LLMConnectionError  # noqa: E402
+ 
+ from app.api.routes.web_compat import (_SCORED_FIELDS, _UNSCORED_FIELDS,  # noqa: E402
+-                                       _answer_rows, _engine)
++                                       SCORING_DOCUMENT_EXTRACTION, _answer_rows, _engine)
+ from app.services import llm_client, program_match  # noqa: E402
+ from app.services.program_match import (CHUNKS_PER_COURSE, _EXCERPT_CHARS,  # noqa: E402
+                                         _breakdown_of, _evidence_of, _excerpt, _to_percent,
+@@ -300,6 +300,65 @@ class EmbeddingLabelTests(_ScoreDetailBase):
+         self.assertIsNone(llm_client.embed_model_used())
+ 
+ 
++class WritersTests(_ScoreDetailBase):
++    """หนึ่งคำขอเรียกโมเดลหลายครั้ง (หน้าเปรียบเทียบสกัดตารางทีละสาขาแล้วค่อยสรุป)"""
++
++    def test_รุ่นเดียวตอบทั้งคำขอ_รายงานตัวเดียว(self):
++        split = llm_client._SplitConnector(_FakeConnector(), _FakeConnector())
++        split.chat([])
++        split.chat([])
++        self.assertEqual(llm_client.chat_models_used(),
++                         [{"provider": "gemini", "model": "gemini-3.5-flash-lite"}])
++
++    def test_เจ้าหลักล้มกลางทาง_ต้องรายงานทั้งสองรุ่น(self):
++        """ครึ่งหนึ่งของหน้ามาจากคนละรุ่น การบอกแค่ตัวสุดท้ายคือการบอกไม่ครบ"""
++        gemini = _FakeConnector()
++        local = _FakeConnector()
++        local.chat_model = "qwen2.5:3b"
++        split = llm_client._SplitConnector(local, gemini)
++        split.chat([])                    # เจ้าหลักตอบ
++        gemini.chat_fails = True
++        split.chat([])                    # เจ้าหลักล้ม ตัวสำรองรับช่วง
++        self.assertEqual(llm_client.chat_models_used(), [
++            {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
++            {"provider": "ollama", "model": "qwen2.5:3b"},
++        ])
++        # ช่องเดิมยังบอกตัวล่าสุดเหมือนเดิม ไม่เปลี่ยนความหมาย
++        self.assertEqual(llm_client.chat_model_used(),
++                         {"provider": "ollama", "model": "qwen2.5:3b"})
++
++    def test_ไม่ได้เรียกโมเดลเลย_รายการว่างและไม่ติดป้าย(self):
++        engine = _engine(explained=True, scoring=SCORING_DOCUMENT_EXTRACTION, embedded=True)
++        self.assertEqual(engine["writers"], [])
++        self.assertIsNone(engine["explanation"])
++
++    def test_ผลที่ไม่ได้ใช้ข้อความของโมเดล_ต้องไม่มีรายชื่อผู้เขียน(self):
++        llm_client._SplitConnector(_FakeConnector(), _FakeConnector()).chat([])
++        self.assertEqual(_engine(explained=False)["writers"], [])
++
++    def test_หน้าเปรียบเทียบบอกครบทั้งขั้นค้นและขั้นเขียน(self):
++        split = llm_client._SplitConnector(_FakeConnector(), _FakeConnector())
++        split.embed("หัวข้อที่ใช้ค้น")
++        split.chat([])
++        engine = _engine(explained=True, scoring=SCORING_DOCUMENT_EXTRACTION, embedded=True)
++        self.assertEqual(engine["embedding"], {"provider": "ollama", "model": "bge-m3"})
++        self.assertEqual(engine["scoring"], SCORING_DOCUMENT_EXTRACTION)
++        self.assertEqual(engine["writers"],
++                         [{"provider": "gemini", "model": "gemini-3.5-flash-lite"}])
++        self.assertEqual(set(engine), {"explanation", "writers", "scoring", "embedding"})
++
++    def test_รายชื่อผู้เขียนไม่รั่วข้ามคำขอ(self):
++        from contextvars import copy_context
++
++        def one():
++            llm_client.reset_chat_model()
++            llm_client._SplitConnector(_FakeConnector(), _FakeConnector()).chat([])
++            return llm_client.chat_models_used()
++
++        self.assertEqual(len(copy_context().run(one)), 1)
++        self.assertEqual(llm_client.chat_models_used(), [])
++
++
+ if __name__ == "__main__":
+     run = unittest.main(verbosity=2, exit=False)
+     raise SystemExit(0 if run.result.wasSuccessful() else 1)
