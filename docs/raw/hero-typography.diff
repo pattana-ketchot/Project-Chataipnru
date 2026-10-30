@@ -1,40 +1,46 @@
-commit 323c6cd5a3d9ee157bc5f6a5d115c44bc0785deb
-Author: popoza11874 <zxcvbngunzapan@gmail.com>
-Date:   Fri Oct 30 14:40:59 2026 +0700
-
-    style(hero): ลดน้ำหนักหัวข้อ คุมระยะบรรทัดไทย และทำให้แผ่นรองข้อความทำงานจริง
-    
-    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
-
 diff --git a/src/components/Hero.jsx b/src/components/Hero.jsx
-index 08d42a9..24d85c3 100644
+index 08d42a9..9306e5d 100644
 --- a/src/components/Hero.jsx
 +++ b/src/components/Hero.jsx
-@@ -48,34 +48,37 @@ const Hero = () => {
+@@ -45,37 +45,46 @@ const Hero = () => {
+         />
+       </div>
+ 
++      {/* ม่านสีไล่ระดับคลุมโซนข้อความทั้งแถบ ให้ตัวอักษรนั่งอยู่บนพื้นเรียบที่ไล่จางเข้าหาภาพ
++          แทนแผ่นสี่เหลี่ยมมนที่ดูเป็นกล่องลอยทับรูป — จอแคบไล่จากบนลงล่าง (ข้อความอยู่ครึ่งบน)
++          จอกว้างไล่จากซ้ายไปขวา (ข้อความอยู่ครึ่งซ้าย) ค่าหยุดเลือกให้ยังทึบอยู่จนพ้นขอบข้อความ */}
++      <div
++        className="hero-scrim absolute inset-0 pointer-events-none xl:hidden"
++        style={{
++          background:
++            'linear-gradient(to bottom, rgba(250,247,242,0.96) 0%, rgba(250,247,242,0.94) 46%, rgba(250,247,242,0.60) 68%, rgba(250,247,242,0) 88%)',
++        }}
++      />
++      <div
++        className="hero-scrim absolute inset-0 pointer-events-none hidden xl:block"
++        style={{
++          background:
++            'linear-gradient(to right, rgba(250,247,242,0.96) 0%, rgba(250,247,242,0.94) 46%, rgba(250,247,242,0.55) 62%, rgba(250,247,242,0) 78%)',
++        }}
++      />
++
        {/* Content Layer - Text and Buttons */}
        <div className="hero-content relative mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-10 sm:pt-12 md:pt-16 lg:pt-20 max-w-[1920px]">
          <div className="hero-content-inner max-w-2xl relative">
 -          {/* Backdrop panel behind the text so it reads clearly instead of looking layered on top of the photo */}
-+          {/* แผ่นรองหลังข้อความ ให้ตัวหนังสืออ่านออกแม้ทับลายภาพ
-+              เดิมแผ่นนี้เป็น -z-10 ซึ่งดันมันไปอยู่หลังรูป Hero (รูปเป็น absolute z auto)
-+              จึงมองไม่เห็นและไม่ช่วยอะไรเลย — เอา -z-10 ออก แล้วให้กล่องข้อความเป็น relative
-+              เพื่อให้ข้อความทับแผ่นนี้ตามลำดับใน DOM */}
-           <div
+-          <div
 -            className="absolute inset-0 -z-10 bg-cream/80 backdrop-blur-lg rounded-3xl"
-+            className="absolute inset-0 bg-cream/75 backdrop-blur-md rounded-3xl"
-             style={{
+-            style={{
 -              maskImage: 'radial-gradient(ellipse at center, black 55%, transparent 100%)',
 -              WebkitMaskImage: 'radial-gradient(ellipse at center, black 55%, transparent 100%)',
-+              maskImage: 'radial-gradient(ellipse at center, black 60%, transparent 100%)',
-+              WebkitMaskImage: 'radial-gradient(ellipse at center, black 60%, transparent 100%)',
-             }}
-           />
- 
+-            }}
+-          />
+-
 -          <div className="p-4 sm:p-6 md:p-8 lg:p-10">
 +          <div className="relative p-4 sm:p-6 md:p-8 lg:p-10">
              {/* Subtitle */}
 -            <p className="hero-subtitle hero-anim-subtitle text-primary font-medium text-sm sm:text-base md:text-lg lg:text-xl mb-3 sm:mb-4 lg:mb-6">
-+            <p className="hero-subtitle hero-anim-subtitle text-primary font-medium tracking-wide text-sm sm:text-base md:text-lg mb-3 sm:mb-4 lg:mb-5">
++            <p className="hero-subtitle hero-anim-subtitle text-primary font-semibold uppercase tracking-[0.18em] text-[11px] sm:text-xs md:text-sm mb-3 sm:mb-4 lg:mb-5">
                Phranakhon Rajabhat University
              </p>
  
@@ -53,16 +59,25 @@ index 08d42a9..24d85c3 100644
              {/* Description */}
 -            <p className="hero-description hero-anim-description text-gray-800 text-sm sm:text-base md:text-lg lg:text-xl mb-6 sm:mb-8 lg:mb-10 leading-relaxed">
 -              ตอบแบบสอบถามสั้น ๆ เพื่อค้นหาสาขาที่เหมาะกับความถนัด<br />
-+            <p className="hero-description hero-anim-description text-gray-800 text-[15px] sm:text-base md:text-lg mb-6 sm:mb-8 lg:mb-10 leading-relaxed">
++            <p className="hero-description hero-anim-description text-gray-800 text-base md:text-lg mb-6 sm:mb-8 lg:mb-10 leading-relaxed">
 +              ตอบแบบสอบถามสั้น ๆ เพื่อค้นหาสาขาที่เหมาะกับความถนัด<br className="hidden md:inline" />
                และความสนใจของคุณ
              </p>
  
+@@ -83,7 +92,7 @@ const Hero = () => {
+             <div className="hero-buttons hero-anim-buttons flex space-x-2 sm:space-x-3 lg:space-x-4">
+               <Link
+                 to="/find-major"
+-                className="group hero-button-pnru inline-flex items-center justify-center gap-2 sm:gap-2.5 lg:gap-3 h-[44px] sm:h-[46px] lg:h-[50px] px-4 sm:px-5 lg:px-6 rounded-full bg-gradient-to-b from-[#2F8F66] to-[#1E5C40] text-white font-semibold text-sm sm:text-base lg:text-lg whitespace-nowrap shadow-[0_6px_16px_-4px_rgba(31,95,66,0.45)] hover:brightness-95"
++                className="group hero-button-pnru inline-flex items-center justify-center gap-2 sm:gap-2.5 lg:gap-3 h-[44px] sm:h-[46px] lg:h-[50px] px-4 sm:px-5 lg:px-6 rounded-full bg-pnru text-white font-semibold text-sm sm:text-base lg:text-lg whitespace-nowrap shadow-[0_4px_12px_-4px_rgba(1,106,43,0.45)] hover:bg-[#015522]"
+               >
+                 ค้นหาสาขาที่ใช่
+                 <ChevronRight className="w-4 h-4 lg:w-5 lg:h-5 text-white transition-transform duration-200 ease-out group-hover:translate-x-1" />
 diff --git a/src/index.css b/src/index.css
-index 5789233..f2eccae 100644
+index 5789233..29f3d40 100644
 --- a/src/index.css
 +++ b/src/index.css
-@@ -98,6 +98,13 @@ body.nav-open {
+@@ -98,6 +98,24 @@ body.nav-open {
    border-radius: 9999px;
  }
  
@@ -71,6 +86,17 @@ index 5789233..f2eccae 100644
 +   ภาษาไทยมีสระบนซ้อนวรรณยุกต์ ("ที่" "ใช่") ระยะเท่านี้ทำให้บรรทัดดูชนกัน จึงคุมไว้ตรงนี้จุดเดียว */
 +.hero-section .hero-heading h1 {
 +  line-height: 1.24;
++}
++
++/* ขีดสั้นเหนือชื่อมหาวิทยาลัย — ป้ายกำกับหน่วยงานแบบเอกสารทางการ
++   ทำด้วย ::before เพื่อให้เคลื่อนไหวเข้าพร้อมบรรทัดเดียวกันและไม่ต้องเพิ่ม element ใน JSX */
++.hero-section .hero-subtitle::before {
++  content: '';
++  display: block;
++  width: 2.25rem;
++  height: 3px;
++  margin-bottom: 0.75rem;
++  background: #016a2b;
 +}
 +
  /* Hero Section entrance animation — scoped to .hero-section only */
