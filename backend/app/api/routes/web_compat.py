@@ -516,8 +516,9 @@ def _user_message(exc: Exception) -> str:
 def _engine(explained: bool, scoring: str | None = None, embedded: bool = False) -> dict:
     return {
         "explanation": chat_model_used() if explained else None,
-        # ทุกรุ่นที่เขียนข้อความให้ผลชุดนี้ ไม่ใช่แค่ตัวสุดท้าย — หนึ่งหน้าอาจมาจากหลายรุ่น
-        # เมื่อเจ้าหลักล้มกลางทางแล้วตัวสำรองรับช่วงต่อ
+        # ทุกรุ่นที่ตอบสำเร็จในคำขอนี้ ไม่ใช่แค่ตัวสุดท้าย — หนึ่งหน้าอาจผ่านหลายรุ่นเมื่อ
+        # เจ้าหลักล้มกลางทางแล้วตัวสำรองรับช่วงต่อ · ไม่ใช่รายชื่อผู้เขียนข้อความที่แสดง
+        # เพราะบางคำตอบถูกตัดทิ้งที่ด่านตรวจข้อความอ้างอิง (ดู llm_client._chat_models_used)
         "writers": chat_models_used() if explained else [],
         "scoring": scoring,
         # รุ่นที่เทียบความคล้ายให้ผลชุดนี้จริง — ส่งเฉพาะผลที่คะแนนมาจากเวกเตอร์
