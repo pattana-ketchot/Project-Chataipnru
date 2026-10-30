@@ -430,26 +430,6 @@ def _course_by_id(db: Session, course_id: str | None) -> "Course | None":
     return db.get(Course, key)
 
 
-def _latest_edition_of(db: Session, course: "Course") -> "Course":
-    """
-    ฉบับล่าสุดของสาขาเดียวกันและระดับเดียวกัน
-
-    ผู้ใช้ที่กำลังเลือกที่เรียนต้องเห็นเล่มที่ใช้อยู่จริง ไม่ใช่ฉบับก่อนหน้า · การจับคู่ด้วย
-    ชื่อเลือกฉบับล่าสุดให้อยู่แล้ว แต่เส้นทางที่ผูกด้วย course_id ของแถวบนเว็บจะตรึงอยู่
-    กับเล่มที่ผูกไว้ตลอด ถ้าคณะปรับปรุงหลักสูตรแล้วนำเล่มใหม่เข้าคลัง หน้าเว็บจะยัง
-    แสดงของเก่าโดยไม่มีอะไรบอก
-
-    ตัดปีออกจากชื่อแล้วให้ match_by_title หาใหม่ — ระดับปริญญาอ่านได้จากชื่อปริญญา
-    ที่ยังติดอยู่ในชื่อเล่ม เล่มโทกับเล่มเอกของสาขาเดียวกันจึงไม่ปนกัน
-    หาไม่เจอก็คืนเล่มเดิม ดีกว่าคืนค่าว่างทั้งที่มีข้อมูลอยู่
-    """
-    base = _EDITION_IN_TITLE.sub("", course.title or "").strip()
-    if not base:
-        return course
-    matched, _ = match_by_title(db, [{"id": "", "title": base}])
-    return matched[0][1] if matched else course
-
-
 @router.get("/course-facts")
 def course_facts_web(title: str, course_id: str | None = None, level: str | None = None,
                      db: Session = Depends(get_db)) -> dict:
@@ -474,8 +454,6 @@ def course_facts_web(title: str, course_id: str | None = None, level: str | None
     course = _course_by_id(db, course_id) or _course_for_site_title(db, title, level or "")
     if course is None:
         return {}
-    # ผูกไว้ที่ฉบับไหนก็ตาม ให้แสดงฉบับล่าสุดของสาขานั้นเสมอ
-    course = _latest_edition_of(db, course)
     about = dict(program_about(course.title))
     about.pop("faculty_source", None)
     about["faculty"] = _faculty_for(course.title, program_about(course.title))

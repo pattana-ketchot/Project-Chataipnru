@@ -207,6 +207,22 @@ def _credit_phrase(facts: list[EditionFact]) -> str:
     return f"ไม่น้อยกว่า {number} หน่วยกิต" if all(map(_says_at_least, facts)) else f"{number} หน่วยกิต"
 
 
+def verified_credit_phrases(db: Session, ids: list[uuid.UUID]) -> dict[str, str]:
+    """
+    วลีจำนวนหน่วยกิตของแต่ละฉบับ จากค่าที่ตรวจแล้วใน mko.v_live_values
+
+    คีย์เป็น course_id (สตริง) ของ **ฉบับนั้นโดยตรง** ฉบับที่ไม่มีค่าที่ตรวจแล้วจะไม่มีคีย์
+    ผู้เรียกต้องบอกว่า "ไม่มีข้อมูล" ห้ามหยิบค่าของฉบับอื่นมาแทน เพราะหน่วยกิตต่างกัน
+    จริงระหว่างฉบับ (คณิตศาสตร์ 2564 = 130 · 2569 = 124)
+
+    ใช้ _credit_phrase เดิมเพื่อให้คำว่า "ไม่น้อยกว่า" ขึ้นเฉพาะเมื่อเอกสารเขียนไว้จริง
+    """
+    if not ids:
+        return {}
+    facts, _ = _scalar_facts(db, "total_credits", ids, {})
+    return {f.course_id: _credit_phrase([f]) for f in facts if f.value_int is not None}
+
+
 def _compose(field_key: str, programme: str, facts: list[EditionFact], missing: list[str]) -> tuple[str, list[str]]:
     lines: list[str] = []
     others: list[str] = []
