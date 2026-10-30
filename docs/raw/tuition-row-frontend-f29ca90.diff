@@ -1,0 +1,42 @@
+commit f29ca90def1d81c4db8202329e732d854d241539
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 13:13:39 2026 +0700
+
+    feat(compare): เพิ่มแถวค่าเทอมในตารางเปรียบเทียบ
+    
+    ค่าเทอมเป็นข้อมูลที่นักเรียนดูก่อนเป็นอันดับแรกเวลาเทียบที่เรียน แต่เดิมมีเฉพาะในกล่อง
+    ของ AI ซึ่งต้องกดปุ่มก่อนถึงจะเห็น
+    
+    ค่ามาจาก /api/course-facts ซึ่งอ่านจากประกาศค่าเทอมของคณะ ไม่ได้ผ่านโมเดล
+    แสดงค่าต่อภาคการศึกษาเป็นบรรทัดหลัก และรูปแบบการเรียน (ภาคปกติ/กศ.พบ) เป็นบรรทัดรอง
+    ไม่มีข้อมูลก็เขียนว่าไม่มีตามจริง
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/src/pages/CompareResult.jsx b/src/pages/CompareResult.jsx
+index 4c8245a..720cab2 100644
+--- a/src/pages/CompareResult.jsx
++++ b/src/pages/CompareResult.jsx
+@@ -204,6 +204,22 @@ const CompareResult = () => {
+         )
+       }
+     },
++    {
++      key: 'tuition',
++      label: 'ค่าเทอม',
++      render: (course) => {
++        const f = facts[course.id] || {}
++        if (!f.tuition_per_semester) {
++          return <p className="text-sm text-gray-500">ยังไม่มีข้อมูลในระบบ</p>
++        }
++        return (
++          <div className="text-sm text-gray-600 space-y-1">
++            <p className="font-semibold text-gray-800">{f.tuition_per_semester} / ภาคการศึกษา</p>
++            {f.study_format && <p className="text-xs text-gray-500">{f.study_format}</p>}
++          </div>
++        )
++      }
++    },
+     {
+       key: 'description',
+       label: 'รายละเอียดหลักสูตร',
