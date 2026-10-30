@@ -1,0 +1,86 @@
+commit 9a8e6daff052070561408c5ec966e46b694d6f43
+Author: popoza11874 <zxcvbngunzapan@gmail.com>
+Date:   Fri Oct 30 11:24:14 2026 +0700
+
+    docs(backend): ระบุให้ชัดว่า writers ไม่ใช่รายชื่อผู้เขียนข้อความที่แสดง
+    
+    ตัวแปรเก็บทุกครั้งที่โมเดลตอบสำเร็จ ซึ่งไม่เท่ากับทุกครั้งที่ข้อความถูกนำไปแสดง —
+    คำตอบบางครั้งถูกตัดทิ้งที่ด่านตรวจข้อความอ้างอิงหรือถูกแทนด้วยข้อความมาตรฐาน
+    ของระบบ หมายเหตุเดิมเขียนว่า "ทุกรุ่นที่เขียนข้อความ" ซึ่งพาให้หน้าเว็บติดป้ายผิด
+    
+    แก้เฉพาะหมายเหตุกับชื่อ/คำอธิบายในชุดทดสอบ ไม่แตะพฤติกรรมหรือรูปร่างข้อมูล
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/backend/app/api/routes/web_compat.py b/backend/app/api/routes/web_compat.py
+index 32b1ea5..071c57c 100644
+--- a/backend/app/api/routes/web_compat.py
++++ b/backend/app/api/routes/web_compat.py
+@@ -516,8 +516,9 @@ def _user_message(exc: Exception) -> str:
+ def _engine(explained: bool, scoring: str | None = None, embedded: bool = False) -> dict:
+     return {
+         "explanation": chat_model_used() if explained else None,
+-        # ทุกรุ่นที่เขียนข้อความให้ผลชุดนี้ ไม่ใช่แค่ตัวสุดท้าย — หนึ่งหน้าอาจมาจากหลายรุ่น
+-        # เมื่อเจ้าหลักล้มกลางทางแล้วตัวสำรองรับช่วงต่อ
++        # ทุกรุ่นที่ตอบสำเร็จในคำขอนี้ ไม่ใช่แค่ตัวสุดท้าย — หนึ่งหน้าอาจผ่านหลายรุ่นเมื่อ
++        # เจ้าหลักล้มกลางทางแล้วตัวสำรองรับช่วงต่อ · ไม่ใช่รายชื่อผู้เขียนข้อความที่แสดง
++        # เพราะบางคำตอบถูกตัดทิ้งที่ด่านตรวจข้อความอ้างอิง (ดู llm_client._chat_models_used)
+         "writers": chat_models_used() if explained else [],
+         "scoring": scoring,
+         # รุ่นที่เทียบความคล้ายให้ผลชุดนี้จริง — ส่งเฉพาะผลที่คะแนนมาจากเวกเตอร์
+diff --git a/backend/app/services/llm_client.py b/backend/app/services/llm_client.py
+index b46bb06..9f2c182 100644
+--- a/backend/app/services/llm_client.py
++++ b/backend/app/services/llm_client.py
+@@ -435,7 +435,11 @@ _chat_model_used: ContextVar[tuple[str, str] | None] = ContextVar(
+ #
+ # หนึ่งคำขอเรียกโมเดลได้หลายครั้ง — หน้าเปรียบเทียบสกัดตารางทีละหลักสูตรแล้วค่อยสรุป
+ # ถ้าเจ้าหลักล้มกลางทาง บางส่วนของหน้าจะมาจากคนละรุ่นกับส่วนที่เหลือ การรายงานแค่
+-# ตัวสุดท้ายจึงบอกผู้ใช้ไม่ครบว่าข้อความที่เขาอ่านอยู่มาจากใครบ้าง
++# ตัวสุดท้ายจึงบอกผู้ใช้ไม่ครบว่ามีใครทำงานให้คำขอนี้บ้าง
++#
++# **ไม่ใช่รายชื่อผู้เขียนข้อความที่แสดงอยู่** — ที่นี่รู้แค่ว่าเรียกแล้วสำเร็จ ไม่ได้ตามรอยว่า
++# คำตอบครั้งนั้นถูกนำไปแสดงหรือถูกตัดทิ้งที่ด่านตรวจข้อความอ้างอิง ถ้อยคำบนหน้าเว็บ
++# จึงต้องไม่อ้างว่าทุกตัวในรายการเป็นคนเขียนสิ่งที่ผู้ใช้อ่านอยู่
+ _chat_models_used: ContextVar[tuple[tuple[str, str], ...]] = ContextVar(
+     "chat_models_used", default=())
+ 
+@@ -491,7 +495,10 @@ def embed_model_used() -> dict | None:
+ 
+ 
+ def chat_models_used() -> list[dict]:
+-    """ทุกรุ่นที่เขียนข้อความให้คำขอนี้ เรียงตามลำดับที่ถูกใช้ครั้งแรก · ไม่ได้เรียกเลย = []"""
++    """ทุกรุ่นที่ตอบสำเร็จในคำขอนี้ เรียงตามลำดับที่ถูกใช้ครั้งแรก · ไม่ได้เรียกเลย = []
++
++    ไม่ใช่รายชื่อผู้เขียนข้อความที่ผู้ใช้เห็น — ดูหมายเหตุของ _chat_models_used
++    """
+     return [{"provider": p, "model": m} for p, m in _chat_models_used.get()]
+ 
+ 
+diff --git a/backend/tests/test_score_detail.py b/backend/tests/test_score_detail.py
+index f781093..ab5a1a9 100644
+--- a/backend/tests/test_score_detail.py
++++ b/backend/tests/test_score_detail.py
+@@ -301,7 +301,12 @@ class EmbeddingLabelTests(_ScoreDetailBase):
+ 
+ 
+ class WritersTests(_ScoreDetailBase):
+-    """หนึ่งคำขอเรียกโมเดลหลายครั้ง (หน้าเปรียบเทียบสกัดตารางทีละสาขาแล้วค่อยสรุป)"""
++    """
++    หนึ่งคำขอเรียกโมเดลหลายครั้ง (หน้าเปรียบเทียบสกัดตารางทีละสาขาแล้วค่อยสรุป)
++
++    รายการนี้คือ "รุ่นที่ตอบสำเร็จ" ไม่ใช่ "รุ่นที่เขียนข้อความที่ผู้ใช้เห็น" — คำตอบบางครั้ง
++    ถูกตัดทิ้งที่ด่านตรวจข้อความอ้างอิง ชื่อข้อทดสอบจึงเลี่ยงคำว่าเขียน
++    """
+ 
+     def test_รุ่นเดียวตอบทั้งคำขอ_รายงานตัวเดียว(self):
+         split = llm_client._SplitConnector(_FakeConnector(), _FakeConnector())
+@@ -311,7 +316,7 @@ class WritersTests(_ScoreDetailBase):
+                          [{"provider": "gemini", "model": "gemini-3.5-flash-lite"}])
+ 
+     def test_เจ้าหลักล้มกลางทาง_ต้องรายงานทั้งสองรุ่น(self):
+-        """ครึ่งหนึ่งของหน้ามาจากคนละรุ่น การบอกแค่ตัวสุดท้ายคือการบอกไม่ครบ"""
++        """สองรุ่นทำงานให้คำขอเดียวกัน การบอกแค่ตัวสุดท้ายคือการบอกไม่ครบ"""
+         gemini = _FakeConnector()
+         local = _FakeConnector()
+         local.chat_model = "qwen2.5:3b"
