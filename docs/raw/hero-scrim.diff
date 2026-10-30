@@ -1,0 +1,56 @@
+diff --git a/src/components/Hero.jsx b/src/components/Hero.jsx
+index 9306e5d..9fa0621 100644
+--- a/src/components/Hero.jsx
++++ b/src/components/Hero.jsx
+@@ -45,27 +45,46 @@ const Hero = () => {
+         />
+       </div>
+ 
+-      {/* ม่านสีไล่ระดับคลุมโซนข้อความทั้งแถบ ให้ตัวอักษรนั่งอยู่บนพื้นเรียบที่ไล่จางเข้าหาภาพ
+-          แทนแผ่นสี่เหลี่ยมมนที่ดูเป็นกล่องลอยทับรูป — จอแคบไล่จากบนลงล่าง (ข้อความอยู่ครึ่งบน)
+-          จอกว้างไล่จากซ้ายไปขวา (ข้อความอยู่ครึ่งซ้าย) ค่าหยุดเลือกให้ยังทึบอยู่จนพ้นขอบข้อความ */}
++      {/* ม่านสีบาง ๆ คลุมฝั่งที่มีข้อความ ให้ตัวอักษรไม่ลอยอยู่บนลายภาพดิบ ๆ
++          ตั้งใจให้จางพอที่ยังเห็นรายละเอียดตึก และไล่จนโปร่งใสก่อนถึงกลุ่มนักศึกษา
++          จึงไม่มีสีขาวพาดทับใบหน้าหรือทำให้คนในภาพซีด
++          จอแคบไล่จากบนลงล่าง (ข้อความอยู่ครึ่งบน) จอกว้างไล่จากซ้ายไปขวา (ข้อความอยู่ครึ่งซ้าย) */}
+       <div
+         className="hero-scrim absolute inset-0 pointer-events-none xl:hidden"
+         style={{
+           background:
+-            'linear-gradient(to bottom, rgba(250,247,242,0.96) 0%, rgba(250,247,242,0.94) 46%, rgba(250,247,242,0.60) 68%, rgba(250,247,242,0) 88%)',
++            'linear-gradient(to bottom, rgba(250,247,242,0.72) 0%, rgba(250,247,242,0.60) 28%, rgba(250,247,242,0.22) 45%, rgba(250,247,242,0) 56%)',
+         }}
+       />
+       <div
+         className="hero-scrim absolute inset-0 pointer-events-none hidden xl:block"
+         style={{
+           background:
+-            'linear-gradient(to right, rgba(250,247,242,0.96) 0%, rgba(250,247,242,0.94) 46%, rgba(250,247,242,0.55) 62%, rgba(250,247,242,0) 78%)',
++            'linear-gradient(to right, rgba(250,247,242,0.55) 0%, rgba(250,247,242,0.42) 28%, rgba(250,247,242,0.18) 40%, rgba(250,247,242,0) 50%)',
+         }}
+       />
+ 
+       {/* Content Layer - Text and Buttons */}
+       <div className="hero-content relative mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-10 sm:pt-12 md:pt-16 lg:pt-20 max-w-[1920px]">
+         <div className="hero-content-inner max-w-2xl relative">
++          {/* สีรองพื้นเฉพาะบริเวณข้อความ — วงรีจางที่ไล่เป็นศูนย์พอดีขอบกรอบข้อความ
++              จึงไม่มีขอบกล่องให้เห็นและไม่ล้นออกไปถึงคนในภาพ ใช้คู่กับม่านบาง ๆ ด้านบน
++              เพื่อให้ตัวอักษรยังอ่านชัดโดยไม่ต้องเพิ่มความทึบทั้งแถบ */}
++          <div
++            className="absolute -inset-y-10 -inset-x-4 sm:-inset-x-6 pointer-events-none md:hidden"
++            style={{
++              background:
++                'radial-gradient(ellipse 78% 42% at 50% 40%, rgba(250,247,242,0.90) 0%, rgba(250,247,242,0.84) 42%, rgba(250,247,242,0.40) 74%, rgba(250,247,242,0) 100%)',
++            }}
++          />
++          <div
++            className="absolute -inset-y-10 -inset-x-8 lg:-inset-x-10 pointer-events-none hidden md:block"
++            style={{
++              background:
++                'radial-gradient(ellipse 50% 42% at 50% 40%, rgba(250,247,242,0.90) 0%, rgba(250,247,242,0.84) 42%, rgba(250,247,242,0.40) 74%, rgba(250,247,242,0) 100%)',
++            }}
++          />
++
+           <div className="relative p-4 sm:p-6 md:p-8 lg:p-10">
+             {/* Subtitle */}
+             <p className="hero-subtitle hero-anim-subtitle text-primary font-semibold uppercase tracking-[0.18em] text-[11px] sm:text-xs md:text-sm mb-3 sm:mb-4 lg:mb-5">
