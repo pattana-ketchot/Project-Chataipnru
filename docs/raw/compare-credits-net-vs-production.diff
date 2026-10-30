@@ -26,19 +26,18 @@ index b60f45f..d820c65 100644
      lines: list[str] = []
      others: list[str] = []
 diff --git a/backend/app/services/program_compare.py b/backend/app/services/program_compare.py
-index 7eb802a..38a2d67 100644
+index 7eb802a..42a3cbf 100644
 --- a/backend/app/services/program_compare.py
 +++ b/backend/app/services/program_compare.py
-@@ -27,6 +27,8 @@
+@@ -27,6 +27,7 @@
  from __future__ import annotations
  
  import json
 +import logging
-+import re
  import uuid
  from dataclasses import dataclass
  
-@@ -35,6 +37,7 @@ from sqlalchemy.orm import Session
+@@ -35,6 +36,7 @@ from sqlalchemy.orm import Session
  
  from app.models.course import Course
  from app.services.llm_client import get_llm_connector
@@ -46,7 +45,7 @@ index 7eb802a..38a2d67 100644
  from app.services.tuition import describe as describe_fee, fee_for
  from app.services.vector_search import search_similar_chunks
  
-@@ -56,13 +59,17 @@ from llm.prompts import (  # noqa: E402
+@@ -56,13 +58,17 @@ from llm.prompts import (  # noqa: E402
  #   "รายวิชาเฉพาะด้านที่ต้องเรียน"      -> ได้วิชาภาษาไทยและภาษาอังกฤษของหมวดศึกษาทั่วไป
  #   "คุณสมบัติของผู้เข้าศึกษา"           -> ได้ระเบียบวินัย เช่น ไม่เคยรับโทษจำคุก
  #   "จำนวนหน่วยกิตรวมตลอดหลักสูตร"      -> ไม่เจอหน้าที่มีตัวเลขจริง
@@ -66,7 +65,7 @@ index 7eb802a..38a2d67 100644
      ("เรียนอะไรบ้าง",
       "หมวดวิชาเฉพาะ กลุ่มวิชาเฉพาะด้าน กลุ่มวิชาแกน รายวิชาบังคับของสาขาวิชา"),
      ("ทักษะที่ได้รับ",
-@@ -83,6 +90,9 @@ MIN_PROGRAMS, MAX_PROGRAMS = 2, 4
+@@ -83,6 +89,9 @@ MIN_PROGRAMS, MAX_PROGRAMS = 2, 4
  CHUNKS_PER_DIMENSION = 4
  CHUNK_CHARS = 700
  
@@ -76,7 +75,7 @@ index 7eb802a..38a2d67 100644
  
  @dataclass
  class ComparedProgram:
-@@ -147,6 +157,17 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
+@@ -147,6 +156,17 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
          for label, _ in DIMENSIONS
      ]
  
@@ -94,7 +93,7 @@ index 7eb802a..38a2d67 100644
      # แถวค่าเทอมมาจากประกาศของคณะ ไม่ได้ผ่านการค้นเอกสารและไม่ได้ผ่านโมเดลเลย
      # จึงต่อท้ายตรงนี้แทนที่จะรวมอยู่ใน DIMENSIONS ซึ่งเป็นหัวข้อที่ดึงจาก มคอ.2
      # วางไว้บนสุดเพราะเป็นข้อมูลที่นักเรียนดูก่อนเป็นอันดับแรกเวลาเทียบที่เรียน
-@@ -163,7 +184,12 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
+@@ -163,7 +183,12 @@ def compare_programs(db: Session, course_ids: list[uuid.UUID]) -> dict:
          "rows": rows,
          # สรุปความต่างจาก "ตารางที่สรุปเสร็จแล้ว" ไม่ใช่จากเนื้อหาดิบ พรอมต์จึงสั้นมาก
          # และโมเดลพูดถึงได้เฉพาะสิ่งที่ปรากฏในตารางซึ่งผู้ใช้เห็นอยู่ตรงหน้าเท่านั้น
@@ -108,17 +107,17 @@ index 7eb802a..38a2d67 100644
      }
  
  
-@@ -196,14 +222,59 @@ def _extract_one(connector, item: dict) -> dict:
+@@ -196,14 +221,60 @@ def _extract_one(connector, item: dict) -> dict:
      return {}
  
  
-+# ตัวเลขที่ตามด้วยคำว่า "หน่วยกิต" — ยอมให้มีช่องว่างหรือขึ้นบรรทัดคั่น เพราะข้อความ
-+# ที่โมเดลเขียนและข้อความที่ยกมาจาก PDF ตัดบรรทัดกลางวลีได้
-+_CREDIT_NUMBER = re.compile(r"(\d+)\s*หน่วยกิต")
-+
-+
-+def _credit_numbers(text_: str) -> set[str]:
-+    return {m.group(1) for m in _CREDIT_NUMBER.finditer(text_ or "")}
++# คำที่ห้ามปรากฏในย่อหน้าที่โมเดลเขียน
++#
++# ดูทั้งคำ ไม่ใช่เฉพาะรูป "ตัวเลข + หน่วยกิต" เพราะข้ออ้างเชิงหน่วยกิตเขียนได้หลายแบบ
++# ที่ตรวจย้อนไม่ได้เหมือนกัน: "หน่วยกิตรวม 130" (เลขอยู่หลังคำ) หรือ "ใช้หน่วยกิตน้อยกว่า
++# อีกสาขา" (ไม่มีเลขเลยแต่เป็นการเปรียบเทียบ) · ส่วนนี้ระบบเขียนเองจากค่าที่ตรวจแล้ว
++# พรอมต์จึงสั่งห้ามไว้ และด่านนี้บังคับตามนั้น
++_FORBIDDEN_IN_SUMMARY = "หน่วยกิต"
 +
 +
 +CREDITS_ROW = "จำนวนหน่วยกิต"
@@ -150,8 +149,9 @@ index 7eb802a..38a2d67 100644
 +    เขียนสรุปความต่างจากตารางที่สรุปเสร็จแล้ว คืนสตริงว่างถ้าล้มหรือไม่ผ่านด่าน
 +
 +    **หน่วยกิตไม่ใช่เรื่องของโมเดล** — แถวหน่วยกิตไม่ถูกส่งเข้าไปในพรอมต์ และพรอมต์สั่ง
-+    ห้ามพูดถึงหน่วยกิตไว้ด้วย · ถ้าข้อความที่ได้ยังมีคำว่าหน่วยกิตพร้อมตัวเลข แปลว่าเป็น
-+    ข้ออ้างที่ผูกกับหลักสูตรไม่ได้และตรวจย้อนไม่ได้ ให้ทิ้งทั้งย่อหน้า ไม่ใช่แสดงออกไป
++    ห้ามพูดถึงหน่วยกิตไว้ด้วย · ถ้าข้อความที่ได้ยังมีคำว่า "หน่วยกิต" ไม่ว่ารูปแบบใด ให้ทิ้ง
++    ทั้งย่อหน้า ไม่ใช่แสดงออกไป — ไม่ว่าจะเป็นตัวเลขหรือการเปรียบเทียบลอย ๆ มันคือข้ออ้าง
++    ที่ผูกกับหลักสูตรไม่ได้และตรวจย้อนไม่ได้ ขณะที่ส่วนนี้ระบบเขียนเองครบอยู่แล้ว
 +    (เหตุผลเดียวกับด่านตรวจข้อความอ้างอิงของขั้นเขียนเหตุผลในหน้าแนะนำสาขา)
 +
 +    ส่วนข้อความหน่วยกิตที่ผู้ใช้เห็น ระบบเขียนเองจากค่าที่ตรวจแล้ว (ดู _credits_sentence)
@@ -170,14 +170,13 @@ index 7eb802a..38a2d67 100644
              [
                  LLMMessage(role="system", content=COMPARE_SUMMARY_SYSTEM_PROMPT),
                  LLMMessage(role="user", content="ตารางเปรียบเทียบ:\n" + "\n".join(lines)),
-@@ -213,3 +284,9 @@ def _summarise(connector, titles: list[str], rows: list[dict]) -> str:
+@@ -213,3 +284,8 @@ def _summarise(connector, titles: list[str], rows: list[dict]) -> str:
          ).strip()
      except LLMConnectionError:
          return ""
 +
-+    if (said := _credit_numbers(summary)):
-+        logger.warning("ทิ้งย่อหน้าสรุป: พูดถึงหน่วยกิต %s ทั้งที่ห้ามไว้ — %r",
-+                       ", ".join(sorted(said)), summary[:200])
++    if _FORBIDDEN_IN_SUMMARY in summary:
++        logger.warning("ทิ้งย่อหน้าสรุป: พูดถึงหน่วยกิตทั้งที่ห้ามไว้ — %r", summary[:200])
 +        return ""
 +    return summary
 diff --git a/llm/prompts.py b/llm/prompts.py
